@@ -1,0 +1,31 @@
+# IDE
+.idea/
+*.iml
+.vscode/
+*.swp
+
+# Java
+target/
+*.class
+*.jar
+*.war
+*.log
+hs_err_pid*
+
+# Node
+node_modules/
+dist/
+.npm
+*.local
+
+# Env & secrets
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Upload / temp
+uploads/
+tmp/
