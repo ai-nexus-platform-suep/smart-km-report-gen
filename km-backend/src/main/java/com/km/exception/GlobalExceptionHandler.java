@@ -4,6 +4,7 @@ import com.km.common.dto.ApiResponse;
 import com.km.common.exception.BusinessException;
 import com.km.common.exception.ErrorCode;
 import lombok.extern.slf4j.Slf4j;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
@@ -14,9 +15,15 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.stream.Collectors;
 
+=======
+import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
+
+
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
 
     /**
      * 业务异常
@@ -58,5 +65,16 @@ public class GlobalExceptionHandler {
     public ApiResponse<Void> handleException(Exception e) {
         log.error("系统异常", e);
         return ApiResponse.error(ErrorCode.INTERNAL_ERROR.getCode(), ErrorCode.INTERNAL_ERROR.getMessage());
+=======
+    @ExceptionHandler(BusinessException.class)
+    public ApiResponse<Void> handleBusiness(BusinessException ex) {
+        return ApiResponse.fail(ex.getCode(), ex.getMessage());
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ApiResponse<Void> handleException(Exception ex) {
+        log.error("Unhandled exception", ex);
+        return ApiResponse.fail(ErrorCode.INTERNAL_ERROR.getCode(), ErrorCode.INTERNAL_ERROR.getMessage());
+
     }
 }

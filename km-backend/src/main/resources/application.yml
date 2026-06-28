@@ -1,11 +1,15 @@
+
 server:
   port: 8091
+
+=======
 
 spring:
   application:
     name: km-backend
   profiles:
     active: dev
+
 
   datasource:
     url: jdbc:mysql://${MYSQL_HOST:localhost}:3306/km_db?useUnicode=true&characterEncoding=utf-8&serverTimezone=Asia/Shanghai
@@ -39,3 +43,13 @@ logging:
     com.km: DEBUG
   autoconfigure:
     exclude: org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+=======
+server:
+  port: 8091
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+

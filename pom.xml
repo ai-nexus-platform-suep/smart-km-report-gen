@@ -1,7 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+=======
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.km</groupId>
@@ -9,8 +13,13 @@
     <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
+
     <name>km-platform</name>
     <description>知识管理系统 - 知识管理组</description>
+=======
+    <name>km-platform</name>
+    <description>知识管理子系统</description>
+
 
     <parent>
         <groupId>org.springframework.boot</groupId>
@@ -27,11 +36,15 @@
     <properties>
         <java.version>1.8</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
         <mybatis.version>3.5.9</mybatis.version>
         <mybatis-spring-boot.version>2.2.2</mybatis-spring-boot.version>
         <jjwt.version>0.11.5</jjwt.version>
         <mapstruct.version>1.4.2.Final</mapstruct.version>
         <lombok.version>1.18.22</lombok.version>
+=======
+        <mybatis.version>2.2.2</mybatis.version>
+
     </properties>
 
     <dependencyManagement>
@@ -41,6 +54,7 @@
                 <artifactId>km-common</artifactId>
                 <version>${project.version}</version>
             </dependency>
+
 
             <dependency>
                 <groupId>org.mybatis.spring.boot</groupId>
@@ -110,4 +124,9 @@
             </plugins>
         </pluginManagement>
     </build>
+=======
+        </dependencies>
+    </dependencyManagement>
+
+
 </project>
