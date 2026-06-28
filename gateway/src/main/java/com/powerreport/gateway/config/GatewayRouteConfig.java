@@ -14,10 +14,17 @@ import org.springframework.context.annotation.Configuration;
  * - /api/sections/** → report-stream 服务（后端2：SSE流式+历史记录）
  * - /api/admin/**   → report-stream 服务（后端2：管理后台）
  * - /api/auth/**    → gateway 自身处理（登录/注册）
+ *
+ * 开发阶段说明：
+ * 由于 Nacos 已禁用（spring.cloud.nacos.discovery.enabled=false），
+ * lb:// 协议无法解析服务实例，因此将此 Java 配置注释掉，
+ * 改用 application.properties 中的静态路由配置（http://localhost:8081 / 8082）。
+ * 部署到生产环境时，恢复此配置并启用 Nacos。
  */
 @Slf4j
-@Configuration
+// @Configuration
 public class GatewayRouteConfig {
+
 
     @Bean
     public RouteLocator customRouteLocator(RouteLocatorBuilder builder) {
