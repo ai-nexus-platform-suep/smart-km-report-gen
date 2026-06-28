@@ -1,0 +1,32 @@
+{
+  "name": "tech-supervision-platform",
+  "private": true,
+  "scripts": {
+    "dev": "turbo dev",
+    "dev:qa": "pnpm --filter @app/qa-web dev",
+    "dev:km": "pnpm --filter @app/km-web dev",
+    "dev:report": "pnpm --filter @app/report-web dev",
+    "build": "turbo build",
+    "build:qa": "pnpm --filter @app/qa-web build",
+    "build:km": "pnpm --filter @app/km-web build",
+    "build:report": "pnpm --filter @app/report-web build",
+    "lint": "turbo lint",
+    "preview": "turbo preview"
+  },
+  "devDependencies": {
+    "turbo": "^2.3.0",
+    "prettier": "^3.3.0",
+    "typescript": "^5.4.0"
+  },
+  "packageManager": "pnpm@9.15.4",
+  "engines": {
+    "node": ">=18"
+  },
+  "msw": {
+    "workerDirectory": [
+      "apps\\qa-web\\public",
+      "apps\\km-web\\public",
+      "apps\\report-web\\public"
+    ]
+  }
+}

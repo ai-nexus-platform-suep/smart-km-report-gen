@@ -1,0 +1,9 @@
+{
+  "name": "@platform/mock",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "dependencies": {
+    "msw": "^2.7.0"
+  }
+}

@@ -1,0 +1,7 @@
+export { default as AppLayout } from './components/AppLayout.vue'
+export { default as AuthGuard } from './components/AuthGuard.vue'
+export { default as LoginPage } from './components/LoginPage.vue'
+export { default as RegisterPage } from './components/RegisterPage.vue'
+export { useAuth } from './composables/useAuth'
+export { createAuthGuard } from './router/guard'
+export { baseRoutes } from './router/base-routes'
