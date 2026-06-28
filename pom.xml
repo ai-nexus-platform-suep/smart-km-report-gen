@@ -16,8 +16,8 @@
     <packaging>pom</packaging>
     <modules>
         <module>qa-common</module>
-        <module>report-common</module>
-        <module>report-outline-docx</module>
+        <module>report-generation/report-common</module>
+        <module>report-generation/report-outline-docx</module>
     </modules>
 
     <properties>

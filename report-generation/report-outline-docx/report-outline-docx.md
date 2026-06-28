@@ -12,7 +12,7 @@
 
 本项目面向电力行业报告编写场景，支持固定类型专业报告的大纲生成、章节内容保存、DOCX 导出和文件下载。系统完整需求覆盖用户认证、报告大纲、内容生成、报告记录、模板管理、管理后台和统计监控等模块。
 
-当前仓库提供报告组公共模块 `report-common` 和后端 1 负责的 Spring Boot 服务 `report-outline-docx`。后端 1 核心交付范围是：
+当前仓库在 `report-generation/` 下提供报告组公共模块 `report-common` 和后端 1 负责的 Spring Boot 服务 `report-outline-docx`。后端 1 核心交付范围是：
 
 - 大纲生成接口
 - 大纲确认保存接口
@@ -40,7 +40,7 @@
 | AI 全栈 | LLM 大纲/章节 Prompt 编写、SSE 内容流调试 |
 | 测试 | 用例编写、Bug 登记追踪、Wiki 文档整理 |
 
-本仓库当前重点说明和实现后端 1 范围。
+本文档当前重点说明和实现后端 1 范围。
 
 ## 3. 技术栈
 
@@ -58,42 +58,44 @@
 ## 4. 项目结构
 
 ```text
-report generate/
+ai-nexus-platform/
 ├── README.md
 ├── pom.xml
-├── database/
-│   ├── schema_mysql.sql
-│   └── sample_seed_core.sql
-├── input/
-│   └── requirements.pdf
-├── report-common/
-│   ├── pom.xml
-│   └── src/main/java/com/powerreport/
-│       ├── common/
-│       ├── entity/
-│       └── enums/
-└── report-outline-docx/
-    ├── pom.xml
-    ├── src/
-    │   ├── nacos-config-example.properties
-    │   └── main/
-    │       ├── java/com/powerreport/
-    │       │   ├── common/
-    │       │   ├── config/
-    │       │   ├── controller/
-    │       │   ├── dto/
-    │       │   ├── mapper/
-    │       │   └── service/
-    │       └── resources/
-    │           └── application.properties
+├── qa-common/
+└── report-generation/
+    ├── database/
+    │   ├── schema_mysql.sql
+    │   └── sample_seed_core.sql
+    ├── input/
+    │   └── requirements.pdf
+    ├── report-common/
+    │   ├── pom.xml
+    │   └── src/main/java/com/powerreport/
+    │       ├── entity/
+    │       └── enums/
+    └── report-outline-docx/
+        ├── pom.xml
+        ├── README.md
+        ├── src/
+        │   ├── nacos-config-example.properties
+        │   └── main/
+        │       ├── java/com/powerreport/
+        │       │   ├── common/
+        │       │   ├── config/
+        │       │   ├── controller/
+        │       │   ├── dto/
+        │       │   ├── mapper/
+        │       │   └── service/
+        │       └── resources/
+        │           └── application.properties
 ```
 
 核心代码位置：
 
 | 文件 | 说明 |
 | --- | --- |
-| `report-common/entity` | 报告主表、大纲、章节、文件等公共实体 |
-| `report-common/enums` | 报告类型、章节状态、图表编号模式等公共枚举 |
+| `report-generation/report-common/entity` | 报告主表、大纲、章节、文件等报告组公共实体 |
+| `report-generation/report-common/enums` | 报告类型、章节状态、图表编号模式等报告组公共枚举 |
 | `qa-common/dto/ApiResponse.java` | 全项目统一接口响应包装 |
 | `ReportController.java` | 大纲、导出、下载接口入口 |
 | `OutlineServiceImpl.java` | 大纲生成、AI 调用、Redis 临时状态、确认保存 |
@@ -123,7 +125,7 @@ mvn -version
 登录 MySQL 后执行：
 
 ```sql
-SOURCE ./database/schema_mysql.sql;
+SOURCE ./report-generation/database/schema_mysql.sql;
 ```
 
 核心表：
@@ -139,7 +141,7 @@ SOURCE ./database/schema_mysql.sql;
 可选测试数据：
 
 ```sql
-SOURCE ./database/sample_seed_core.sql;
+SOURCE ./report-generation/database/sample_seed_core.sql;
 ```
 
 ## 7. 配置 Nacos
@@ -157,7 +159,7 @@ Format: Properties
 配置内容参考：
 
 ```text
-report-outline-docx/src/nacos-config-example.properties
+report-generation/report-outline-docx/src/nacos-config-example.properties
 ```
 
 示例：
@@ -209,7 +211,7 @@ app.ai.fallback-enabled=false
 在仓库根目录启动后端 1 服务：
 
 ```powershell
-mvn -pl report-outline-docx -am spring-boot:run
+mvn -pl report-generation/report-outline-docx -am spring-boot:run
 ```
 
 也可以先打包验证：
