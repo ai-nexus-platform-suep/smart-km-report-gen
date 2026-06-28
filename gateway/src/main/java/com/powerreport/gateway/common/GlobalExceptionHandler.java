@@ -2,17 +2,20 @@ package com.powerreport.gateway.common;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.web.reactive.error.ErrorWebExceptionHandler;
+import org.springframework.context.support.DefaultMessageSourceResolvable;
 import org.springframework.core.annotation.Order;
 import org.springframework.core.io.buffer.DataBuffer;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.server.reactive.ServerHttpResponse;
 import org.springframework.stereotype.Component;
+import org.springframework.web.bind.support.WebExchangeBindException;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.nio.charset.StandardCharsets;
+import java.util.stream.Collectors;
 
 /**
  * 网关全局异常处理
@@ -30,7 +33,12 @@ public class GlobalExceptionHandler implements ErrorWebExceptionHandler {
         int status;
         String message;
 
-        if (ex instanceof ResponseStatusException statusException) {
+        if (ex instanceof WebExchangeBindException bindException) {
+            status = HttpStatus.BAD_REQUEST.value();
+            message = bindException.getBindingResult().getAllErrors().stream()
+                    .map(DefaultMessageSourceResolvable::getDefaultMessage)
+                    .collect(Collectors.joining("; "));
+        } else if (ex instanceof ResponseStatusException statusException) {
             status = statusException.getStatusCode().value();
             message = statusException.getReason();
         } else {

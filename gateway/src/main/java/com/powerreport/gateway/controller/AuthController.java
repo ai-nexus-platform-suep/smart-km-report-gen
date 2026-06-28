@@ -14,6 +14,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -51,8 +52,11 @@ public class AuthController {
         String password = request.getPassword().trim();
 
         if (USER_STORE.containsKey(username)) {
-            return ResponseEntity.status(HttpStatus.CONFLICT)
-                    .body(Map.of("code", 1002, "message", "用户已存在", "data", null));
+            Map<String, Object> body = new HashMap<>();
+            body.put("code", 1002);
+            body.put("message", "用户已存在");
+            body.put("data", null);
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(body);
         }
 
         USER_STORE.put(username, password);
@@ -60,8 +64,11 @@ public class AuthController {
 
         log.info("User registered: {}", username);
 
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(Map.of("code", 200, "message", "注册成功", "data", null));
+        Map<String, Object> successBody = new HashMap<>();
+        successBody.put("code", 200);
+        successBody.put("message", "注册成功");
+        successBody.put("data", null);
+        return ResponseEntity.status(HttpStatus.CREATED).body(successBody);
     }
 
     @PostMapping("/login")
@@ -71,13 +78,19 @@ public class AuthController {
 
         String storedPassword = USER_STORE.get(username);
         if (storedPassword == null) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("code", 1001, "message", "用户不存在", "data", null));
+            Map<String, Object> body = new HashMap<>();
+            body.put("code", 1001);
+            body.put("message", "用户不存在");
+            body.put("data", null);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
         }
 
         if (!storedPassword.equals(password)) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("code", 1003, "message", "密码错误", "data", null));
+            Map<String, Object> body = new HashMap<>();
+            body.put("code", 1003);
+            body.put("message", "密码错误");
+            body.put("data", null);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
         }
 
         List<String> roles = ROLE_STORE.getOrDefault(username, List.of("ROLE_USER"));
@@ -105,16 +118,22 @@ public class AuthController {
 
         try {
             if (!jwtTokenProvider.validateToken(refreshToken)) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body(Map.of("code", 1005, "message", "Refresh Token 无效或已过期", "data", null));
+                Map<String, Object> body = new HashMap<>();
+                body.put("code", 1005);
+                body.put("message", "Refresh Token 无效或已过期");
+                body.put("data", null);
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
             }
 
             Claims claims = jwtTokenProvider.parseToken(refreshToken);
             String tokenType = claims.get("type", String.class);
 
             if (!"refresh".equals(tokenType)) {
-                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                        .body(Map.of("code", 1004, "message", "Token 类型错误", "data", null));
+                Map<String, Object> body = new HashMap<>();
+                body.put("code", 1004);
+                body.put("message", "Token 类型错误");
+                body.put("data", null);
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
             }
 
             String username = claims.getSubject();
@@ -138,8 +157,11 @@ public class AuthController {
 
         } catch (Exception e) {
             log.error("Token refresh failed", e);
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(Map.of("code", 1004, "message", "Token 刷新失败", "data", null));
+            Map<String, Object> body = new HashMap<>();
+            body.put("code", 1004);
+            body.put("message", "Token 刷新失败");
+            body.put("data", null);
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(body);
         }
     }
 
