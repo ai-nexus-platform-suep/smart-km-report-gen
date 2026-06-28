@@ -1,9 +1,11 @@
 """StateGraph 组装 + 条件路由 (人员 A 独占)"""
 
-from langgraph.graph import END, StateGraph
+from typing import Literal
+
+from langgraph.graph import END, START, StateGraph
 
 from qa_agent.graph.state import AgentState
-from qa_agent.graph.nodes import intent_node, retrieve_node, rerank_node, generate_node
+from qa_agent.graph.nodes import CHAT_INTENT, intent_node, retrieve_node, rerank_node, generate_node
 
 
 def build_workflow() -> StateGraph:
@@ -14,7 +16,7 @@ def build_workflow() -> StateGraph:
     workflow.add_node("rerank", rerank_node)
     workflow.add_node("generate", generate_node)
 
-    workflow.set_entry_point("intent")
+    workflow.add_edge(START, "intent")
     workflow.add_conditional_edges("intent", route_by_intent, {
         "rag": "retrieve",
         "direct": "generate",
@@ -29,13 +31,13 @@ def build_workflow() -> StateGraph:
     return workflow
 
 
-def route_by_intent(state: AgentState) -> str:
-    if state.get("intent") in ("文档检索",):
+def route_by_intent(state: AgentState) -> Literal["rag", "direct"]:
+    if state.get("intent") == CHAT_INTENT:
         return "direct"
     return "rag"
 
 
-def route_if_empty(state: AgentState) -> str:
+def route_if_empty(state: AgentState) -> Literal["rerank", "generate"]:
     if state.get("retrieved_docs"):
         return "rerank"
     return "generate"

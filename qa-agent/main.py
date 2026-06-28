@@ -1,5 +1,10 @@
+import sys
+from pathlib import Path
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from qa_agent.api.chat import router as chat_router
 from qa_agent.api.conversation import router as conversation_router
