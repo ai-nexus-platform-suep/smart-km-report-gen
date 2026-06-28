@@ -18,6 +18,12 @@
     <dependencies>
         <dependency>
             <groupId>com.myenglish</groupId>
+            <artifactId>qa-common</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>com.myenglish</groupId>
             <artifactId>report-common</artifactId>
             <version>${project.version}</version>
         </dependency>

@@ -1,6 +1,6 @@
 package com.powerreport.controller;
 
-import com.powerreport.common.ApiResult;
+import com.myenglish.qacommon.dto.ApiResponse;
 import com.powerreport.dto.OutlineConfirmRequest;
 import com.powerreport.dto.OutlineConfirmResponse;
 import com.powerreport.dto.OutlineGenerateRequest;
@@ -42,40 +42,40 @@ public class ReportController {
      * Compatibility endpoint: return local fixed outline template.
      */
     @PostMapping("/outline")
-    public ApiResult<List<OutlineNodeResponse>> outline(@Valid @RequestBody OutlineRequest request) {
-        return ApiResult.ok(outlineService.buildOutline(request.getReportType()));
+    public ApiResponse<List<OutlineNodeResponse>> outline(@Valid @RequestBody OutlineRequest request) {
+        return ApiResponse.success(outlineService.buildOutline(request.getReportType()));
     }
 
     /**
      * Backend 1 scope: call AI outline API, parse and cache outline in Redis.
      */
     @PostMapping("/outline/generate")
-    public ApiResult<OutlineGenerateResponse> generateOutline(
+    public ApiResponse<OutlineGenerateResponse> generateOutline(
             @Valid @RequestBody OutlineGenerateRequest request
     ) {
-        return ApiResult.ok(outlineService.generateOutline(request));
+        return ApiResponse.success(outlineService.generateOutline(request));
     }
 
     /**
      * Backend 1 scope: save final confirmed outline into reports + report_outline_nodes.
      */
     @PostMapping("/outline/confirm")
-    public ApiResult<OutlineConfirmResponse> confirmOutline(
+    public ApiResponse<OutlineConfirmResponse> confirmOutline(
             @Valid @RequestBody OutlineConfirmRequest request
     ) {
-        return ApiResult.ok(outlineService.confirmOutline(request));
+        return ApiResponse.success(outlineService.confirmOutline(request));
     }
 
     /**
      * Backend 1 scope: rebuild DOCX from saved DB draft without calling LLM.
      */
     @PostMapping("/{reportId}/export/docx")
-    public ApiResult<ReportFileResponse> exportReportDocx(
+    public ApiResponse<ReportFileResponse> exportReportDocx(
             @PathVariable String reportId,
             @RequestBody(required = false) ReportDocxExportRequest request
     ) throws IOException {
         ReportDocxExportRequest actualRequest = request == null ? new ReportDocxExportRequest() : request;
-        return ApiResult.ok(docxExportService.exportReport(reportId, actualRequest));
+        return ApiResponse.success(docxExportService.exportReport(reportId, actualRequest));
     }
 
     /**

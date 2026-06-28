@@ -1,6 +1,6 @@
 package com.powerreport.controller;
 
-import com.powerreport.common.ApiResult;
+import com.myenglish.qacommon.dto.ApiResponse;
 import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -11,8 +11,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class HealthController {
 
     @GetMapping("/health")
-    public ApiResult<Map<String, String>> health() {
-        return ApiResult.ok(Map.of(
+    public ApiResponse<Map<String, String>> health() {
+        return ApiResponse.success(Map.of(
                 "status", "ok",
                 "scope", "outline-and-docx"
         ));

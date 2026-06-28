@@ -94,7 +94,7 @@ report generate/
 | --- | --- |
 | `report-common/entity` | 报告主表、大纲、章节、文件等公共实体 |
 | `report-common/enums` | 报告类型、章节状态、图表编号模式等公共枚举 |
-| `report-common/common/ApiResult.java` | 统一接口响应包装 |
+| `qa-common/dto/ApiResponse.java` | 全项目统一接口响应包装 |
 | `ReportController.java` | 大纲、导出、下载接口入口 |
 | `OutlineServiceImpl.java` | 大纲生成、AI 调用、Redis 临时状态、确认保存 |
 | `DocxExportServiceImpl.java` | DOCX 渲染、数据库草稿导出、文件记录、图表编号 |
@@ -234,8 +234,8 @@ GET http://127.0.0.1:8080/api/health
 
 ```json
 {
-  "success": true,
-  "message": "ok",
+  "code": 200,
+  "message": "操作成功",
   "data": {
     "status": "ok",
     "scope": "outline-and-docx"
@@ -249,8 +249,8 @@ GET http://127.0.0.1:8080/api/health
 
 ```json
 {
-  "success": true,
-  "message": "ok",
+  "code": 200,
+  "message": "操作成功",
   "data": {}
 }
 ```
@@ -299,8 +299,8 @@ POST /api/reports/outline/generate
 
 ```json
 {
-  "success": true,
-  "message": "ok",
+  "code": 200,
+  "message": "操作成功",
   "data": {
     "tempId": "9d8a0d71-6b14-41b3-a7fb-c9969d38b80c",
     "source": "AI",
@@ -420,8 +420,8 @@ POST /api/reports/outline/confirm
 
 ```json
 {
-  "success": true,
-  "message": "ok",
+  "code": 200,
+  "message": "操作成功",
   "data": {
     "reportId": "2972bb8e-bb2b-47f9-8a99-dfb385a22538",
     "status": "DRAFT",
@@ -471,8 +471,8 @@ POST /api/reports/{reportId}/export/docx
 
 ```json
 {
-  "success": true,
-  "message": "ok",
+  "code": 200,
+  "message": "操作成功",
   "data": {
     "fileId": "c7ddf38a-1382-4bda-a1b0-df0f677600bb",
     "reportId": "2972bb8e-bb2b-47f9-8a99-dfb385a22538",
