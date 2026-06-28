@@ -18,6 +18,7 @@
         <module>qa-common</module>
         <module>report-generation/report-common</module>
         <module>report-generation/report-outline-docx</module>
+        <module>gateway</module>
     </modules>
 
     <properties>
