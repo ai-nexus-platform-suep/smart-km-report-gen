@@ -1,0 +1,18 @@
+# Java / Maven
+**/target/
+*.class
+
+# IDE
+.idea/
+*.iml
+
+# Logs
+*.log
+
+# Local generated files
+**/storage/reports/*
+**/storage/templates/*
+!**/storage/reports/.gitkeep
+!**/storage/templates/.gitkeep
+
+# Keep downloaded source PDFs unless you explicitly remove them.
