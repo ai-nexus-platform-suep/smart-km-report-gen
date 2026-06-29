@@ -5,6 +5,8 @@ import com.powerreport.gateway.dto.AuthResponse;
 import com.powerreport.gateway.dto.LoginRequest;
 import com.powerreport.gateway.dto.RefreshTokenRequest;
 import com.powerreport.gateway.dto.RegisterRequest;
+import com.powerreport.gateway.entity.SysUserEntity;
+import com.powerreport.gateway.service.UserService;
 import com.powerreport.gateway.util.JwtTokenProvider;
 import io.jsonwebtoken.Claims;
 import lombok.RequiredArgsConstructor;
@@ -24,34 +26,23 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.Optional;
 
 
 /**
  * 认证控制器（WebFlux 函数式端点）
  *
  * 提供用户注册、登录、Token 刷新接口。
- * 当前使用内存存储用户信息（ConcurrentHashMap），仅用于开发和演示。
- * 生产环境应替换为数据库用户服务。
+ * 用户数据持久化存储于 MySQL（sys_user 表），密码使用 BCrypt 加密。
  */
 @Slf4j
 @Configuration
 @RequiredArgsConstructor
 public class AuthController {
 
-    private static final Map<String, String> USER_STORE = new ConcurrentHashMap<>();
-    private static final Map<String, List<String>> ROLE_STORE = new ConcurrentHashMap<>();
-
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtProperties jwtProperties;
-
-    static {
-        USER_STORE.put("admin", "admin123");
-        ROLE_STORE.put("admin", Arrays.asList("ROLE_ADMIN", "ROLE_USER"));
-
-        USER_STORE.put("user", "user123");
-        ROLE_STORE.put("user", Arrays.asList("ROLE_USER"));
-    }
+    private final UserService userService;
 
     @Bean
     public RouterFunction<ServerResponse> authRoutes() {
@@ -89,13 +80,12 @@ public class AuthController {
                     String username = registerReq.getUsername().trim();
                     String password = registerReq.getPassword().trim();
 
-                    if (USER_STORE.containsKey(username)) {
+                    // 调用 UserService 注册（BCrypt 加密 + 写入 DB）
+                    boolean success = userService.register(username, password, "ROLE_USER");
+                    if (!success) {
                         return status(HttpStatus.CONFLICT,
                                 buildResponse(1002, "用户已存在", null));
                     }
-
-                    USER_STORE.put(username, password);
-                    ROLE_STORE.put(username, Arrays.asList("ROLE_USER"));
 
                     log.info("User registered: {}", username);
 
@@ -110,18 +100,16 @@ public class AuthController {
                     String username = loginReq.getUsername().trim();
                     String password = loginReq.getPassword().trim();
 
-                    String storedPassword = USER_STORE.get(username);
-                    if (storedPassword == null) {
+                    // 调用 UserService 登录校验（BCrypt 密码匹配）
+                    Optional<SysUserEntity> userOpt = userService.login(username, password);
+                    if (!userOpt.isPresent()) {
+                        // 不区分"用户不存在"和"密码错误"，防止用户名枚举攻击
                         return status(HttpStatus.UNAUTHORIZED,
-                                buildResponse(1001, "用户不存在", null));
+                                buildResponse(1001, "用户名或密码错误", null));
                     }
 
-                    if (!storedPassword.equals(password)) {
-                        return status(HttpStatus.UNAUTHORIZED,
-                                buildResponse(1003, "密码错误", null));
-                    }
-
-                    List<String> roles = ROLE_STORE.getOrDefault(username, Arrays.asList("ROLE_USER"));
+                    SysUserEntity user = userOpt.get();
+                    List<String> roles = parseRoles(user.getRoles());
 
                     String accessToken = jwtTokenProvider.generateAccessToken(username, roles);
                     String refreshToken = jwtTokenProvider.generateRefreshToken(username);
@@ -161,7 +149,11 @@ public class AuthController {
                         }
 
                         String username = claims.getSubject();
-                        List<String> roles = ROLE_STORE.getOrDefault(username, Arrays.asList("ROLE_USER"));
+
+                        // 从数据库获取用户角色
+                        List<String> roles = userService.findByUsername(username)
+                                .map(user -> parseRoles(user.getRoles()))
+                                .orElse(Arrays.asList("ROLE_USER"));
 
                         String newAccessToken = jwtTokenProvider.generateAccessToken(username, roles);
                         String newRefreshToken = jwtTokenProvider.generateRefreshToken(username);
@@ -194,12 +186,29 @@ public class AuthController {
                     buildResponse(401, "未认证", null));
         }
 
-        List<String> roles = ROLE_STORE.getOrDefault(username, Arrays.asList("ROLE_USER"));
+        // 从数据库获取用户角色
+        List<String> roles = userService.findByUsername(username)
+                .map(user -> parseRoles(user.getRoles()))
+                .orElse(Arrays.asList("ROLE_USER"));
 
         Map<String, Object> data = new HashMap<>();
         data.put("username", username);
         data.put("roles", roles);
 
         return ok(buildResponse(200, "操作成功", data));
+    }
+
+    /**
+     * 将数据库中的 roles 字符串（逗号分隔）解析为 List
+     */
+    private List<String> parseRoles(String rolesStr) {
+        if (rolesStr == null || rolesStr.trim().isEmpty()) {
+            return Arrays.asList("ROLE_USER");
+        }
+        String[] parts = rolesStr.split(",");
+        return Arrays.stream(parts)
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .collect(java.util.stream.Collectors.toList());
     }
 }
