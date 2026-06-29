@@ -19,6 +19,7 @@
         <module>report-generation/report-common</module>
         <module>report-generation/report-outline-docx</module>
         <module>gateway</module>
+        <module>report-generation/report-content-flow</module>
     </modules>
 
     <properties>

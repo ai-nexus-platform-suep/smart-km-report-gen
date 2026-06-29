@@ -1,6 +1,6 @@
 package com.powerreport;
 
-import com.powerreport.config.AiIntegrationProperties;
+import com.powerreport.config.ReportAiProperties;
 import com.powerreport.config.ReportExportProperties;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -9,7 +9,7 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 @SpringBootApplication
 @EnableConfigurationProperties({
         ReportExportProperties.class,
-        AiIntegrationProperties.class
+        ReportAiProperties.class
 })
 public class ReportOutlineDocxApplication {
 

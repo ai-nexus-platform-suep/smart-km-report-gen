@@ -6,8 +6,16 @@
 .idea/
 *.iml
 
+
 # Logs
 *.log
+
+# Python local runtime / secrets
+**/.venv/
+**/__pycache__/
+**/.env
+**/.env.*
+!**/.env.example
 
 # Local generated files
 **/storage/reports/*
