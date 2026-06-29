@@ -4,7 +4,7 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    database_url: str = "mysql+aiomysql://root:1234@127.0.0.1:3306/smart-km-report-gen"
+    database_url: str = "mysql+aiomysql://root:1234@127.0.0.1:3306/smart_km_report_gen"
     jwt_secret_key: str = "change-me"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 1440

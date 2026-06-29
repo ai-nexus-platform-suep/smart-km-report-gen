@@ -16,6 +16,20 @@ from qa_agent.service.citation_service import build_citations, merge_consecutive
 from qa_agent.service.thinking_service import add_thinking_step
 
 
+def _get_llm_config(state: dict) -> dict:
+    """从 state 中获取 LLM 配置，优先用 Java 传入的 model_config，fallback 到本地 settings"""
+    mc = state.get("model_config") if isinstance(state, dict) else {}
+    if mc and mc.get("api_key") and mc.get("base_url"):
+        return mc
+    return {
+        "provider": "deepseek",
+        "base_url": settings.llm_api_url,
+        "model_name": settings.llm_model_name,
+        "api_key": settings.llm_api_key,
+        "timeout_seconds": settings.llm_timeout,
+    }
+
+
 KNOWLEDGE_INTENT = "KNOWLEDGE_QA"
 CHAT_INTENT = "CHAT"
 DOCUMENT_SEARCH_INTENT = "DOCUMENT_SEARCH"
@@ -158,16 +172,17 @@ def _normalize_llm_decision(payload: dict) -> dict | None:
     return _intent_decision(intent, confidence, reason, needs_clarification, "llm")
 
 
-async def _classify_intent_with_llm(question: str) -> dict | None:
-    if not settings.llm_api_key:
+async def _classify_intent_with_llm(question: str, config: dict) -> dict | None:
+    if not config.get("api_key"):
         return None
-
+    base_url = config["base_url"].rstrip("/")
+    timeout = config.get("timeout_seconds", settings.llm_timeout)
     try:
-        async with httpx.AsyncClient(timeout=settings.llm_timeout) as client:
+        async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(
-                f"{settings.llm_api_url.rstrip('/')}/chat/completions",
-                headers={"Authorization": f"Bearer {settings.llm_api_key}"},
-                json={"model": settings.llm_model_name, "messages": _classification_messages(question)},
+                f"{base_url}/chat/completions",
+                headers={"Authorization": f"Bearer {config['api_key']}"},
+                json={"model": config.get("model_name", "deepseek-chat"), "messages": _classification_messages(question)},
             )
             response.raise_for_status()
             payload = response.json()
@@ -186,12 +201,12 @@ async def _classify_intent_with_llm(question: str) -> dict | None:
     return _normalize_llm_decision(json_payload) if json_payload else None
 
 
-async def _classify_intent(question: str) -> dict:
+async def _classify_intent(question: str, config: dict) -> dict:
     rule_decision = _classify_intent_by_rule(question)
     if rule_decision is not None:
         return rule_decision
 
-    llm_decision = await _classify_intent_with_llm(question)
+    llm_decision = await _classify_intent_with_llm(question, config)
     if llm_decision is not None:
         return llm_decision
 
@@ -252,23 +267,24 @@ def _history_without_current_question(messages: list, question: str) -> list:
     return history
 
 
-async def _stream_chat_model(messages: list[dict]) -> AsyncIterator[str]:
-    """流式调用 DeepSeek，逐 token yield 文本片段。"""
-    if not settings.llm_api_key:
+async def _stream_chat_model(messages: list[dict], config: dict) -> AsyncIterator[str]:
+    """流式调用 LLM，逐 token yield 文本片段。"""
+    if not config.get("api_key"):
         yield "LLM API key 未配置，当前仅完成 Agent 工作流编排。"
         return
 
-    url = f"{settings.llm_api_url.rstrip('/')}/chat/completions"
-    headers = {"Authorization": f"Bearer {settings.llm_api_key}"}
+    base_url = config["base_url"].rstrip("/")
+    timeout = config.get("timeout_seconds", settings.llm_timeout)
+    headers = {"Authorization": f"Bearer {config['api_key']}"}
     body = {
-        "model": settings.llm_model_name,
+        "model": config.get("model_name", "deepseek-chat"),
         "messages": messages,
         "stream": True,
     }
 
     try:
-        async with httpx.AsyncClient(timeout=settings.llm_timeout) as client:
-            async with client.stream("POST", url, headers=headers, json=body) as response:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            async with client.stream("POST", f"{base_url}/chat/completions", headers=headers, json=body) as response:
                 response.raise_for_status()
                 async for line in response.aiter_lines():
                     if not line or not line.startswith("data:"):
@@ -291,9 +307,9 @@ async def _stream_chat_model(messages: list[dict]) -> AsyncIterator[str]:
         yield "LLM 服务暂不可用，请稍后重试。"
 
 
-async def _call_chat_model(messages: list[dict]) -> str:
+async def _call_chat_model(messages: list[dict], config: dict) -> str:
     parts: list[str] = []
-    async for token in _stream_chat_model(messages):
+    async for token in _stream_chat_model(messages, config):
         parts.append(token)
     return "".join(parts) or "LLM 服务未返回有效回答。"
 
@@ -334,7 +350,8 @@ def _build_messages(
 
 async def intent_node(state: AgentState) -> dict:
     question = _question_from_state(state)
-    decision = await _classify_intent(question)
+    config = _get_llm_config(state)
+    decision = await _classify_intent(question, config)
     intent = decision["intent"]
     confidence = decision["confidence"]
     reason = decision["reason"]
@@ -413,6 +430,7 @@ async def generate_node(state: AgentState) -> dict:
     documents = state.get("retrieved_docs") or []
     no_knowledge = state.get("intent") in RAG_INTENTS and not documents
     llm_messages = _build_messages(question, documents, no_knowledge, state.get("messages") or [])
+    config = _get_llm_config(state)
 
     try:
         writer = get_stream_writer()
@@ -420,7 +438,7 @@ async def generate_node(state: AgentState) -> dict:
         writer = None
 
     parts: list[str] = []
-    async for token in _stream_chat_model(llm_messages):
+    async for token in _stream_chat_model(llm_messages, config):
         parts.append(token)
         if writer is not None:
             writer({"delta": token})

@@ -434,6 +434,13 @@ class TestABCIntegrationContracts:
                 "question": "什么是技术监督？",
                 "user_id": 7,
                 "selected_kb_ids": [1, 2],
+                "model_config": {
+                    "provider": "deepseek",
+                    "base_url": "https://api.deepseek.com",
+                    "model_name": "deepseek-chat",
+                    "api_key": "",
+                    "timeout_seconds": 60,
+                },
             }
         ]
         assert response.intent == "KNOWLEDGE_QA"

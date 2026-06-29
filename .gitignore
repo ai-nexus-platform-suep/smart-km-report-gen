@@ -25,3 +25,10 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .venv/
+.pytest_cache/
+
+# AI Tools
+.claude/
+.cursor/
+.trellis/
+AGENTS.md

@@ -21,6 +21,7 @@ from ..db.session import get_session_factory
 from ..graph.workflow import agent_graph
 from ..service.citation_service import citation_to_sse
 from ..service.thinking_service import to_sse_event
+from ..client.java_client import fetch_llm_config
 
 router = APIRouter(tags=["chat"])
 
@@ -60,12 +61,14 @@ async def _stream_chat(
     )
 
     history, _ = await get_messages(db, req.conversation_id, page=1, size=200)
+    model_config = await fetch_llm_config(user_id=user_id)
     agent_input = {
         "messages": _history_messages(history),
         "question": req.question,
         "conversation_id": req.conversation_id,
         "user_id": user_id,
         "selected_kb_ids": req.selected_kb_ids,
+        "model_config": model_config,
     }
 
     assistant_message = await save_message(
@@ -220,11 +223,14 @@ async def chat_test(req: ChatTestReq) -> ChatTestResp:
     if not req.question.strip():
         raise HTTPException(status_code=400, detail="问题不能为空")
 
+    user_id = req.user_id or DEFAULT_USER_ID
+    model_config = await fetch_llm_config(user_id=user_id)
     agent_input = {
         "messages": _test_history_messages(req),
         "question": req.question,
-        "user_id": req.user_id,
+        "user_id": user_id,
         "selected_kb_ids": req.selected_kb_ids,
+        "model_config": model_config,
     }
     final_state = await agent_graph.ainvoke(agent_input)
     retrieved_docs = final_state.get("retrieved_docs") or []
