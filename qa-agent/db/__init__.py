@@ -1,5 +1,5 @@
 from qa_agent.db.models import Base, Conversation, Message, QaMessage, QaSession
-from qa_agent.db.session import async_session_factory, engine, get_db
+from qa_agent.db.session import get_db, get_engine, get_session_factory
 
 __all__ = [
     "Base",
@@ -7,7 +7,7 @@ __all__ = [
     "Message",
     "QaMessage",
     "QaSession",
-    "async_session_factory",
-    "engine",
     "get_db",
+    "get_engine",
+    "get_session_factory",
 ]

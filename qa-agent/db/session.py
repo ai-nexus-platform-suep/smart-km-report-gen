@@ -6,12 +6,26 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from qa_agent.core.config import settings
 
-engine = create_async_engine(settings.database_url, echo=False, pool_pre_ping=True)
-async_session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+engine = None
+async_session_factory = None
+
+
+def get_engine():
+    global engine
+    if engine is None:
+        engine = create_async_engine(settings.database_url, echo=False)
+    return engine
+
+
+def get_session_factory():
+    global async_session_factory
+    if async_session_factory is None:
+        async_session_factory = async_sessionmaker(get_engine(), class_=AsyncSession, expire_on_commit=False)
+    return async_session_factory
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    async with async_session_factory() as session:
+    async with get_session_factory()() as session:
         try:
             yield session
             await session.commit()

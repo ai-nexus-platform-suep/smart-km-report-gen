@@ -1,8 +1,12 @@
-"""集成测试 (人员 C 独占)
+"""qa-agent 上下文、思考过程、引用与 SSE 契约测试。
 
-覆盖: 上下文管理、思考过程、引用溯源 三个模块
 运行: python -m pytest qa-agent/tests/test_chat.py -v
 """
+
+import json
+import importlib
+import sys
+from types import ModuleType, SimpleNamespace
 
 import pytest
 from qa_agent.graph.context import (
@@ -25,6 +29,7 @@ from qa_agent.service.citation_service import (
     citation_to_sse,
 )
 from qa_agent.core.constants import SSEEventType, ThinkingStepType
+from qa_agent.graph.nodes import _build_messages
 
 
 # ============================================================
@@ -244,3 +249,226 @@ class TestConstants:
         assert ThinkingStepType.RETRIEVE == "retrieve"
         assert ThinkingStepType.RERANK == "rerank"
         assert ThinkingStepType.GENERATE == "generate"
+
+
+class TestABCIntegrationContracts:
+    """A/B/C 合并后的跨层契约测试。"""
+
+    def test_build_messages_uses_history_without_repeating_current_question(self):
+        messages = [
+            {"role": "user", "content": "变压器油温异常怎么处理"},
+            {"role": "assistant", "content": "先检查冷却系统。"},
+            {"role": "user", "content": "具体步骤是什么"},
+        ]
+
+        llm_messages = _build_messages(
+            "具体步骤是什么",
+            documents=[],
+            no_knowledge=False,
+            history_messages=messages,
+        )
+        prompt = llm_messages[-1]["content"]
+
+        assert "历史对话上下文" in prompt
+        assert "用户: 变压器油温异常怎么处理" in prompt
+        assert "助手: 先检查冷却系统。" in prompt
+        assert prompt.count("具体步骤是什么") == 1
+
+    def test_build_messages_keeps_documents_after_history(self):
+        llm_messages = _build_messages(
+            "什么是技术监督？",
+            documents=[
+                {
+                    "doc_id": "doc_1",
+                    "doc_name": "技术监督办法.pdf",
+                    "snippet": "技术监督是指...",
+                    "score": 0.92,
+                }
+            ],
+            no_knowledge=False,
+            history_messages=[{"role": "user", "content": "你好"}],
+        )
+        prompt = llm_messages[-1]["content"]
+
+        assert "历史对话上下文" in prompt
+        assert "知识库片段" in prompt
+        assert "技术监督办法.pdf" in prompt
+        assert "用户问题:什么是技术监督？" in prompt
+
+    def test_thinking_and_citation_sse_payloads_are_canonical(self):
+        step_payload = to_sse_event(add_thinking_step([], "retrieve", "检索到 2 条片段")[0])
+        citation_payload = citation_to_sse(
+            merge_consecutive_citations(
+                build_citations(
+                    [
+                        {"doc_id": "d1", "doc_name": "A.pdf", "snippet": "片段1", "score": 0.9},
+                        {"doc_id": "d1", "doc_name": "A.pdf", "snippet": "片段2", "score": 0.8},
+                    ]
+                )
+            )
+        )
+
+        assert step_payload["type"] == "thinking"
+        assert step_payload["step_type"] == "retrieve"
+        assert "event_type" not in step_payload
+        assert citation_payload["type"] == "citation"
+        assert citation_payload["merged"] is True
+        assert citation_payload["citations"][0]["indices"] == [1, 2]
+
+    def test_stream_chat_emits_canonical_thinking_and_citation_events(self, monkeypatch):
+        updated_messages = []
+        fake_session_module = ModuleType("qa_agent.db.session")
+        fake_session_module.get_engine = lambda: object()
+        fake_session_module.get_session_factory = lambda: object()
+
+        async def fake_get_db():
+            yield SimpleNamespace()
+
+        fake_session_module.get_db = fake_get_db
+        monkeypatch.setitem(sys.modules, "qa_agent.db.session", fake_session_module)
+        chat_module = importlib.import_module("qa_agent.api.chat")
+
+        async def fake_get_conversation(db, conversation_id):
+            return SimpleNamespace(id=conversation_id)
+
+        async def fake_save_message(db, conversation_id, role, content, **kwargs):
+            if role == "assistant":
+                return SimpleNamespace(id=9002)
+            return SimpleNamespace(id=9001)
+
+        async def fake_get_messages(db, conversation_id, page=1, size=200):
+            return [SimpleNamespace(role="user", content="什么是技术监督？")], 1
+
+        async def fake_update_message(db, message_id, **kwargs):
+            updated_messages.append({"message_id": message_id, **kwargs})
+            return SimpleNamespace(id=message_id)
+
+        class FakeAgentGraph:
+            async def astream(self, agent_input, stream_mode):
+                del agent_input, stream_mode
+                first_step = add_thinking_step([], "intent", "识别意图: KNOWLEDGE_QA")[0]
+                second_step = add_thinking_step([first_step], "generate", "回答生成完成")[1]
+                yield "updates", {
+                    "intent": {
+                        "intent": "KNOWLEDGE_QA",
+                        "thinking_steps": [first_step],
+                    }
+                }
+                yield "custom", {"delta": "答"}
+                yield "updates", {
+                    "generate": {
+                        "final_response": "答案",
+                        "citations": [{"doc_id": "d1", "indices": [1, 2], "doc_name": "A.pdf"}],
+                        "thinking_steps": [first_step, second_step],
+                        "error": None,
+                    }
+                }
+
+        monkeypatch.setattr(chat_module, "get_conversation", fake_get_conversation)
+        monkeypatch.setattr(chat_module, "save_message", fake_save_message)
+        monkeypatch.setattr(chat_module, "get_messages", fake_get_messages)
+        monkeypatch.setattr(chat_module, "update_message", fake_update_message)
+        monkeypatch.setattr(chat_module, "agent_graph", FakeAgentGraph())
+
+        async def collect_events():
+            req = chat_module.ChatReq(conversation_id=1, question="什么是技术监督？", selected_kb_ids=[])
+            return [event async for event in chat_module._stream_chat(req, SimpleNamespace())]
+
+        import asyncio
+
+        events = asyncio.run(collect_events())
+        parsed_events = [(event["event"], json.loads(event["data"])) for event in events]
+
+        thinking_payloads = [data for event, data in parsed_events if event == "thinking"]
+        citation_payloads = [data for event, data in parsed_events if event == "citation"]
+        message_payloads = [data for event, data in parsed_events if event == "message"]
+
+        assert thinking_payloads[0]["type"] == "thinking"
+        assert thinking_payloads[0]["step_type"] == "intent"
+        assert citation_payloads == [
+            {"type": "citation", "citations": [{"doc_id": "d1", "indices": [1, 2], "doc_name": "A.pdf"}], "merged": True}
+        ]
+        assert message_payloads[0]["delta"] == "答"
+        assert message_payloads[-1]["finished"] is True
+        assert json.loads(updated_messages[0]["citations"])[0]["indices"] == [1, 2]
+
+    def test_chat_test_invokes_graph_without_database(self, monkeypatch):
+        chat_module = importlib.import_module("qa_agent.api.chat")
+        captured_inputs = []
+
+        class FakeAgentGraph:
+            async def ainvoke(self, agent_input):
+                captured_inputs.append(agent_input)
+                return {
+                    "intent": "KNOWLEDGE_QA",
+                    "mode": "rag",
+                    "needs_clarification": False,
+                    "classification_source": "rule",
+                    "retrieved_docs": [{"doc_id": "d1"}, {"doc_id": "d2"}],
+                    "thinking_steps": [{"type": "intent", "message": "识别意图", "timestamp": 1.0}],
+                    "citations": [{"doc_id": "d1", "index": 1, "doc_name": "A.pdf"}],
+                    "final_response": "测试回答",
+                }
+
+        monkeypatch.setattr(chat_module, "agent_graph", FakeAgentGraph())
+
+        async def call_endpoint():
+            req = chat_module.ChatTestReq(
+                question="什么是技术监督？",
+                selected_kb_ids=[1, 2],
+                user_id=7,
+                messages=[{"role": "assistant", "content": "你好"}],
+            )
+            return await chat_module.chat_test(req)
+
+        import asyncio
+
+        response = asyncio.run(call_endpoint())
+
+        assert captured_inputs == [
+            {
+                "messages": [
+                    {"role": "assistant", "content": "你好"},
+                    {"role": "user", "content": "什么是技术监督？"},
+                ],
+                "question": "什么是技术监督？",
+                "user_id": 7,
+                "selected_kb_ids": [1, 2],
+            }
+        ]
+        assert response.intent == "KNOWLEDGE_QA"
+        assert response.mode == "rag"
+        assert response.classification_source == "rule"
+        assert response.retrieved_docs_count == 2
+        assert response.final_response == "测试回答"
+
+    def test_chat_test_keeps_existing_current_question(self):
+        chat_module = importlib.import_module("qa_agent.api.chat")
+        req = chat_module.ChatTestReq(
+            question="继续说明",
+            messages=[{"role": "user", "content": "继续说明"}],
+        )
+
+        assert chat_module._test_history_messages(req) == [{"role": "user", "content": "继续说明"}]
+
+    def test_chat_sse_returns_error_when_database_session_init_fails(self, monkeypatch):
+        chat_module = importlib.import_module("qa_agent.api.chat")
+
+        def raise_missing_driver():
+            raise ModuleNotFoundError("No module named 'aiomysql'")
+
+        monkeypatch.setattr(chat_module, "get_session_factory", raise_missing_driver)
+
+        async def collect_events():
+            req = chat_module.ChatReq(conversation_id=1, question="什么是技术监督？", selected_kb_ids=[])
+            response = await chat_module.chat(req)
+            return [event async for event in response.body_iterator]
+
+        import asyncio
+
+        events = asyncio.run(collect_events())
+        parsed_events = [(event["event"], json.loads(event["data"])) for event in events]
+
+        assert parsed_events[0][0] == "error"
+        assert "数据库会话初始化失败" in parsed_events[0][1]["message"]
+        assert parsed_events[1] == ("done", {})

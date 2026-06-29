@@ -1,7 +1,7 @@
 """API 请求/响应模型 (人员 B 独占)"""
 
 from datetime import datetime
-from typing import Generic, TypeVar
+from typing import Any, Generic, Literal, TypeVar
 
 from pydantic import BaseModel, Field
 
@@ -63,3 +63,26 @@ class ChatReq(BaseModel):
     question: str = Field(min_length=1)
     user_id: int | None = None
     selected_kb_ids: list[int] = Field(default_factory=list)
+
+
+class ChatHistoryMessage(BaseModel):
+    role: Literal["system", "user", "assistant"] = "user"
+    content: str = Field(min_length=1)
+
+
+class ChatTestReq(BaseModel):
+    question: str = Field(min_length=1, examples=["什么是电力技术监督？"])
+    selected_kb_ids: list[int] = Field(default_factory=list)
+    user_id: int | None = None
+    messages: list[ChatHistoryMessage] = Field(default_factory=list)
+
+
+class ChatTestResp(BaseModel):
+    intent: str | None = None
+    mode: str | None = None
+    needs_clarification: bool = False
+    classification_source: str | None = None
+    retrieved_docs_count: int = 0
+    thinking_steps: list[dict[str, Any]] = Field(default_factory=list)
+    citations: list[dict[str, Any]] = Field(default_factory=list)
+    final_response: str = ""
