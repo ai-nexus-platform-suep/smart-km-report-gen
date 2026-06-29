@@ -9,6 +9,7 @@ public class CreateKnowledgeBaseRequest {
     private String name;
     @Size(max = 500)
     private String description;
+    @NotBlank
     private String docType;
     private String chunkStrategy;
     private String searchStrategy;

@@ -34,6 +34,13 @@ public class KnowledgeBaseController {
         return ApiResponse.ok(knowledgeBaseService.create(request, 0L));
     }
 
+    // 精确路由必须在 /{id} 之前，否则 batch 会被匹配为 id
+    @DeleteMapping("/batch")
+    public ApiResponse<Void> batchDelete(@Valid @RequestBody BatchDeleteRequest request) {
+        knowledgeBaseService.batchDelete(request.getIds());
+        return ApiResponse.ok();
+    }
+
     @GetMapping("/{id}")
     public ApiResponse<KnowledgeBaseVO> get(@PathVariable String id) {
         return ApiResponse.ok(knowledgeBaseService.getById(id));
@@ -49,12 +56,6 @@ public class KnowledgeBaseController {
     @DeleteMapping("/{id}")
     public ApiResponse<Void> delete(@PathVariable String id) {
         knowledgeBaseService.deleteById(id);
-        return ApiResponse.ok();
-    }
-
-    @DeleteMapping("/batch")
-    public ApiResponse<Void> batchDelete(@Valid @RequestBody BatchDeleteRequest request) {
-        knowledgeBaseService.batchDelete(request.getIds());
         return ApiResponse.ok();
     }
 }
