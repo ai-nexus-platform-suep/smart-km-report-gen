@@ -11,31 +11,31 @@ const moduleRoutes: RouteRecordRaw[] = [
   {
     path: '/reports',
     name: 'ReportList',
-    component: () => import('../pages/ReportHistory.vue'),
+    component: () => import('../pages/reports/ReportListPage.vue'),
     meta: { title: '报告记录' },
   },
   {
     path: '/reports/new',
     name: 'ReportCreate',
-    component: () => import('../pages/ReportCreate.vue'),
+    component: () => import('../pages/reports/NewReportPage.vue'),
     meta: { title: '新建报告' },
   },
   {
     path: '/reports/:id/outline',
     name: 'ReportOutline',
-    component: placeholder('大纲编辑', '后续任务 C-14 迁入完整大纲生成与编辑页面'),
+    component: () => import('../pages/reports/OutlinePage.vue'),
     meta: { title: '大纲编辑' },
   },
   {
     path: '/reports/:id/workspace',
     name: 'ReportWorkspace',
-    component: placeholder('正文工作台', '后续任务 C-15 迁入正文流式生成与章节编辑页面'),
+    component: () => import('../pages/reports/WorkspacePage.vue'),
     meta: { title: '正文工作台' },
   },
   {
     path: '/reports/:id/export',
     name: 'ReportExport',
-    component: placeholder('报告导出', '后续任务 C-18 迁入 DOCX 导出与下载页面'),
+    component: () => import('../pages/reports/ExportPage.vue'),
     meta: { title: '报告导出' },
   },
   {
@@ -73,27 +73,18 @@ function guarded(title: string, description: string) {
     })
 }
 
-function placeholder(title: string, description: string) {
-  return () =>
-    Promise.resolve({
-      setup() {
-        return () => Placeholder(title, description)
-      },
-    })
-}
-
 function Placeholder(title: string, description: string) {
   return h('section', { class: 'page' }, [
     h('div', { class: 'page-title' }, [
       h('div', [
-        h('span', { class: 'eyebrow' }, 'REPORT MODULE'),
+        h('span', { class: 'eyebrow' }, 'REPORT ADMIN'),
         h('h1', title),
         h('p', description),
       ]),
     ]),
     h('div', { class: 'surface', style: 'padding: 28px;' }, [
-      h('div', { class: 'terminal-label', style: 'color: var(--accent-blue);' }, 'MIGRATION PLACEHOLDER'),
-      h('p', { style: 'margin: 12px 0 0; color: var(--text-secondary);' }, '当前阶段完成入口、路由、布局、样式和基础组件迁移，业务页面将在后续任务逐步接入。'),
+      h('div', { class: 'terminal-label', style: 'color: var(--accent-blue);' }, 'ADMIN PLACEHOLDER'),
+      h('p', { style: 'margin: 12px 0 0; color: var(--text-secondary);' }, '当前只迁移用户侧报告功能，管理侧页面将在后续任务单独接入。'),
     ]),
   ])
 }
