@@ -65,7 +65,7 @@ public class PipelineCallbackController {
                 chunks.add(chunk);
             }
             if (!chunks.isEmpty()) {
-                chunkMapper.batchInsert(chunks);
+                chunkMapper.insertBatch(chunks);
             }
         }
 

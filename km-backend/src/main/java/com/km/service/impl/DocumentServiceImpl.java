@@ -49,6 +49,7 @@ public class DocumentServiceImpl implements DocumentService {
     private final ChunkMapper chunkMapper;
     private final KnowledgeBaseMapper knowledgeBaseMapper;
     private final FileStorageService fileStorageService;
+    private final DocumentTaskProducer taskProducer;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
