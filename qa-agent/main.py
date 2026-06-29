@@ -19,8 +19,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(chat_router, prefix="/api/v1")
-app.include_router(conversation_router, prefix="/api/v1")
+app.include_router(chat_router, prefix="/api")
+app.include_router(conversation_router, prefix="/api")
 
 
 if __name__ == "__main__":
