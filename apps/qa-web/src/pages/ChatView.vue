@@ -240,10 +240,27 @@ function appendFollowUp() {
           <p class="eyebrow">智能问答</p>
           <h2>技术监督助手</h2>
         </div>
-        <el-button type="primary" :icon="Plus" circle />
+        <el-button class="new-chat-btn" type="primary" :icon="Plus">新建</el-button>
+      </div>
+
+      <!-- 侧栏概览用于制造“产品工作台”感，也方便后续接入真实统计数据。 -->
+      <div class="panel-hero">
+        <span class="hero-glow" />
+        <strong>企业知识问答空间</strong>
+        <p>基于规程、报告和检修记录生成可追溯回答。</p>
+        <div class="hero-stats">
+          <span><b>2</b> 知识库</span>
+          <span><b>4</b> 最近会话</span>
+        </div>
       </div>
 
       <el-input v-model="query" class="conversation-search" :prefix-icon="Search" placeholder="搜索会话、设备、规程" />
+
+      <div class="panel-tabs">
+        <button class="active">全部</button>
+        <button>收藏</button>
+        <button>最近</button>
+      </div>
 
       <div class="conversation-list">
         <button
@@ -255,7 +272,10 @@ function appendFollowUp() {
         >
           <span class="conversation-icon"><ChatDotRound /></span>
           <span class="conversation-content">
-            <span class="conversation-title">{{ item.title }}</span>
+            <span class="conversation-title">
+              {{ item.title }}
+              <i v-if="item.id === activeConversationId" />
+            </span>
             <span class="conversation-summary">{{ item.summary }}</span>
             <span class="conversation-meta">
               <span>{{ item.tag }}</span>
@@ -427,9 +447,10 @@ function appendFollowUp() {
 /* 页面整体采用三栏工作台布局：会话、对话、溯源信息。 */
 .qa-chat-shell {
   display: grid;
-  grid-template-columns: 292px minmax(0, 1fr) 340px;
-  gap: 16px;
+  grid-template-columns: 304px minmax(0, 1fr) 340px;
+  gap: 18px;
   min-height: calc(100vh - var(--header-height) - 48px);
+  color: var(--text-primary);
 }
 
 .conversation-panel,
@@ -437,15 +458,33 @@ function appendFollowUp() {
 .insight-panel {
   min-height: 0;
   border: 1px solid var(--border-color);
-  border-radius: var(--border-radius);
+  border-radius: 22px;
   background: var(--bg-container);
-  box-shadow: var(--shadow-xs);
+  box-shadow: var(--shadow-sm);
 }
 
 .conversation-panel {
   display: flex;
   flex-direction: column;
+  position: relative;
+  overflow: hidden;
   padding: 18px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.98)),
+    radial-gradient(circle at 12% 4%, rgba(15, 118, 110, 0.14), transparent 30%);
+}
+
+.conversation-panel::before {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(90deg, rgba(15, 118, 110, 0.08) 1px, transparent 1px),
+    linear-gradient(180deg, rgba(15, 118, 110, 0.06) 1px, transparent 1px);
+  background-size: 26px 26px;
+  content: '';
+  mask-image: linear-gradient(180deg, #000, transparent 50%);
+  pointer-events: none;
 }
 
 .panel-top,
@@ -471,13 +510,15 @@ function appendFollowUp() {
 }
 
 .panel-top {
+  position: relative;
+  z-index: 1;
   gap: 12px;
-  margin-bottom: 18px;
+  margin-bottom: 14px;
 }
 
 .eyebrow,
 .header-kicker {
-  color: #0f766e;
+  color: var(--qa-brand, #0f766e);
   font-size: 12px;
   font-weight: 700;
 }
@@ -491,43 +532,155 @@ function appendFollowUp() {
 }
 
 .panel-top h2 {
-  font-size: 20px;
+  font-size: 21px;
+  letter-spacing: -0.3px;
+}
+
+.new-chat-btn {
+  border: 0;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #0f766e, #2563eb);
+  box-shadow: 0 12px 22px rgba(15, 118, 110, 0.22);
+}
+
+.panel-hero {
+  position: relative;
+  z-index: 1;
+  overflow: hidden;
+  margin-bottom: 14px;
+  padding: 16px;
+  border: 1px solid rgba(15, 118, 110, 0.16);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 86% 12%, rgba(37, 99, 235, 0.16), transparent 28%),
+    linear-gradient(135deg, rgba(236, 253, 245, 0.96), rgba(239, 246, 255, 0.88));
+}
+
+.hero-glow {
+  position: absolute;
+  right: -28px;
+  bottom: -34px;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: rgba(20, 184, 166, 0.22);
+  filter: blur(4px);
+}
+
+.panel-hero strong {
+  position: relative;
+  z-index: 1;
+  display: block;
+  color: #0f172a;
+  font-size: 15px;
+}
+
+.panel-hero p {
+  position: relative;
+  z-index: 1;
+  margin: 8px 0 14px;
+  color: #475467;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.hero-stats {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.hero-stats span {
+  padding: 6px 9px;
+  border: 1px solid rgba(15, 118, 110, 0.12);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.62);
+  color: #475467;
+  font-size: 12px;
+}
+
+.hero-stats b {
+  color: #0f766e;
 }
 
 .conversation-search {
+  position: relative;
+  z-index: 1;
   margin-bottom: 14px;
 }
 
+.conversation-search :deep(.el-input__wrapper) {
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.06);
+}
+
+.panel-tabs {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 12px;
+  padding: 4px;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 14px;
+  background: rgba(241, 245, 249, 0.82);
+}
+
+.panel-tabs button {
+  height: 30px;
+  border-radius: 10px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.panel-tabs button.active {
+  background: #fff;
+  color: var(--qa-brand, #0f766e);
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
+}
+
 .conversation-list {
+  position: relative;
+  z-index: 1;
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   min-height: 0;
   overflow-y: auto;
+  padding-right: 2px;
 }
 
 .conversation-item {
   display: grid;
-  grid-template-columns: 36px minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 11px;
   width: 100%;
   padding: 12px;
   border: 1px solid transparent;
-  border-radius: var(--border-radius);
+  border-radius: 18px;
   color: var(--text-secondary);
   text-align: left;
   transition: all var(--transition-fast);
 }
 
 .conversation-item:hover {
-  background: var(--bg-hover);
+  border-color: rgba(15, 23, 42, 0.06);
+  background: rgba(255, 255, 255, 0.72);
+  transform: translateY(-1px);
 }
 
 .conversation-item.active {
-  border-color: #b7d4ff;
-  background: #f0f7ff;
+  border-color: rgba(15, 118, 110, 0.28);
+  background:
+    linear-gradient(135deg, rgba(236, 253, 245, 0.92), rgba(239, 246, 255, 0.92));
   color: var(--text-primary);
+  box-shadow: 0 14px 26px rgba(15, 23, 42, 0.08);
 }
 
 .conversation-icon,
@@ -538,11 +691,16 @@ function appendFollowUp() {
 }
 
 .conversation-icon {
-  width: 36px;
-  height: 36px;
-  border-radius: var(--border-radius-sm);
-  background: #edf6f5;
-  color: #0f766e;
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  background: rgba(15, 118, 110, 0.10);
+  color: var(--qa-brand, #0f766e);
+}
+
+.conversation-item.active .conversation-icon {
+  background: linear-gradient(135deg, #0f766e, #2563eb);
+  color: #fff;
 }
 
 .conversation-icon :deep(svg),
@@ -567,8 +725,21 @@ function appendFollowUp() {
 }
 
 .conversation-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   color: inherit;
   font-weight: 650;
+}
+
+.conversation-title i {
+  width: 7px;
+  height: 7px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #17b26a;
+  box-shadow: 0 0 0 4px rgba(23, 178, 106, 0.12);
 }
 
 .conversation-summary {
@@ -592,11 +763,14 @@ function appendFollowUp() {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96)),
+    radial-gradient(circle at 96% 2%, rgba(37, 99, 235, 0.08), transparent 28%);
 }
 
 .chat-header {
   gap: 16px;
-  padding: 20px 24px 16px;
+  padding: 22px 26px 16px;
   border-bottom: 1px solid var(--border-color-light);
 }
 
@@ -604,10 +778,12 @@ function appendFollowUp() {
   display: flex;
   gap: 6px;
   margin-bottom: 4px;
+  align-items: center;
 }
 
 .chat-header h1 {
-  font-size: 22px;
+  font-size: 23px;
+  letter-spacing: -0.4px;
 }
 
 .header-actions {
@@ -619,19 +795,20 @@ function appendFollowUp() {
 .context-strip {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-  padding: 14px 24px;
+  gap: 12px;
+  padding: 14px 26px;
   border-bottom: 1px solid var(--border-color-light);
-  background: #fbfcfd;
+  background: rgba(248, 250, 252, 0.72);
 }
 
 .context-card {
   gap: 10px;
   min-width: 0;
-  padding: 10px;
-  border: 1px solid var(--border-color-light);
-  border-radius: var(--border-radius);
-  background: #fff;
+  padding: 12px;
+  border: 1px solid rgba(15, 23, 42, 0.06);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
 }
 
 .context-card strong,
@@ -645,10 +822,10 @@ function appendFollowUp() {
 }
 
 .context-icon {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   flex: 0 0 auto;
-  border-radius: var(--border-radius-sm);
+  border-radius: 12px;
 }
 
 .context-icon.blue {
@@ -670,10 +847,10 @@ function appendFollowUp() {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 24px;
+  padding: 28px 26px;
   background:
-    linear-gradient(180deg, rgba(247, 250, 252, 0.88), rgba(255, 255, 255, 0.96)),
-    radial-gradient(circle at top left, rgba(21, 94, 239, 0.06), transparent 28%);
+    radial-gradient(circle at top left, rgba(15, 118, 110, 0.08), transparent 30%),
+    linear-gradient(180deg, rgba(248, 250, 252, 0.86), rgba(255, 255, 255, 0.94));
 }
 
 .message-row {
@@ -709,10 +886,11 @@ function appendFollowUp() {
   justify-content: center;
   width: 38px;
   height: 38px;
-  border-radius: 10px;
-  background: #0f766e;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #0f766e, #2563eb);
   color: #fff;
   font-weight: 700;
+  box-shadow: 0 12px 20px rgba(15, 118, 110, 0.16);
 }
 
 .message-body {
@@ -732,16 +910,23 @@ function appendFollowUp() {
 }
 
 .message-card {
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius);
-  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.92);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
 
+.message-row.user .message-card {
+  border-color: rgba(15, 118, 110, 0.14);
+  background: linear-gradient(135deg, rgba(236, 253, 245, 0.96), rgba(239, 246, 255, 0.92));
+}
+
 .inline-thinking {
-  border-bottom: 1px solid var(--border-color-light);
-  background: #fbfcfd;
+  border-bottom: 1px solid rgba(15, 23, 42, 0.06);
+  background:
+    linear-gradient(90deg, rgba(15, 118, 110, 0.08), rgba(37, 99, 235, 0.05)),
+    rgba(248, 250, 252, 0.9);
 }
 
 .thinking-toggle {
@@ -759,7 +944,8 @@ function appendFollowUp() {
 }
 
 .thinking-toggle small {
-  color: #155eef;
+  color: var(--qa-blue, #2563eb);
+  font-weight: 700;
 }
 
 .inline-thinking-list {
@@ -802,7 +988,7 @@ function appendFollowUp() {
 
 .inline-thinking-step.running .inline-dot {
   background: #f79009;
-  box-shadow: 0 0 0 4px #fff5e6;
+  box-shadow: 0 0 0 4px rgba(247, 144, 9, 0.14);
 }
 
 .message-card p {
@@ -823,13 +1009,13 @@ function appendFollowUp() {
   gap: 4px;
   padding: 8px 12px;
   border-top: 1px solid var(--border-color-light);
-  background: #fbfcfd;
+  background: rgba(248, 250, 252, 0.74);
 }
 
 .composer {
-  padding: 16px 24px 20px;
+  padding: 16px 26px 22px;
   border-top: 1px solid var(--border-color);
-  background: #fff;
+  background: rgba(255, 255, 255, 0.92);
 }
 
 .composer-top {
@@ -840,9 +1026,14 @@ function appendFollowUp() {
 }
 
 .composer :deep(.el-textarea__inner) {
-  border-radius: var(--border-radius);
-  box-shadow: none;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.08);
   line-height: 1.6;
+}
+
+.composer :deep(.el-textarea__inner:focus) {
+  box-shadow: 0 0 0 1px rgba(15, 118, 110, 0.36), 0 16px 32px rgba(15, 23, 42, 0.08);
 }
 
 .follow-up-bar {
@@ -851,9 +1042,9 @@ function appendFollowUp() {
   gap: 8px;
   margin-top: 10px;
   padding: 10px;
-  border: 1px solid #fedf89;
-  border-radius: var(--border-radius);
-  background: #fffbeb;
+  border: 1px solid rgba(217, 119, 6, 0.26);
+  border-radius: 16px;
+  background: rgba(255, 251, 235, 0.92);
 }
 
 .composer-actions {
@@ -868,18 +1059,20 @@ function appendFollowUp() {
 }
 
 .quick-prompts button {
-  padding: 5px 10px;
-  border: 1px solid var(--border-color);
+  padding: 6px 11px;
+  border: 1px solid rgba(15, 23, 42, 0.08);
   border-radius: 999px;
+  background: rgba(255, 255, 255, 0.62);
   color: var(--text-secondary);
   font-size: 12px;
   transition: all var(--transition-fast);
 }
 
 .quick-prompts button:hover {
-  border-color: #b7d4ff;
-  background: #f0f7ff;
-  color: #155eef;
+  border-color: rgba(15, 118, 110, 0.24);
+  background: var(--qa-brand-soft, #e9fbf6);
+  color: var(--qa-brand, #0f766e);
+  transform: translateY(-1px);
 }
 
 .send-actions {
@@ -894,6 +1087,9 @@ function appendFollowUp() {
   gap: 14px;
   padding: 18px;
   overflow-y: auto;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96)),
+    radial-gradient(circle at 30% 0%, rgba(15, 118, 110, 0.10), transparent 28%);
 }
 
 .insight-section {
@@ -919,8 +1115,8 @@ function appendFollowUp() {
   min-width: 24px;
   height: 24px;
   border-radius: 999px;
-  background: #eef3ff;
-  color: #155eef;
+  background: rgba(37, 99, 235, 0.10);
+  color: var(--qa-blue, #2563eb);
   font-size: 12px;
 }
 
@@ -942,12 +1138,12 @@ function appendFollowUp() {
   margin-top: 5px;
   border-radius: 50%;
   background: #17b26a;
-  box-shadow: 0 0 0 4px #eafaf3;
+  box-shadow: 0 0 0 4px rgba(23, 178, 106, 0.14);
 }
 
 .timeline-item.running .timeline-dot {
   background: #f79009;
-  box-shadow: 0 0 0 4px #fff5e6;
+  box-shadow: 0 0 0 4px rgba(247, 144, 9, 0.14);
 }
 
 .timeline-item strong {
@@ -971,9 +1167,10 @@ function appendFollowUp() {
 
 .citation-card {
   padding: 12px;
-  border: 1px solid var(--border-color);
-  border-radius: var(--border-radius);
-  background: #fff;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.82);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
 }
 
 .citation-head {
@@ -989,7 +1186,7 @@ function appendFollowUp() {
 }
 
 .citation-head span {
-  color: #0f766e;
+  color: var(--qa-brand, #0f766e);
   font-size: 12px;
   font-weight: 700;
 }
@@ -998,6 +1195,89 @@ function appendFollowUp() {
   display: block;
   margin-top: 8px;
   color: var(--text-tertiary);
+}
+
+/* 暗色模式单独适配，避免白底卡片和弱对比文字在夜间主题下看不清。 */
+:global([data-theme='dark']) .conversation-panel {
+  background:
+    linear-gradient(180deg, rgba(16, 24, 39, 0.96), rgba(15, 23, 42, 0.98)),
+    radial-gradient(circle at 12% 4%, rgba(45, 212, 191, 0.12), transparent 30%);
+}
+
+:global([data-theme='dark']) .panel-hero {
+  border-color: rgba(45, 212, 191, 0.18);
+  background:
+    radial-gradient(circle at 86% 12%, rgba(59, 130, 246, 0.16), transparent 28%),
+    linear-gradient(135deg, rgba(15, 118, 110, 0.16), rgba(30, 41, 59, 0.88));
+}
+
+:global([data-theme='dark']) .panel-hero strong,
+:global([data-theme='dark']) .panel-hero p {
+  color: var(--text-primary);
+}
+
+:global([data-theme='dark']) .hero-stats span,
+:global([data-theme='dark']) .conversation-search :deep(.el-input__wrapper),
+:global([data-theme='dark']) .panel-tabs,
+:global([data-theme='dark']) .panel-tabs button.active {
+  border-color: rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.72);
+  color: var(--text-secondary);
+}
+
+:global([data-theme='dark']) .conversation-item:hover,
+:global([data-theme='dark']) .conversation-item.active {
+  border-color: rgba(45, 212, 191, 0.22);
+  background: rgba(30, 41, 59, 0.78);
+  box-shadow: none;
+}
+
+:global([data-theme='dark']) .chat-workspace,
+:global([data-theme='dark']) .insight-panel {
+  background:
+    linear-gradient(180deg, rgba(16, 24, 39, 0.98), rgba(15, 23, 42, 0.98)),
+    radial-gradient(circle at 96% 2%, rgba(37, 99, 235, 0.12), transparent 28%);
+}
+
+:global([data-theme='dark']) .context-strip,
+:global([data-theme='dark']) .message-tools {
+  background: rgba(15, 23, 42, 0.58);
+}
+
+:global([data-theme='dark']) .context-card,
+:global([data-theme='dark']) .message-card,
+:global([data-theme='dark']) .citation-card {
+  border-color: rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.76);
+  box-shadow: none;
+}
+
+:global([data-theme='dark']) .message-row.user .message-card {
+  border-color: rgba(45, 212, 191, 0.22);
+  background: linear-gradient(135deg, rgba(15, 118, 110, 0.22), rgba(37, 99, 235, 0.16));
+}
+
+:global([data-theme='dark']) .inline-thinking {
+  border-bottom-color: rgba(148, 163, 184, 0.16);
+  background: linear-gradient(90deg, rgba(45, 212, 191, 0.12), rgba(37, 99, 235, 0.10));
+}
+
+:global([data-theme='dark']) .composer {
+  background: rgba(16, 24, 39, 0.96);
+}
+
+:global([data-theme='dark']) .composer :deep(.el-textarea__inner),
+:global([data-theme='dark']) .follow-up-bar,
+:global([data-theme='dark']) .quick-prompts button {
+  border-color: rgba(148, 163, 184, 0.18);
+  background: rgba(15, 23, 42, 0.78);
+  color: var(--text-primary);
+}
+
+:global([data-theme='dark']) .quick-prompts button:hover {
+  border-color: rgba(45, 212, 191, 0.28);
+  background: rgba(15, 118, 110, 0.18);
+  color: #7dd3fc;
 }
 
 /* 小屏时隐藏右侧溯源栏，优先保证聊天主流程可用。 */
