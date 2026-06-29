@@ -1,4 +1,4 @@
-﻿### 1. 健康检查
+### 1. 健康检查
 GET http://localhost:8091/api/health
 
 ### 2. 上传文档
@@ -53,3 +53,43 @@ Content-Type: application/json
 
 ### 10. 重试处理
 POST http://localhost:8091/api/documents/2b5f269c6e9f44f48dda1dca5bf5c42f/retry
+### 11. 检索测试（vector_rerank 模式）
+POST http://localhost:8091/api/search
+Content-Type: application/json
+
+{
+  "query": "变压器油温异常如何处理",
+  "knowledgeBaseIds": ["kb-test-001"],
+  "topK": 10,
+  "searchMode": "vector_rerank",
+  "similarityThreshold": 0.6,
+  "rerankThreshold": 0.5,
+  "tagFilters": {
+    "专业": "汽机"
+  }
+}
+
+### 12. 检索测试（纯向量模式）
+POST http://localhost:8091/api/search
+Content-Type: application/json
+
+{
+  "query": "设备巡检周期",
+  "knowledgeBaseIds": [],
+  "topK": 5,
+  "searchMode": "vector",
+  "similarityThreshold": 0.7
+}
+
+### 13. 知识库列表（对外 API - 供问答/报告组消费）
+GET http://localhost:8091/api/knowledge-bases?page=1&pageSize=20
+
+### 14. 知识库列表 - 按类型筛选
+GET http://localhost:8091/api/knowledge-bases?docType=规程规范&page=1&pageSize=20
+
+### 15. 知识库列表 - 按关键词搜索
+GET http://localhost:8091/api/knowledge-bases?keyword=规程&page=1&pageSize=20
+
+### 16. 知识库详情（对外 API）
+GET http://localhost:8091/api/knowledge-bases/kb-test-001
+

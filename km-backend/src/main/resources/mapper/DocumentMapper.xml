@@ -90,4 +90,14 @@
         WHERE id = #{id}
     </update>
 
+    <!-- 批量查询文档，用于检索结果回填文档名称 -->
+    <select id="listByIds" resultMap="BaseResultMap">
+        SELECT <include refid="BaseColumns"/>
+        FROM document
+        WHERE id IN
+        <foreach collection="ids" item="id" open="(" separator="," close=")">
+            #{id}
+        </foreach>
+    </select>
+
 </mapper>
