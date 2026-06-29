@@ -1,5 +1,6 @@
 package com.km.entity;
 
+
 import java.time.LocalDateTime;
 
 public class SystemConfig {
@@ -13,4 +14,16 @@ public class SystemConfig {
     public void setConfigValue(String configValue) { this.configValue = configValue; }
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
+=======
+import lombok.Data;
+
+import java.time.LocalDateTime;
+
+@Data
+public class SystemConfig {
+
+    private String configKey;
+    private String configValue;
+    private LocalDateTime updatedAt;
+
 }
