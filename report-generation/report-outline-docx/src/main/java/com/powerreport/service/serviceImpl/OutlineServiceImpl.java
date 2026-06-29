@@ -3,7 +3,7 @@ package com.powerreport.service.serviceImpl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.powerreport.config.AiIntegrationProperties;
+import com.powerreport.config.ReportAiProperties;
 import com.powerreport.dto.OutlineConfirmRequest;
 import com.powerreport.dto.OutlineConfirmResponse;
 import com.powerreport.dto.OutlineGenerateRequest;
@@ -40,7 +40,7 @@ public class OutlineServiceImpl implements OutlineService {
     private static final String DEFAULT_OWNER = "local_user";
     private static final String STATUS_DRAFT = "DRAFT";
 
-    private final AiIntegrationProperties aiProperties;
+    private final ReportAiProperties aiProperties;
     private final ObjectMapper objectMapper;
     private final StringRedisTemplate redisTemplate;
     private final ReportMapper reportMapper;
@@ -48,7 +48,7 @@ public class OutlineServiceImpl implements OutlineService {
     private final RestTemplate restTemplate;
 
     public OutlineServiceImpl(
-            AiIntegrationProperties aiProperties,
+            ReportAiProperties aiProperties,
             ObjectMapper objectMapper,
             StringRedisTemplate redisTemplate,
             ReportMapper reportMapper,

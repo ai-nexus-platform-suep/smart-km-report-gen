@@ -5,25 +5,31 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 
 @Data
 @ConfigurationProperties(prefix = "app.ai")
-public class AiIntegrationProperties {
+public class ReportAiProperties {
 
     /**
-     * AI 全栈同学提供的大纲生成接口地址。
+     * AI service endpoint for outline generation.
      */
     private String outlineUrl = "";
 
     /**
-     * AI HTTP 调用超时时间，单位：秒。
+     * AI service endpoint for section content streaming.
+     */
+    private String sectionStreamUrl = "";
+
+    /**
+     * AI HTTP timeout, in seconds.
      */
     private int timeoutSeconds = 60;
 
     /**
-     * Redis 中大纲临时状态的过期时间，单位：秒。
+     * Outline temporary state TTL in Redis, in seconds.
      */
     private long outlineTempTtlSeconds = 1800;
 
     /**
-     * AI 接口未配置或调用失败时，是否使用本地固定大纲方便联调。
+     * Whether outline generation can fallback to local templates.
      */
     private boolean fallbackEnabled = true;
 }
+

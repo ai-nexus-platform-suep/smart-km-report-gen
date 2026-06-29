@@ -1,9 +1,10 @@
 package com.powerreport.mapper;
 
 import com.baomidou.mybatisplus.core.mapper.BaseMapper;
-import com.powerreport.entity.ReportTemplateEntity;
+import com.powerreport.entity.ReportSectionEntity;
 import org.apache.ibatis.annotations.Mapper;
 
 @Mapper
-public interface ReportTemplateMapper extends BaseMapper<ReportTemplateEntity> {
+public interface ReportSectionMapper extends BaseMapper<ReportSectionEntity> {
 }
+
