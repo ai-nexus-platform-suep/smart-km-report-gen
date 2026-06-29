@@ -1,7 +1,20 @@
-import type { EntityId, OutlineNode, ReportDetail, ReportFile, ReportSection, ReportType } from "@/types/domain";
+import type {
+  EntityId,
+  LlmConfig,
+  MaterialRecord,
+  OutlineNode,
+  ReportDetail,
+  ReportFile,
+  ReportSection,
+  ReportType,
+  TemplateRecord
+} from "@/types/domain";
 
 interface MockDb {
   reports: ReportDetail[];
+  templates: TemplateRecord[];
+  materials: MaterialRecord[];
+  llmConfigs: LlmConfig[];
   nextId: number;
 }
 
@@ -131,17 +144,102 @@ function seedReport(): ReportDetail {
   };
 }
 
+function seedTemplates(): TemplateRecord[] {
+  return [
+    {
+      id: "tpl-summer-default",
+      name: "迎峰度夏检查报告模板",
+      reportType: "SUMMER_PEAK_CHECK",
+      version: "v1.2",
+      enabled: true,
+      createdBy: "C组管理员",
+      createdAt: now()
+    },
+    {
+      id: "tpl-coal-audit",
+      name: "煤库存审计报告模板",
+      reportType: "COAL_INVENTORY_AUDIT",
+      version: "v1.0",
+      enabled: true,
+      createdBy: "C组管理员",
+      createdAt: now()
+    }
+  ];
+}
+
+function seedMaterials(): MaterialRecord[] {
+  return [
+    {
+      id: "mat-summer-checklist",
+      name: "迎峰度夏检查依据汇编.docx",
+      reportType: "SUMMER_PEAK_CHECK",
+      specialty: "电气",
+      parseStatus: "READY",
+      ragflowDatasetId: "rag-report-summer",
+      uploadedBy: "C组管理员",
+      createdAt: now()
+    },
+    {
+      id: "mat-coal-ledger",
+      name: "煤库存台账核验样例.xlsx",
+      reportType: "COAL_INVENTORY_AUDIT",
+      specialty: "燃料",
+      parseStatus: "PARSING",
+      ragflowDatasetId: "rag-report-coal",
+      uploadedBy: "C组管理员",
+      createdAt: now()
+    }
+  ];
+}
+
+function seedLlmConfigs(): LlmConfig[] {
+  return [
+    {
+      id: "llm-main",
+      provider: "OPENAI_COMPATIBLE",
+      baseUrl: "https://api.example.com/v1",
+      apiKeyConfigured: true,
+      modelName: "deepseek-chat",
+      timeoutSeconds: 120,
+      enabled: true
+    },
+    {
+      id: "llm-local",
+      provider: "OLLAMA",
+      baseUrl: "http://127.0.0.1:11434",
+      apiKeyConfigured: false,
+      modelName: "qwen2.5:14b",
+      timeoutSeconds: 180,
+      enabled: false
+    }
+  ];
+}
+
 function initialDb(): MockDb {
   return {
     reports: [seedReport()],
+    templates: seedTemplates(),
+    materials: seedMaterials(),
+    llmConfigs: seedLlmConfigs(),
     nextId: 1000
+  };
+}
+
+function normalizeDb(db: Partial<MockDb>): MockDb {
+  const initial = initialDb();
+  return {
+    reports: db.reports ?? initial.reports,
+    templates: db.templates ?? initial.templates,
+    materials: db.materials ?? initial.materials,
+    llmConfigs: db.llmConfigs ?? initial.llmConfigs,
+    nextId: db.nextId ?? initial.nextId
   };
 }
 
 function readDb(): MockDb {
   const raw = localStorage.getItem(DB_KEY);
   if (!raw) return initialDb();
-  return JSON.parse(raw) as MockDb;
+  return normalizeDb(JSON.parse(raw) as Partial<MockDb>);
 }
 
 export const mockDb = {

@@ -107,6 +107,37 @@ export interface ReportQuery {
   year?: number | null;
 }
 
+export interface TemplateRecord {
+  id: EntityId;
+  name: string;
+  reportType: ReportType;
+  version: string;
+  enabled: boolean;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface MaterialRecord {
+  id: EntityId;
+  name: string;
+  reportType: ReportType;
+  specialty: string;
+  parseStatus: "PENDING" | "PARSING" | "READY" | "FAILED";
+  ragflowDatasetId: string;
+  uploadedBy: string;
+  createdAt: string;
+}
+
+export interface LlmConfig {
+  id: EntityId;
+  provider: "OLLAMA" | "RAGFLOW" | "OPENAI_COMPATIBLE";
+  baseUrl: string;
+  apiKeyConfigured: boolean;
+  modelName: string;
+  timeoutSeconds: number;
+  enabled: boolean;
+}
+
 export type GenerateStreamEvent =
   | { type: "task_started"; reportId: EntityId; taskId: string; totalSections: number }
   | { type: "section_started"; sectionId: EntityId; number: string; title: string }

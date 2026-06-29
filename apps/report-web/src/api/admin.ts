@@ -1,5 +1,9 @@
 import { apiRequest, enableMock } from "@/api/http";
 import { mockDb } from "@/api/mockDb";
+import type { EntityId, LlmConfig, MaterialRecord, TemplateRecord } from "@/types/domain";
+
+const wait = (ms = 300) => new Promise((resolve) => window.setTimeout(resolve, ms));
+const sameId = (a?: EntityId, b?: EntityId) => String(a) === String(b);
 
 export type MetricTone = "blue" | "cyan" | "green" | "orange" | "pink" | "red" | "purple";
 export type HealthStatus = "ONLINE" | "DEGRADED" | "OFFLINE";
@@ -262,4 +266,100 @@ function recentDates(days: number) {
     date.setDate(date.getDate() - (days - index - 1));
     return `${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
   });
+}
+
+export async function listTemplates() {
+  await wait();
+  return mockDb.data.templates;
+}
+
+export async function addTemplate(template: Omit<TemplateRecord, "id" | "createdAt" | "createdBy">) {
+  await wait();
+  const db = mockDb.data;
+  const record: TemplateRecord = {
+    ...template,
+    id: mockDb.nextId(db),
+    createdAt: new Date().toISOString(),
+    createdBy: "当前管理员"
+  };
+  db.templates.unshift(record);
+  mockDb.save(db);
+  return record;
+}
+
+export async function updateTemplate(template: TemplateRecord) {
+  await wait();
+  const db = mockDb.data;
+  const index = db.templates.findIndex((item) => sameId(item.id, template.id));
+  if (index < 0) throw new Error("模板不存在");
+  db.templates[index] = template;
+  mockDb.save(db);
+  return template;
+}
+
+export async function deleteTemplate(id: EntityId) {
+  await wait();
+  const db = mockDb.data;
+  db.templates = db.templates.filter((template) => !sameId(template.id, id));
+  mockDb.save(db);
+}
+
+export async function listMaterials() {
+  await wait();
+  return mockDb.data.materials;
+}
+
+export async function addMaterial(material: Omit<MaterialRecord, "id" | "createdAt" | "uploadedBy" | "parseStatus" | "ragflowDatasetId">) {
+  await wait();
+  const db = mockDb.data;
+  const record: MaterialRecord = {
+    ...material,
+    id: mockDb.nextId(db),
+    parseStatus: "PARSING",
+    ragflowDatasetId: `rag-report-${Date.now()}`,
+    uploadedBy: "当前管理员",
+    createdAt: new Date().toISOString()
+  };
+  db.materials.unshift(record);
+  mockDb.save(db);
+  return record;
+}
+
+export async function deleteMaterial(id: EntityId) {
+  await wait();
+  const db = mockDb.data;
+  db.materials = db.materials.filter((material) => !sameId(material.id, id));
+  mockDb.save(db);
+}
+
+export async function listLlmConfigs() {
+  await wait();
+  return mockDb.data.llmConfigs;
+}
+
+export async function saveLlmConfig(config: LlmConfig) {
+  await wait();
+  const db = mockDb.data;
+  const index = db.llmConfigs.findIndex((item) => sameId(item.id, config.id));
+  let record = config;
+
+  if (index >= 0) {
+    db.llmConfigs[index] = config;
+  } else {
+    record = { ...config, id: mockDb.nextId(db) };
+    db.llmConfigs.unshift(record);
+  }
+
+  mockDb.save(db);
+  return record;
+}
+
+export async function testLlmConfig(id: EntityId) {
+  await wait(800);
+  const config = mockDb.data.llmConfigs.find((item) => sameId(item.id, id));
+  if (!config) throw new Error("模型配置不存在");
+  return {
+    success: config.enabled,
+    message: config.enabled ? "连接成功，模型响应时间 286ms" : "配置未启用，无法测试"
+  };
 }
