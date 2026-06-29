@@ -1,5 +1,7 @@
 """LangGraph 各节点实现 (人员 A 独占)"""
 
+import json
+
 import httpx
 
 from qa_agent.client.knowledge_client import search_knowledge
@@ -12,6 +14,14 @@ from qa_agent.model.reranker import rerank
 KNOWLEDGE_INTENT = "KNOWLEDGE_QA"
 CHAT_INTENT = "CHAT"
 DOCUMENT_SEARCH_INTENT = "DOCUMENT_SEARCH"
+REPORT_GENERATION_INTENT = "REPORT_GENERATION"
+KB_MANAGEMENT_INTENT = "KB_MANAGEMENT"
+TASK_ACTION_INTENT = "TASK_ACTION"
+
+INTENT_CONFIDENCE_THRESHOLD = 0.6
+RAG_INTENTS = (KNOWLEDGE_INTENT, DOCUMENT_SEARCH_INTENT)
+UNSUPPORTED_ACTION_INTENTS = (REPORT_GENERATION_INTENT, KB_MANAGEMENT_INTENT, TASK_ACTION_INTENT)
+KNOWN_INTENTS = RAG_INTENTS + (CHAT_INTENT,) + UNSUPPORTED_ACTION_INTENTS
 
 
 def _question_from_state(state: AgentState) -> str:
@@ -38,19 +48,161 @@ def _append_step(state: AgentState, event_type: str, message: str) -> list[dict]
     return steps
 
 
-def _classify_intent(question: str) -> str:
-    if not question.strip():
-        return CHAT_INTENT
+def _intent_decision(
+    intent: str,
+    confidence: float,
+    reason: str,
+    needs_clarification: bool,
+    source: str,
+) -> dict:
+    return {
+        "intent": intent,
+        "confidence": max(0.0, min(1.0, confidence)),
+        "reason": reason,
+        "needs_clarification": needs_clarification,
+        "source": source,
+    }
 
-    document_keywords = ("检索", "查找文档", "找文档", "有哪些文档")
-    if any(keyword in question for keyword in document_keywords):
-        return DOCUMENT_SEARCH_INTENT
+
+def _classify_intent_by_rule(question: str) -> dict | None:
+    clean_question = question.strip()
+    lower_question = clean_question.lower()
+    if not clean_question:
+        return _intent_decision(CHAT_INTENT, 0.4, "用户输入为空，需要补充问题。", True, "rule")
 
     chat_keywords = ("你好", "天气", "讲个笑话", "你是谁", "hello", "hi")
-    if any(keyword.lower() in question.lower() for keyword in chat_keywords):
-        return CHAT_INTENT
+    if any(keyword.lower() in lower_question for keyword in chat_keywords):
+        return _intent_decision(CHAT_INTENT, 0.95, "命中闲聊关键词。", False, "rule")
 
-    return KNOWLEDGE_INTENT
+    report_keywords = ("生成报告", "写报告", "报告生成", "导出报告", "周报", "日报", "月报")
+    report_actions = ("生成", "写", "导出", "整理")
+    if any(keyword in clean_question for keyword in report_keywords) or (
+        "报告" in clean_question and any(action in clean_question for action in report_actions)
+    ):
+        return _intent_decision(REPORT_GENERATION_INTENT, 0.9, "识别为报告生成请求，但当前迭代未执行该能力。", True, "rule")
+
+    kb_keywords = ("创建知识库", "删除知识库", "新增知识库", "知识库管理", "上传文档", "导入文档", "删除文档")
+    if any(keyword in clean_question for keyword in kb_keywords):
+        return _intent_decision(KB_MANAGEMENT_INTENT, 0.9, "识别为知识库管理请求，但当前迭代未执行该能力。", True, "rule")
+
+    action_keywords = ("创建任务", "安排任务", "执行任务", "提醒我", "帮我执行", "提交审批")
+    if any(keyword in clean_question for keyword in action_keywords):
+        return _intent_decision(TASK_ACTION_INTENT, 0.85, "识别为任务动作请求，但当前迭代未执行该能力。", True, "rule")
+
+    document_keywords = ("检索", "查找文档", "找文档", "有哪些文档")
+    if any(keyword in clean_question for keyword in document_keywords):
+        return _intent_decision(DOCUMENT_SEARCH_INTENT, 0.95, "命中文档检索关键词。", False, "rule")
+
+    ambiguous_keywords = ("帮我分析一下", "这份材料怎么样", "帮我看看", "分析一下", "评价一下", "处理一下")
+    if any(keyword in clean_question for keyword in ambiguous_keywords):
+        return _intent_decision(KNOWLEDGE_INTENT, 0.35, "请求缺少材料、目标或输出要求，需要先澄清。", True, "rule")
+
+    knowledge_keywords = ("什么是", "如何", "为什么", "请解释", "介绍一下", "技术监督", "规定", "流程", "办法")
+    if any(keyword in clean_question for keyword in knowledge_keywords):
+        return _intent_decision(KNOWLEDGE_INTENT, 0.8, "命中知识问答表达。", False, "rule")
+
+    return None
+
+
+def _classification_messages(question: str) -> list[dict]:
+    return [
+        {
+            "role": "system",
+            "content": (
+                "你是智能问答系统的意图分类器。只返回 JSON，不要输出 Markdown。"
+                "可选 intent: CHAT, KNOWLEDGE_QA, DOCUMENT_SEARCH, REPORT_GENERATION, KB_MANAGEMENT, TASK_ACTION。"
+                "返回字段: intent, confidence, reason, needs_clarification。"
+            ),
+        },
+        {"role": "user", "content": question},
+    ]
+
+
+def _extract_json_object(content: str) -> dict | None:
+    start = content.find("{")
+    end = content.rfind("}")
+    if start < 0 or end < start:
+        return None
+    try:
+        payload = json.loads(content[start:end + 1])
+    except (TypeError, ValueError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _as_bool(value: object) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in ("true", "1", "yes", "y")
+    return bool(value)
+
+
+def _normalize_llm_decision(payload: dict) -> dict | None:
+    intent = str(payload.get("intent") or "").upper()
+    if intent not in KNOWN_INTENTS:
+        return None
+
+    try:
+        confidence = float(payload.get("confidence", 0.0))
+    except (TypeError, ValueError):
+        confidence = 0.0
+
+    reason = str(payload.get("reason") or "LLM 返回结构化分类结果。")
+    needs_clarification = _as_bool(payload.get("needs_clarification"))
+    if confidence < INTENT_CONFIDENCE_THRESHOLD or intent in UNSUPPORTED_ACTION_INTENTS:
+        needs_clarification = True
+    return _intent_decision(intent, confidence, reason, needs_clarification, "llm")
+
+
+async def _classify_intent_with_llm(question: str) -> dict | None:
+    if not settings.llm_api_key:
+        return None
+
+    try:
+        async with httpx.AsyncClient(timeout=settings.llm_timeout) as client:
+            response = await client.post(
+                f"{settings.llm_api_url.rstrip('/')}/chat/completions",
+                headers={"Authorization": f"Bearer {settings.llm_api_key}"},
+                json={"model": settings.llm_model_name, "messages": _classification_messages(question)},
+            )
+            response.raise_for_status()
+            payload = response.json()
+    except (httpx.HTTPError, ValueError):
+        return None
+
+    choices = payload.get("choices") if isinstance(payload, dict) else None
+    if not choices:
+        return None
+
+    message = choices[0].get("message") if isinstance(choices[0], dict) else None
+    content = message.get("content") if isinstance(message, dict) else None
+    if content is None:
+        return None
+    json_payload = _extract_json_object(str(content))
+    return _normalize_llm_decision(json_payload) if json_payload else None
+
+
+async def _classify_intent(question: str) -> dict:
+    rule_decision = _classify_intent_by_rule(question)
+    if rule_decision is not None:
+        return rule_decision
+
+    llm_decision = await _classify_intent_with_llm(question)
+    if llm_decision is not None:
+        return llm_decision
+
+    return _intent_decision(KNOWLEDGE_INTENT, 0.3, "未能可靠识别用户意图，需要补充上下文。", True, "fallback")
+
+
+def _mode_from_decision(decision: dict) -> str:
+    if decision.get("needs_clarification"):
+        return "clarify"
+    if decision.get("intent") == CHAT_INTENT:
+        return "direct"
+    if decision.get("intent") in RAG_INTENTS:
+        return "rag"
+    return "clarify"
 
 
 def _format_documents(documents: list[dict]) -> str:
@@ -109,14 +261,44 @@ def _build_messages(question: str, documents: list[dict], no_knowledge: bool) ->
 
 async def intent_node(state: AgentState) -> dict:
     question = _question_from_state(state)
-    intent = _classify_intent(question)
+    decision = await _classify_intent(question)
+    intent = decision["intent"]
+    confidence = decision["confidence"]
+    reason = decision["reason"]
+    source = decision["source"]
+    mode = _mode_from_decision(decision)
     return {
         "question": question,
         "intent": intent,
-        "mode": "direct" if intent == CHAT_INTENT else "rag",
+        "intent_confidence": confidence,
+        "route_reason": reason,
+        "classification_source": source,
+        "needs_clarification": decision["needs_clarification"],
+        "mode": mode,
         "retrieved_docs": [],
         "citations": [],
-        "thinking_steps": _append_step(state, "intent", f"识别意图: {intent}"),
+        "thinking_steps": _append_step(
+            state,
+            "intent",
+            f"识别意图: {intent}，置信度 {confidence:.2f}，来源 {source}。{reason}",
+        ),
+        "error": None,
+    }
+
+
+async def clarify_node(state: AgentState) -> dict:
+    intent = state.get("intent") or KNOWLEDGE_INTENT
+    reason = state.get("route_reason") or "当前问题缺少必要上下文。"
+    if intent in UNSUPPORTED_ACTION_INTENTS:
+        answer = f"我已识别到这是 {intent} 类型请求。当前 Agent 迭代只支持问答和文档检索编排，暂不直接执行该操作。请补充目标、材料范围和期望输出，我可以先帮你澄清需求或转成可问答的问题。"
+    else:
+        answer = f"我还需要更多信息才能准确处理。{reason} 请补充要分析的材料、具体问题或期望输出。"
+
+    return {
+        "final_response": answer,
+        "retrieved_docs": [],
+        "citations": [],
+        "thinking_steps": _append_step(state, "clarify", "上下文不足或能力未开放，先向用户澄清。"),
         "error": None,
     }
 
@@ -156,7 +338,7 @@ async def rerank_node(state: AgentState) -> dict:
 async def generate_node(state: AgentState) -> dict:
     question = _question_from_state(state)
     documents = state.get("retrieved_docs") or []
-    no_knowledge = state.get("intent") in (KNOWLEDGE_INTENT, DOCUMENT_SEARCH_INTENT) and not documents
+    no_knowledge = state.get("intent") in RAG_INTENTS and not documents
     answer = await _call_chat_model(_build_messages(question, documents, no_knowledge))
     if no_knowledge and "未找到相关知识库信息" not in answer:
         answer = f"未找到相关知识库信息。{answer}"
