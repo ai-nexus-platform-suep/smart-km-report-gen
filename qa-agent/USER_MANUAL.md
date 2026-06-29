@@ -13,7 +13,7 @@
 - 修复 Python 包导入问题，使 `qa_agent.*` 可以正常 import。
 - 接入 DeepSeek Chat Completions 兼容接口。
 - 实现 Agent 状态定义 `AgentState`。
-- 实现意图识别、知识库检索、重排序、回答生成四类节点。
+- 实现可解释意图识别、澄清、知识库检索、重排序、回答生成节点。
 - 实现 HTTP-first 知识库检索适配器，方便后续知识库模块无缝接入。
 - 实现无知识库、无 embedding、无外部检索接口时的安全降级。
 - 提供 Agent 工作流图：`qa-agent/AGENT_WORKFLOW.md`。
@@ -38,6 +38,7 @@ START
   ↓
 intent_node
   ├─ CHAT → generate_node → END
+  ├─ 低置信度 / 上下文不足 / 未开放动作 → clarify_node → END
   └─ KNOWLEDGE_QA / DOCUMENT_SEARCH
         ↓
      retrieve_node
@@ -54,9 +55,19 @@ intent_node
 节点说明：
 
 - `intent_node`：识别用户问题意图。
+- `clarify_node`：在问题上下文不足、置信度低或命中未开放动作时，返回澄清追问或能力边界说明。
 - `retrieve_node`：调用知识库 HTTP 检索适配器。
 - `rerank_node`：按文档 `score` 降序重排，并截取 Top K。
 - `generate_node`：组装 prompt，调用 DeepSeek 生成回答。
+
+当前支持的意图：
+
+- `CHAT`：闲聊或直接回答。
+- `KNOWLEDGE_QA`：知识问答，进入 RAG。
+- `DOCUMENT_SEARCH`：文档检索，进入 RAG。
+- `REPORT_GENERATION`：报告生成请求，本迭代只识别并澄清，不执行生成。
+- `KB_MANAGEMENT`：知识库管理请求，本迭代只识别并澄清，不执行 CRUD。
+- `TASK_ACTION`：任务动作请求，本迭代只识别并澄清，不执行动作。
 
 ## 4. 配置说明
 
@@ -111,6 +122,10 @@ result = await agent_graph.ainvoke({
 常用返回字段：
 
 - `intent`：识别出的意图。
+- `intent_confidence`：意图识别置信度。
+- `route_reason`：路由原因，适合给 B 端展示思考过程或调试误判。
+- `classification_source`：分类来源，可能是 `rule`、`llm`、`fallback`。
+- `needs_clarification`：是否需要先向用户追问。
 - `retrieved_docs`：检索到的知识片段。
 - `thinking_steps`：思考过程步骤。
 - `citations`：引用来源。
