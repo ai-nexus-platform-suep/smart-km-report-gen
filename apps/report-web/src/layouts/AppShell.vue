@@ -41,7 +41,7 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { clearToken, getStoredUser } from '@platform/core'
 import type { UserInfo } from '@platform/core/types'
-import { DocumentAdd, Files, Histogram, Collection, UploadFilled, Setting } from '@element-plus/icons-vue'
+import { DocumentAdd, Files, Histogram, Collection, Setting } from '@element-plus/icons-vue'
 import BrandLogo from '../components/BrandLogo.vue'
 
 const router = useRouter()
@@ -53,7 +53,6 @@ const nav = [
   { path: '/reports/new', label: '新建报告', icon: DocumentAdd, role: 'USER' },
   { path: '/admin/dashboard', label: '趋势监控', icon: Histogram, role: 'ADMIN' },
   { path: '/admin/templates', label: '模板管理', icon: Collection, role: 'ADMIN' },
-  { path: '/admin/materials', label: '素材管理', icon: UploadFilled, role: 'ADMIN' },
   { path: '/admin/llm-configs', label: '模型配置', icon: Setting, role: 'ADMIN' },
 ] as const
 
