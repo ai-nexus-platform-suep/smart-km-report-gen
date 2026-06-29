@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: qa-chat-service
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/smart_km_report_gen?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    username: root
+    password: 1234
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+mybatis-plus:
+  mapper-locations: classpath*:/mapper/**/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      id-type: assign_id
+
+server:
+  port: 8082

@@ -1,0 +1,34 @@
+# IDE
+.idea/
+*.iml
+.vscode/
+
+# Maven
+target/
+*.jar
+*.war
+
+# Node
+node_modules/
+dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+
+# AI Tools
+.claude/
+.cursor/
+.trellis/
+AGENTS.md
