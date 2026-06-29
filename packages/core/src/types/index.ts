@@ -1,4 +1,14 @@
-export type { Role, UserInfo, LoginRequest, RegisterRequest, LoginResponse } from './auth'
+export type {
+  BackendRole,
+  CurrentUserResponse,
+  LoginRequest,
+  LoginResponse,
+  RefreshTokenRequest,
+  RefreshTokenResponse,
+  RegisterRequest,
+  Role,
+  UserInfo,
+} from './auth'
 export type { ApiResponse, PageResult } from './api'
 export type {
   KnowledgeBase, KnowledgeBaseType, Document, Chunk, DocumentStatus,

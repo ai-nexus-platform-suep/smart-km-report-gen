@@ -1,5 +1,6 @@
 // === 角色 ===
 export type Role = 'USER' | 'ADMIN'
+export type BackendRole = 'ROLE_USER' | 'ROLE_ADMIN' | string
 
 // === 用户 ===
 export interface UserInfo {
@@ -10,6 +11,7 @@ export interface UserInfo {
   phone: string | null
   avatar: string | null
   role: Role
+  roles?: BackendRole[]
   status: 0 | 1
 }
 
@@ -26,6 +28,21 @@ export interface RegisterRequest {
 }
 
 export interface LoginResponse {
-  token: string
-  user: UserInfo
+  accessToken: string
+  refreshToken: string
+  tokenType: string
+  expiresIn: number
+  username: string
+  roles: BackendRole[]
+}
+
+export interface RefreshTokenRequest {
+  refreshToken: string
+}
+
+export type RefreshTokenResponse = LoginResponse
+
+export interface CurrentUserResponse {
+  username: string
+  roles: BackendRole[]
 }

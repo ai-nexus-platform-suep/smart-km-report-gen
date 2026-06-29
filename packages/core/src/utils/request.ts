@@ -1,5 +1,5 @@
 import axios, { type AxiosInstance, type AxiosRequestConfig } from 'axios'
-import { getToken, clearToken } from './auth'
+import { getToken, getTokenType, clearToken } from './auth'
 import { CODE } from '../constants'
 
 const BASE_URL = import.meta.env.VITE_API_BASE || ''
@@ -14,7 +14,7 @@ const instance: AxiosInstance = axios.create({
 instance.interceptors.request.use((config) => {
   const token = getToken()
   if (token) {
-    config.headers.Authorization = `Bearer ${token}`
+    config.headers.Authorization = `${getTokenType()} ${token}`
   }
   return config
 })
