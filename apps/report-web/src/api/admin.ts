@@ -1,6 +1,6 @@
 import { apiRequest, enableMock } from "@/api/http";
 import { mockDb } from "@/api/mockDb";
-import type { EntityId, LlmConfig, MaterialRecord, TemplateRecord } from "@/types/domain";
+import type { EntityId, LlmConfig, TemplateRecord } from "@/types/domain";
 
 const wait = (ms = 300) => new Promise((resolve) => window.setTimeout(resolve, ms));
 const sameId = (a?: EntityId, b?: EntityId) => String(a) === String(b);
@@ -301,34 +301,6 @@ export async function deleteTemplate(id: EntityId) {
   await wait();
   const db = mockDb.data;
   db.templates = db.templates.filter((template) => !sameId(template.id, id));
-  mockDb.save(db);
-}
-
-export async function listMaterials() {
-  await wait();
-  return mockDb.data.materials;
-}
-
-export async function addMaterial(material: Omit<MaterialRecord, "id" | "createdAt" | "uploadedBy" | "parseStatus" | "ragflowDatasetId">) {
-  await wait();
-  const db = mockDb.data;
-  const record: MaterialRecord = {
-    ...material,
-    id: mockDb.nextId(db),
-    parseStatus: "PARSING",
-    ragflowDatasetId: `rag-report-${Date.now()}`,
-    uploadedBy: "当前管理员",
-    createdAt: new Date().toISOString()
-  };
-  db.materials.unshift(record);
-  mockDb.save(db);
-  return record;
-}
-
-export async function deleteMaterial(id: EntityId) {
-  await wait();
-  const db = mockDb.data;
-  db.materials = db.materials.filter((material) => !sameId(material.id, id));
   mockDb.save(db);
 }
 

@@ -1,7 +1,6 @@
 import type {
   EntityId,
   LlmConfig,
-  MaterialRecord,
   OutlineNode,
   ReportDetail,
   ReportFile,
@@ -13,7 +12,6 @@ import type {
 interface MockDb {
   reports: ReportDetail[];
   templates: TemplateRecord[];
-  materials: MaterialRecord[];
   llmConfigs: LlmConfig[];
   nextId: number;
 }
@@ -167,31 +165,6 @@ function seedTemplates(): TemplateRecord[] {
   ];
 }
 
-function seedMaterials(): MaterialRecord[] {
-  return [
-    {
-      id: "mat-summer-checklist",
-      name: "迎峰度夏检查依据汇编.docx",
-      reportType: "SUMMER_PEAK_CHECK",
-      specialty: "电气",
-      parseStatus: "READY",
-      ragflowDatasetId: "rag-report-summer",
-      uploadedBy: "C组管理员",
-      createdAt: now()
-    },
-    {
-      id: "mat-coal-ledger",
-      name: "煤库存台账核验样例.xlsx",
-      reportType: "COAL_INVENTORY_AUDIT",
-      specialty: "燃料",
-      parseStatus: "PARSING",
-      ragflowDatasetId: "rag-report-coal",
-      uploadedBy: "C组管理员",
-      createdAt: now()
-    }
-  ];
-}
-
 function seedLlmConfigs(): LlmConfig[] {
   return [
     {
@@ -219,7 +192,6 @@ function initialDb(): MockDb {
   return {
     reports: [seedReport()],
     templates: seedTemplates(),
-    materials: seedMaterials(),
     llmConfigs: seedLlmConfigs(),
     nextId: 1000
   };
@@ -230,7 +202,6 @@ function normalizeDb(db: Partial<MockDb>): MockDb {
   return {
     reports: db.reports ?? initial.reports,
     templates: db.templates ?? initial.templates,
-    materials: db.materials ?? initial.materials,
     llmConfigs: db.llmConfigs ?? initial.llmConfigs,
     nextId: db.nextId ?? initial.nextId
   };

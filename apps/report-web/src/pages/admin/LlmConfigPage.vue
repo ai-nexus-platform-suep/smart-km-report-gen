@@ -96,8 +96,7 @@ const createFormRef = ref<FormInstance>();
 
 const providerOptions: Array<{ label: string; value: LlmConfig["provider"] }> = [
   { label: "OPENAI_COMPATIBLE", value: "OPENAI_COMPATIBLE" },
-  { label: "OLLAMA", value: "OLLAMA" },
-  { label: "RAGFLOW", value: "RAGFLOW" }
+  { label: "OLLAMA", value: "OLLAMA" }
 ];
 
 const createForm = reactive({
