@@ -1,20 +1,34 @@
 package com.km.dto.response;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 import java.util.Map;
 
 public class StatsSummaryVO {
-    private long kbCount;
-    private long docCount;
+
+    @JsonProperty("knowledgeBaseCount")
+    private long knowledgeBaseCount;
+
+    @JsonProperty("documentCount")
+    private long documentCount;
+
+    @JsonProperty("chunkCount")
     private long chunkCount;
+
+    @JsonProperty("readyDocumentCount")
+    private long readyDocumentCount;
+
+    @JsonProperty("dailyUploadTrend")
     private List<Map<String, Object>> dailyUploadTrend;
 
-    public long getKbCount() { return kbCount; }
-    public void setKbCount(long kbCount) { this.kbCount = kbCount; }
-    public long getDocCount() { return docCount; }
-    public void setDocCount(long docCount) { this.docCount = docCount; }
+    public long getKnowledgeBaseCount() { return knowledgeBaseCount; }
+    public void setKnowledgeBaseCount(long v) { this.knowledgeBaseCount = v; }
+    public long getDocumentCount() { return documentCount; }
+    public void setDocumentCount(long v) { this.documentCount = v; }
     public long getChunkCount() { return chunkCount; }
-    public void setChunkCount(long chunkCount) { this.chunkCount = chunkCount; }
+    public void setChunkCount(long v) { this.chunkCount = v; }
+    public long getReadyDocumentCount() { return readyDocumentCount; }
+    public void setReadyDocumentCount(long v) { this.readyDocumentCount = v; }
     public List<Map<String, Object>> getDailyUploadTrend() { return dailyUploadTrend; }
-    public void setDailyUploadTrend(List<Map<String, Object>> dailyUploadTrend) { this.dailyUploadTrend = dailyUploadTrend; }
+    public void setDailyUploadTrend(List<Map<String, Object>> v) { this.dailyUploadTrend = v; }
 }

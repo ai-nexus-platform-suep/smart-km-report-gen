@@ -8,5 +8,6 @@ public interface StatsMapper {
     long countKnowledgeBases();
     long countDocuments();
     long countChunks();
+    long countReadyDocuments();
     List<Map<String, Object>> dailyUploadTrend(@Param("days") int days);
 }

@@ -14,6 +14,10 @@
         SELECT COUNT(*) FROM chunk
     </select>
 
+    <select id="countReadyDocuments" resultType="long">
+        SELECT COUNT(*) FROM document WHERE status = 'READY'
+    </select>
+
     <select id="dailyUploadTrend" resultType="java.util.Map">
         SELECT DATE(created_at) AS date, COUNT(*) AS count
         FROM document

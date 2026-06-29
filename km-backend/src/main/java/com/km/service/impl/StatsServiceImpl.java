@@ -15,9 +15,10 @@ public class StatsServiceImpl implements StatsService {
     @Override
     public StatsSummaryVO getSummary() {
         StatsSummaryVO vo = new StatsSummaryVO();
-        vo.setKbCount(statsMapper.countKnowledgeBases());
-        vo.setDocCount(statsMapper.countDocuments());
+        vo.setKnowledgeBaseCount(statsMapper.countKnowledgeBases());
+        vo.setDocumentCount(statsMapper.countDocuments());
         vo.setChunkCount(statsMapper.countChunks());
+        vo.setReadyDocumentCount(statsMapper.countReadyDocuments());
         vo.setDailyUploadTrend(statsMapper.dailyUploadTrend(30));
         return vo;
     }
