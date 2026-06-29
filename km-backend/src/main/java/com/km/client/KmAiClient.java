@@ -48,8 +48,22 @@ public class KmAiClient {
     }
 
     public RerankResponse rerank(RerankRequest request) {
-        AiApiResponse<RerankResponse> body = post("/internal/rerank", request);
-        return body != null ? body.getData() : null;
+        try {
+            String url = baseUrl + "/internal/rerank";
+            org.springframework.http.ResponseEntity<String> rawResp = restTemplate.exchange(
+                    url, org.springframework.http.HttpMethod.POST,
+                    new org.springframework.http.HttpEntity<>(request), String.class);
+            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+            com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(rawResp.getBody());
+            if (root.get("code").asInt() != 0) {
+                log.warn("AI rerank error: {}", root.get("message").asText());
+                return null;
+            }
+            return mapper.treeToValue(root.get("data"), RerankResponse.class);
+        } catch (Exception e) {
+            log.warn("AI rerank failed: {}", e.getMessage());
+            return null;
+        }
     }
 
     public boolean healthCheck() {
