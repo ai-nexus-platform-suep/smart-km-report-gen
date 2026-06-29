@@ -25,10 +25,13 @@ mybatis:
 
 km:
   minio:
-    enabled: false
+    enabled: true
+    endpoint: http://localhost:9000
+    accessKey: minioadmin
+    secretKey: minioadmin
+    bucket: km-documents
   storage:
-    type: local
-    local-path: D:\kb\uploads
+    type: minio
   jwt:
     secret: change-me-in-production-km-platform-2026
     expire-hours: 24
