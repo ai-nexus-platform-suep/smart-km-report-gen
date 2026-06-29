@@ -7,6 +7,10 @@ public final class JsonUtils {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+    public static ObjectMapper getMapper() {
+        return MAPPER;
+    }
+
     private JsonUtils() {
     }
 

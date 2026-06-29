@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.km.repository.KnowledgeBaseMapper">
+
+    <resultMap id="BaseResultMap" type="com.km.entity.KnowledgeBase">
+        <id column="id" property="id"/>
+        <result column="name" property="name"/>
+        <result column="description" property="description"/>
+        <result column="doc_type" property="docType"/>
+        <result column="chunk_strategy_json" property="chunkStrategyJson"/>
+        <result column="search_strategy" property="searchStrategy"/>
+        <result column="doc_count" property="docCount"/>
+        <result column="owner_id" property="ownerId"/>
+        <result column="created_at" property="createdAt"/>
+        <result column="updated_at" property="updatedAt"/>
+    </resultMap>
+
+    <select id="getById" resultMap="BaseResultMap">
+        SELECT id, name, description, doc_type, chunk_strategy_json,
+               search_strategy, doc_count, owner_id, created_at, updated_at
+        FROM knowledge_base
+        WHERE id = #{id}
+    </select>
+
+    <update id="incrementDocCount">
+        UPDATE knowledge_base
+        SET doc_count = doc_count + 1,
+            updated_at = NOW()
+        WHERE id = #{id}
+    </update>
+
+    <update id="decrementDocCount">
+        UPDATE knowledge_base
+        SET doc_count = GREATEST(0, doc_count - #{count}),
+            updated_at = NOW()
+        WHERE id = #{id}
+    </update>
+
+</mapper>
