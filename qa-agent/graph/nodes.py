@@ -1,6 +1,10 @@
 """LangGraph 各节点实现 (人员 A 独占)"""
 
+import json
+from collections.abc import AsyncIterator
+
 import httpx
+from langgraph.config import get_stream_writer
 
 from qa_agent.client.knowledge_client import search_knowledge
 from qa_agent.core.config import settings
@@ -63,29 +67,50 @@ def _format_documents(documents: list[dict]) -> str:
     return "\n\n".join(formatted)
 
 
-async def _call_chat_model(messages: list[dict]) -> str:
+async def _stream_chat_model(messages: list[dict]) -> AsyncIterator[str]:
+    """流式调用 DeepSeek，逐 token yield 文本片段。"""
     if not settings.llm_api_key:
-        return "LLM API key 未配置，当前仅完成 Agent 工作流编排。"
+        yield "LLM API key 未配置，当前仅完成 Agent 工作流编排。"
+        return
+
+    url = f"{settings.llm_api_url.rstrip('/')}/chat/completions"
+    headers = {"Authorization": f"Bearer {settings.llm_api_key}"}
+    body = {
+        "model": settings.llm_model_name,
+        "messages": messages,
+        "stream": True,
+    }
 
     try:
         async with httpx.AsyncClient(timeout=settings.llm_timeout) as client:
-            response = await client.post(
-                f"{settings.llm_api_url.rstrip('/')}/chat/completions",
-                headers={"Authorization": f"Bearer {settings.llm_api_key}"},
-                json={"model": settings.llm_model_name, "messages": messages},
-            )
-            response.raise_for_status()
-            payload = response.json()
-    except (httpx.HTTPError, ValueError):
-        return "LLM 服务暂不可用，请稍后重试。"
+            async with client.stream("POST", url, headers=headers, json=body) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if not line or not line.startswith("data:"):
+                        continue
+                    payload = line[len("data:") :].strip()
+                    if payload == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(payload)
+                    except json.JSONDecodeError:
+                        continue
+                    choices = chunk.get("choices") if isinstance(chunk, dict) else None
+                    if not choices:
+                        continue
+                    delta = choices[0].get("delta") if isinstance(choices[0], dict) else None
+                    content = delta.get("content") if isinstance(delta, dict) else None
+                    if content:
+                        yield str(content)
+    except httpx.HTTPError:
+        yield "LLM 服务暂不可用，请稍后重试。"
 
-    choices = payload.get("choices") if isinstance(payload, dict) else None
-    if not choices:
-        return "LLM 服务未返回有效回答。"
 
-    message = choices[0].get("message") if isinstance(choices[0], dict) else None
-    content = message.get("content") if isinstance(message, dict) else None
-    return str(content or "LLM 服务未返回有效回答。")
+async def _call_chat_model(messages: list[dict]) -> str:
+    parts: list[str] = []
+    async for token in _stream_chat_model(messages):
+        parts.append(token)
+    return "".join(parts) or "LLM 服务未返回有效回答。"
 
 
 def _build_messages(question: str, documents: list[dict], no_knowledge: bool) -> list[dict]:
@@ -157,7 +182,15 @@ async def generate_node(state: AgentState) -> dict:
     question = _question_from_state(state)
     documents = state.get("retrieved_docs") or []
     no_knowledge = state.get("intent") in (KNOWLEDGE_INTENT, DOCUMENT_SEARCH_INTENT) and not documents
-    answer = await _call_chat_model(_build_messages(question, documents, no_knowledge))
+    llm_messages = _build_messages(question, documents, no_knowledge)
+
+    writer = get_stream_writer()
+    parts: list[str] = []
+    async for token in _stream_chat_model(llm_messages):
+        parts.append(token)
+        writer({"delta": token})
+
+    answer = "".join(parts)
     if no_knowledge and "未找到相关知识库信息" not in answer:
         answer = f"未找到相关知识库信息。{answer}"
 
