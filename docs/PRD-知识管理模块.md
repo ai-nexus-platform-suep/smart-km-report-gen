@@ -60,7 +60,7 @@
 | 支持文档格式 | ≥ 6 种（PDF/DOCX/PPTX/XLSX/MD/TXT） |
 | 文档处理成功率 | ≥ 95%（答辩样例文档） |
 | 核心页面可用性 | 登录、知识库、文档、检索、配置 5 大模块无阻塞 Bug |
-| 对外 API | `/api/v1/search` 有 OpenAPI 文档且联调通过 |
+| 对外 API | `/api/search` 有 OpenAPI 文档且联调通过 |
 
 ---
 
@@ -193,7 +193,7 @@ flowchart LR
 
 #### 业务规则
 
-- 所有 `/api/v1/**` 需 JWT，白名单：`/api/v1/auth/login`、`/api/v1/auth/register`
+- 所有 `/api/**` 需 JWT，白名单：`/api/auth/login`、`/api/auth/register`
 - JWT Payload 含：`userId`、`username`、`role`（`USER` / `ADMIN`）
 
 ---
@@ -433,15 +433,15 @@ flowchart LR
 
 | 接口 | 方法 | 说明 | 消费方 |
 |------|------|------|--------|
-| `/api/v1/knowledge-bases` | GET | 可访问知识库列表 | 问答、报告 |
-| `/api/v1/knowledge-bases/{id}` | GET | 知识库详情 | 问答、报告 |
-| `/api/v1/search` | POST | **核心检索接口** | 问答 RAG |
-| `/api/v1/documents/{id}` | GET | 文档元数据 | 问答溯源 |
-| `/api/v1/documents/{id}/chunks` | GET | 切片列表 | 问答、报告 |
-| `/api/v1/documents/{id}/download` | GET | 原文下载 | 问答溯源 |
-| `/api/v1/stats/summary` | GET | 统计摘要 | 集成平台 |
+| `/api/knowledge-bases` | GET | 可访问知识库列表 | 问答、报告 |
+| `/api/knowledge-bases/{id}` | GET | 知识库详情 | 问答、报告 |
+| `/api/search` | POST | **核心检索接口** | 问答 RAG |
+| `/api/documents/{id}` | GET | 文档元数据 | 问答溯源 |
+| `/api/documents/{id}/chunks` | GET | 切片列表 | 问答、报告 |
+| `/api/documents/{id}/download` | GET | 原文下载 | 问答溯源 |
+| `/api/stats/summary` | GET | 统计摘要 | 集成平台 |
 
-#### `/api/v1/search` 请求体
+#### `/api/search` 请求体
 
 ```json
 {
@@ -455,7 +455,7 @@ flowchart LR
 }
 ```
 
-#### `/api/v1/search` 响应体
+#### `/api/search` 响应体
 
 ```json
 {
@@ -506,7 +506,7 @@ flowchart LR
 3. 打开切片详情 → 展示切分结果
 4. 切换普通用户 → 前台检索「油温异常处理」→ 展示 Top 结果
 5. 管理后台概览 → 展示文档数、趋势图
-6. （可选）展示 Postman 调用 `/api/v1/search` 返回 JSON
+6. （可选）展示 Postman 调用 `/api/search` 返回 JSON
 
 ---
 
@@ -538,7 +538,7 @@ flowchart LR
 ### 8.4 兼容性
 
 - 第一期独立部署，预留与第四仓库集成的 JWT 结构
-- API 版本 `/api/v1/`，破坏性变更升 v2
+- API 路径前缀 `/api/`（无 URL 版本号）；破坏性变更需评审并更新 `api-contract.yaml`
 
 ---
 
@@ -590,7 +590,7 @@ flowchart LR
 | 依赖 | 说明 |
 |------|------|
 | SiliconFlow API | 嵌入/重排序默认提供方 |
-| 问答组 | 消费 `/api/v1/search`，6/28 前对齐契约 |
+| 问答组 | 消费 `/api/search`，6/28 前对齐契约 |
 | 大组技术决策 | 向量库选型、JWT 统一方案 |
 
 ### 11.2 风险
@@ -599,7 +599,7 @@ flowchart LR
 |------|------|
 | 工期 9 天 | 严守 P0，P1 酌情砍减 |
 | 解析复杂格式失败 | 答辩样例仅用 PDF/DOCX/MD |
-| 跨组接口不一致 | 6/28 前冻结 OpenAPI v1 |
+| 跨组接口不一致 | 6/28 前冻结 OpenAPI 契约 |
 
 ---
 
@@ -613,7 +613,7 @@ flowchart LR
 - [ ] 处理管线端到端自动化
 - [ ] US-SR01 ~ SR05 全部通过
 - [ ] US-CFG01 ~ CFG04 全部通过
-- [ ] `/api/v1/search` 联调通过
+- [ ] `/api/search` 联调通过
 
 ### 交付物
 

@@ -31,7 +31,7 @@ cd "$ROOT"
 
 echo ""
 echo "=========================================="
-echo "  后端: http://localhost:8091/api/v1/health"
+echo "  后端: http://localhost:8091/api/health"
 echo "  前端: http://localhost:5173"
 echo "  按 Ctrl+C 停止"
 echo "=========================================="

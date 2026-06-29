@@ -15,7 +15,7 @@ import java.util.Collections;
  * EPIC-06 接入真实向量检索；脚手架阶段返回空结果。
  */
 @RestController
-@RequestMapping("/api/v1")
+@RequestMapping("/api")
 public class SearchController {
 
     @PostMapping("/search")

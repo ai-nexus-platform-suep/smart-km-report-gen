@@ -50,7 +50,7 @@ mvn spring-boot:run
 验证：
 
 ```bash
-curl http://localhost:8091/api/v1/health
+curl http://localhost:8091/api/health
 # {"code":0,"message":"ok","data":{"service":"km-backend","status":"UP","version":"1.0.0-SNAPSHOT"}}
 ```
 
@@ -78,11 +78,11 @@ bash scripts/start-dev.sh
 
 | 接口 | 方法 | 说明 |
 |------|------|------|
-| `/api/v1/health` | GET | 健康检查 |
-| `/api/v1/search` | POST | 向量检索（问答 RAG 依赖） |
-| `/api/v1/knowledge-bases` | GET | 知识库列表 |
+| `/api/health` | GET | 健康检查 |
+| `/api/search` | POST | 向量检索（问答 RAG 依赖） |
+| `/api/knowledge-bases` | GET | 知识库列表 |
 
-脚手架阶段 `/api/v1/search` 返回空结果，EPIC-06 接入真实检索。
+脚手架阶段 `/api/search` 返回空结果，EPIC-06 接入真实检索。
 
 ## 环境变量
 
@@ -113,7 +113,7 @@ git commit -m "feat(a): 你的功能描述"
 - [x] Docker Compose（MySQL、Redis、RabbitMQ、MinIO）
 - [x] Flyway 初始化表结构 `V1__init_km.sql`
 - [x] 统一响应 `ApiResponse` + 全局异常处理
-- [x] 健康检查 `/api/v1/health`
+- [x] 健康检查 `/api/health`
 - [x] 对外契约 `docs/api-contract.yaml`
 - [x] 前端 Vue3 骨架（登录 / 检索 / 管理后台占位页）
 

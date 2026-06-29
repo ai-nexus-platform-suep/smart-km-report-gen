@@ -107,7 +107,7 @@ paths:
       summary: Milvus 向量检索（可选）
       description: |
         若 Java 不直连 Milvus SDK，由本接口完成向量检索。
-        km-backend 的 `/api/v1/search` 编排本接口 + `/internal/rerank`。
+        km-backend 的 `/api/search` 编排本接口 + `/internal/rerank`。
       operationId: vectorSearch
       requestBody:
         required: true
