@@ -1,14 +1,28 @@
 // apps/km-web/src/api/knowledge.ts
-import { apiGet, apiDelete, API_KM } from '@platform/core'
+import { apiGet, apiPost, apiDelete, API_KM } from '@platform/core'
 
-// 获取知识库分页列表
+export interface CreateKnowledgeBaseRequest {
+  name: string
+  description?: string
+  docType: string
+  chunkStrategy: {
+    type: 'heading' | 'fixed_size'
+    separator?: string
+    recursiveMerge?: boolean
+    chunkSize?: number
+    overlap?: number
+  }
+  searchStrategy: string
+}
+
 export function getKnowledgeBaseList(params: any) {
-  // 架构同学封装的 apiGet 第二个参数直接就是 params
   return apiGet(API_KM.KB.LIST, params)
 }
 
-// 删除知识库
+export function createKnowledgeBase(data: CreateKnowledgeBaseRequest) {
+  return apiPost(API_KM.KB.CREATE, data)
+}
+
 export function deleteKnowledgeBase(id: number) {
-  // apiDelete 的第二个参数是 config 对象
   return apiDelete(API_KM.KB.DELETE, { params: { id } })
 }
