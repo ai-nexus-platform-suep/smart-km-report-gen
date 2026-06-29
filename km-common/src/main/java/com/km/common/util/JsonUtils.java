@@ -21,4 +21,12 @@ public final class JsonUtils {
             throw new IllegalStateException("JSON serialize failed", e);
         }
     }
+
+    public static <T> T fromJson(String json, Class<T> type) {
+        try {
+            return MAPPER.readValue(json, type);
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("JSON deserialize failed", e);
+        }
+    }
 }

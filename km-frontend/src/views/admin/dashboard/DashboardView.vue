@@ -8,7 +8,10 @@ const router = useRouter()
   <div class="dashboard">
     <header class="header">
       <h1>管理后台</h1>
-      <el-button link @click="router.push('/search')">返回检索</el-button>
+      <div>
+        <el-button link @click="router.push('/admin/settings')">系统设置</el-button>
+        <el-button link @click="router.push('/search')">返回检索</el-button>
+      </div>
     </header>
     <el-row :gutter="16">
       <el-col :span="8">
