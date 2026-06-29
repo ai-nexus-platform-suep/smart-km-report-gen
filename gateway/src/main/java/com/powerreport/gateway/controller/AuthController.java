@@ -105,7 +105,7 @@ public class AuthController {
                     if (!userOpt.isPresent()) {
                         // 不区分"用户不存在"和"密码错误"，防止用户名枚举攻击
                         return status(HttpStatus.UNAUTHORIZED,
-                                buildResponse(1001, "用户名或密码错误", null));
+                                buildResponse(1003, "密码错误", null));
                     }
 
                     SysUserEntity user = userOpt.get();
@@ -180,22 +180,45 @@ public class AuthController {
     }
 
     private Mono<ServerResponse> getCurrentUser(ServerRequest request) {
-        String username = request.headers().firstHeader("X-Username");
-        if (username == null) {
+        // 从 Authorization 请求头中解析 Token
+        String authHeader = request.headers().firstHeader("Authorization");
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             return status(HttpStatus.UNAUTHORIZED,
-                    buildResponse(401, "未认证", null));
+                    buildResponse(401, "未认证，请先登录", null));
         }
 
-        // 从数据库获取用户角色
-        List<String> roles = userService.findByUsername(username)
-                .map(user -> parseRoles(user.getRoles()))
-                .orElse(Arrays.asList("ROLE_USER"));
+        String token = authHeader.substring(7).trim();
+        if (token.isEmpty()) {
+            return status(HttpStatus.UNAUTHORIZED,
+                    buildResponse(401, "Token 不能为空", null));
+        }
 
-        Map<String, Object> data = new HashMap<>();
-        data.put("username", username);
-        data.put("roles", roles);
+        try {
+            // 校验 Token
+            if (!jwtTokenProvider.validateToken(token)) {
+                return status(HttpStatus.UNAUTHORIZED,
+                        buildResponse(401, "Token 无效或已过期", null));
+            }
 
-        return ok(buildResponse(200, "操作成功", data));
+            String username = jwtTokenProvider.getUsername(token);
+            List<String> roles = jwtTokenProvider.getRoles(token);
+
+            // 从数据库获取最新角色信息
+            List<String> dbRoles = userService.findByUsername(username)
+                    .map(user -> parseRoles(user.getRoles()))
+                    .orElse(roles);
+
+            Map<String, Object> data = new HashMap<>();
+            data.put("username", username);
+            data.put("roles", dbRoles);
+
+            return ok(buildResponse(200, "操作成功", data));
+
+        } catch (Exception e) {
+            log.error("Get current user failed", e);
+            return status(HttpStatus.UNAUTHORIZED,
+                    buildResponse(401, "Token 无效", null));
+        }
     }
 
     /**
