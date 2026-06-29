@@ -17,5 +17,6 @@ public class Chunk {
     private Integer chunkIndex;
     private String chunkType;
     private String vectorId;
+    private Integer charCount;
     private LocalDateTime createdAt;
 }

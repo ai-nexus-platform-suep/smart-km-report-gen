@@ -15,6 +15,7 @@ import com.km.repository.KnowledgeBaseMapper;
 import com.km.service.DocumentConverter;
 import com.km.service.DocumentService;
 import com.km.storage.FileStorageService;
+import com.km.pipeline.producer.DocumentTaskProducer;
 import com.km.vo.ChunkVO;
 import com.km.vo.DocumentVO;
 import com.km.common.util.JsonUtils;
@@ -80,6 +81,14 @@ public class DocumentServiceImpl implements DocumentService {
         documentMapper.insert(doc);
 
         knowledgeBaseMapper.incrementDocCount(kbId);
+
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper om = new com.fasterxml.jackson.databind.ObjectMapper();
+            java.util.Map<String, Object> strategy = om.readValue(kb.getChunkStrategyJson(), java.util.Map.class);
+            taskProducer.sendProcessTask(docId, kbId, objectName, file.getContentType(), strategy);
+        } catch (Exception e) {
+            log.warn("Failed to send process task: {}", docId, e);
+        }
 
         DocumentVO vo = DocumentConverter.toVO(doc);
         KnowledgeBase updatedKb = knowledgeBaseMapper.getById(kbId);
@@ -210,10 +219,22 @@ public class DocumentServiceImpl implements DocumentService {
             throw new BusinessException(ErrorCode.KM_DOC_005);
         }
 
+        chunkMapper.deleteByDocId(docId);
         documentMapper.updateStatus(docId, DocumentStatus.UPLOADED, null);
 
         doc.setStatus(DocumentStatus.UPLOADED);
         doc.setErrorMsg(null);
+
+        try {
+            KnowledgeBase kb = knowledgeBaseMapper.getById(doc.getKbId());
+            if (kb != null) {
+                com.fasterxml.jackson.databind.ObjectMapper om = new com.fasterxml.jackson.databind.ObjectMapper();
+                java.util.Map<String, Object> strategy = om.readValue(kb.getChunkStrategyJson(), java.util.Map.class);
+                taskProducer.sendProcessTask(doc.getId(), doc.getKbId(), doc.getFilePath(), doc.getMimeType(), strategy);
+            }
+        } catch (Exception e) {
+            log.warn("Failed to resend process task: {}", doc.getId(), e);
+        }
         return DocumentConverter.toVO(doc);
     }
 
