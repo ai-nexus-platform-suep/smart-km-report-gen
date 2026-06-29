@@ -5,7 +5,27 @@ export type {
   ChunkStrategy, SearchMode, SearchResultItem, SearchResponse,
 } from './knowledge'
 export type {
-  Conversation, Message, Citation, ThinkingStep, ChatRequest, SseEvent,
+  ChatRequest,
+  ChatStreamRequest,
+  ChatTestRequest,
+  ChatTestResponse,
+  Citation,
+  Conversation,
+  ConversationListResult,
+  ConversationMessagesResult,
+  ConversationSchema,
+  GenerateStatus,
+  IntentType,
+  Message,
+  MessageRole,
+  MessageSchema,
+  ModelConfigPayload,
+  ModelConfigVO,
+  ModelProvider,
+  ModelScenario,
+  SseEvent,
+  ThinkingStep,
+  ThinkingStatus,
 } from './qa'
 export type {
   ReportRecord, ReportStatus, OutlineSection, ReportTemplate, TemplateType, Material, ReportSseEvent,

@@ -43,6 +43,10 @@ export function apiPut<T = unknown>(url: string, data?: unknown, config?: AxiosR
   return instance.put<T>(url, data, config)
 }
 
+export function apiPatch<T = unknown>(url: string, data?: unknown, config?: AxiosRequestConfig) {
+  return instance.patch<T>(url, data, config)
+}
+
 export function apiDelete<T = unknown>(url: string, config?: AxiosRequestConfig) {
   return instance.delete<T>(url, config)
 }

@@ -9,8 +9,10 @@ export const API_QA = {
   CHAT: {
     LIST: '/api/conversations',
     CREATE: '/api/conversations',
+    UPDATE_TITLE: '/api/conversations/:id',
     DELETE: '/api/conversations/:id',
-    STREAM: '/api/chat/stream',
+    TEST: '/api/chat/test',
+    STREAM: '/api/chat',
     HISTORY: '/api/conversations/:id/messages',
   },
   SEARCH: {
@@ -18,10 +20,17 @@ export const API_QA = {
   },
   ADMIN: {
     QA_CONFIG: '/api/admin/qa-config',
-    LLM_CONFIG: '/api/admin/llm-config',
     RETRIEVAL_TEST: '/api/admin/retrieval-test',
     STATS: '/api/admin/stats',
     QA_TREND: '/api/admin/stats/qa-trend',
+  },
+  MODEL_CONFIG: {
+    LIST: '/api/model-configs',
+    CREATE: '/api/model-configs',
+    UPDATE: '/api/model-configs/:id',
+    DELETE: '/api/model-configs/:id',
+    SET_DEFAULT: '/api/model-configs/:id/default',
+    INTERNAL_DEFAULT: '/internal/model-configs/default',
   },
 } as const
 
