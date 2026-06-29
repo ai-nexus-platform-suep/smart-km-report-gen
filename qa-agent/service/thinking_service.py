@@ -25,6 +25,7 @@ def add_thinking_step(
     event_type: str,
     message: str,
     elapsed_ms: Optional[float] = None,
+    phase: str = "done",
 ) -> list[dict]:
     """向思考步骤列表新增一步。
 
@@ -48,6 +49,7 @@ def add_thinking_step(
         "message": message,
         "timestamp": time.time(),
         "elapsed_ms": elapsed_ms,
+        "phase": phase,
     }
     # 新建列表，避免副作用
     return steps + [step]
@@ -95,6 +97,7 @@ def to_sse_event(step: dict) -> dict:
         "step_type": step.get("type", ""),
         "message": step.get("message", ""),
         "elapsed_ms": step.get("elapsed_ms"),
+        "phase": step.get("phase", "done"),
     }
 
 

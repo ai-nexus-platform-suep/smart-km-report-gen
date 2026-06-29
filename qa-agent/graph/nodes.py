@@ -13,7 +13,7 @@ from qa_agent.graph.state import AgentState
 from qa_agent.model.embedding import embed_query
 from qa_agent.model.reranker import rerank
 from qa_agent.service.citation_service import build_citations, merge_consecutive_citations
-from qa_agent.service.thinking_service import add_thinking_step
+from qa_agent.service.thinking_service import add_thinking_step, to_sse_event
 
 
 def _get_llm_config(state: dict) -> dict:
@@ -63,6 +63,15 @@ def _question_from_state(state: AgentState) -> str:
 
 def _append_step(state: AgentState, event_type: str, message: str) -> list[dict]:
     return add_thinking_step(list(state.get("thinking_steps") or []), event_type, message)
+
+
+def _emit_start_step(event_type: str, message: str) -> None:
+    try:
+        writer = get_stream_writer()
+    except RuntimeError:
+        return
+
+    writer(to_sse_event({"type": event_type, "message": message, "phase": "start"}))
 
 
 def _intent_decision(
@@ -349,6 +358,7 @@ def _build_messages(
 
 
 async def intent_node(state: AgentState) -> dict:
+    _emit_start_step("intent", "正在识别用户意图")
     question = _question_from_state(state)
     config = _get_llm_config(state)
     decision = await _classify_intent(question, config)
@@ -377,6 +387,7 @@ async def intent_node(state: AgentState) -> dict:
 
 
 async def clarify_node(state: AgentState) -> dict:
+    _emit_start_step("clarify", "正在准备澄清问题")
     intent = state.get("intent") or KNOWLEDGE_INTENT
     reason = state.get("route_reason") or "当前问题缺少必要上下文。"
     if intent in UNSUPPORTED_ACTION_INTENTS:
@@ -394,6 +405,7 @@ async def clarify_node(state: AgentState) -> dict:
 
 
 async def retrieve_node(state: AgentState) -> dict:
+    _emit_start_step("retrieve", "正在检索知识库片段")
     question = _question_from_state(state)
     embedding = await embed_query(question)
     documents = await search_knowledge(
@@ -414,6 +426,7 @@ async def retrieve_node(state: AgentState) -> dict:
 
 
 async def rerank_node(state: AgentState) -> dict:
+    _emit_start_step("rerank", "正在重排序候选片段")
     documents = await rerank(
         _question_from_state(state),
         state.get("retrieved_docs") or [],
@@ -426,6 +439,7 @@ async def rerank_node(state: AgentState) -> dict:
 
 
 async def generate_node(state: AgentState) -> dict:
+    _emit_start_step("generate", "正在生成回答")
     question = _question_from_state(state)
     documents = state.get("retrieved_docs") or []
     no_knowledge = state.get("intent") in RAG_INTENTS and not documents
