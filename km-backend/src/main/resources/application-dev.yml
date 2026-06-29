@@ -17,6 +17,11 @@ spring:
     enabled: true
     locations: classpath:db/migration
     baseline-on-migrate: true
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+      location: C:\Users\32436\AppData\Local\Temp
 
 mybatis:
   mapper-locations: classpath:mapper/*.xml
@@ -37,3 +42,4 @@ km:
     expire-hours: 24
   ai-service:
     base-url: http://localhost:8092
+    callback-url: http://localhost:8091/internal/document/status

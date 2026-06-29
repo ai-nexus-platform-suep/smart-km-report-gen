@@ -29,41 +29,13 @@ public class KmAiClient {
     }
 
     public VectorSearchResponse vectorSearch(VectorSearchRequest request) {
-        try {
-            String url = baseUrl + "/internal/search";
-            org.springframework.http.ResponseEntity<String> rawResp = restTemplate.exchange(
-                    url, org.springframework.http.HttpMethod.POST,
-                    new org.springframework.http.HttpEntity<>(request), String.class);
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(rawResp.getBody());
-            if (root.get("code").asInt() != 0) {
-                log.warn("AI search error: {}", root.get("message").asText());
-                return null;
-            }
-            return mapper.treeToValue(root.get("data"), VectorSearchResponse.class);
-        } catch (Exception e) {
-            log.warn("AI vector search failed: {}", e.getMessage());
-            return null;
-        }
+        AiApiResponse<VectorSearchResponse> body = post("/internal/search", request);
+        return body != null ? body.getData() : null;
     }
 
     public RerankResponse rerank(RerankRequest request) {
-        try {
-            String url = baseUrl + "/internal/rerank";
-            org.springframework.http.ResponseEntity<String> rawResp = restTemplate.exchange(
-                    url, org.springframework.http.HttpMethod.POST,
-                    new org.springframework.http.HttpEntity<>(request), String.class);
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(rawResp.getBody());
-            if (root.get("code").asInt() != 0) {
-                log.warn("AI rerank error: {}", root.get("message").asText());
-                return null;
-            }
-            return mapper.treeToValue(root.get("data"), RerankResponse.class);
-        } catch (Exception e) {
-            log.warn("AI rerank failed: {}", e.getMessage());
-            return null;
-        }
+        AiApiResponse<RerankResponse> body = post("/internal/rerank", request);
+        return body != null ? body.getData() : null;
     }
 
     public boolean healthCheck() {
@@ -80,35 +52,27 @@ public class KmAiClient {
         }
     }
 
+    @SuppressWarnings("unchecked")
     private <T> AiApiResponse<T> post(String path, Object request) {
         String url = baseUrl + path;
         try {
-            ResponseEntity<String> rawResp = restTemplate.exchange(
-                    url, HttpMethod.POST, new HttpEntity<>(request), String.class);
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(rawResp.getBody());
-            int code = root.get("code").asInt();
-            String message = root.get("message").asText();
-            if (code != 0) {
-                log.warn("AI service error: code={}, msg={}, url={}", code, message, url);
+            ResponseEntity<AiApiResponse<T>> resp = restTemplate.exchange(
+                    url, HttpMethod.POST, new HttpEntity<>(request),
+                    new ParameterizedTypeReference<AiApiResponse<T>>() {});
+            AiApiResponse<T> body = resp.getBody();
+            if (body == null) {
+                log.warn("AI service returned null body: {}", url);
                 return null;
             }
-            com.fasterxml.jackson.databind.JavaType apiType = mapper.getTypeFactory()
-                .constructParametricType(AiApiResponse.class, Object.class);
-            AiApiResponse<?> raw = mapper.readValue(rawResp.getBody(), apiType);
-            Object rawData = raw.getData();
-            com.fasterxml.jackson.databind.JsonNode dataNode = root.get("data");
-            T data = mapper.treeToValue(dataNode, mapper.getTypeFactory().constructType(Object.class));
-            // Use reflection to get the proper type - simpler: just let Jackson figure it out
-            String jsonStr = rawResp.getBody();
-            // Parse: get data field as generic JsonNode, then convert to target type
-            @SuppressWarnings("unchecked")
-            AiApiResponse<T> typed = (AiApiResponse<T>)raw;
-            return typed;
+            if (body.getCode() != 0) {
+                log.warn("AI service error: code={}, msg={}, url={}",
+                        body.getCode(), body.getMessage(), url);
+                return null;
+            }
+            return body;
         } catch (Exception e) {
             log.warn("AI call failed: {}, url={}", e.getMessage(), url);
             throw e;
         }
-    }  @SuppressWarnings("unchecked")
-    
+    }
 }
