@@ -1,4 +1,4 @@
-"""调用 Java 服务拉取配置 (人员 A 独占)"""
+"""调用 Java 服务拉取模型配置 (人员 A 独占)"""
 
 import httpx
 
@@ -7,19 +7,11 @@ from qa_agent.core.config import settings
 
 def _local_llm_config() -> dict:
     return {
-        "api_url": settings.llm_api_url,
-        "api_key": settings.llm_api_key,
+        "provider": "deepseek",
+        "base_url": settings.llm_api_url,
         "model_name": settings.llm_model_name,
-        "timeout": settings.llm_timeout,
-    }
-
-
-def _local_retrieval_config() -> dict:
-    return {
-        "knowledge_search_url": settings.knowledge_search_url,
-        "top_k": settings.default_top_k,
-        "similarity_threshold": settings.default_similarity_threshold,
-        "rerank_threshold": settings.default_rerank_threshold,
+        "api_key": settings.llm_api_key,
+        "timeout_seconds": settings.llm_timeout,
     }
 
 
@@ -43,30 +35,46 @@ async def _fetch_json(path: str) -> dict | None:
     return None
 
 
-async def fetch_llm_config() -> dict:
-    remote_config = await _fetch_json(settings.java_llm_config_path)
-    return remote_config or _local_llm_config()
+async def fetch_llm_config(user_id: int = 1, scenario: str = "chat") -> dict:
+    """从 Java 获取指定用户在某场景下的默认模型配置（apiKey 已解密）"""
+    remote_config = await _fetch_json(
+        f"internal/model-configs/default?userId={user_id}&scenario={scenario}"
+    )
+    if remote_config:
+        # Java 返回 camelCase，转为 snake_case 内部使用
+        return {
+            "provider": remote_config.get("provider", "deepseek"),
+            "base_url": remote_config.get("baseUrl", ""),
+            "model_name": remote_config.get("modelName", ""),
+            "api_key": remote_config.get("apiKey", ""),
+            "timeout_seconds": remote_config.get("timeoutSeconds", settings.llm_timeout),
+        }
+    return _local_llm_config()
 
 
 async def fetch_retrieval_config() -> dict:
-    remote_config = await _fetch_json(settings.java_retrieval_config_path)
-    return remote_config or _local_retrieval_config()
+    return {
+        "knowledge_search_url": settings.knowledge_search_url,
+        "top_k": settings.default_top_k,
+        "similarity_threshold": settings.default_similarity_threshold,
+        "rerank_threshold": settings.default_rerank_threshold,
+    }
 
 
 async def test_llm_connection() -> bool:
     config = await fetch_llm_config()
-    api_key = config.get("api_key") or config.get("apiKey")
-    api_url = (config.get("api_url") or config.get("apiUrl") or "").rstrip("/")
-    model_name = config.get("model_name") or config.get("modelName")
-    timeout = config.get("timeout") or settings.llm_timeout
+    api_key = config.get("api_key", "")
+    base_url = (config.get("base_url") or "").rstrip("/")
+    model_name = config.get("model_name", "")
+    timeout = config.get("timeout_seconds", settings.llm_timeout)
 
-    if not api_key or not api_url or not model_name:
+    if not api_key or not base_url or not model_name:
         return False
 
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
             response = await client.post(
-                f"{api_url}/chat/completions",
+                f"{base_url}/chat/completions",
                 headers={"Authorization": f"Bearer {api_key}"},
                 json={
                     "model": model_name,

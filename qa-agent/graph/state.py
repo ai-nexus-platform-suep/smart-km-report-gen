@@ -22,4 +22,5 @@ class AgentState(TypedDict):
     thinking_steps: NotRequired[list[dict]]
     citations: NotRequired[list[dict]]
     final_response: NotRequired[str]
+    model_config: NotRequired[dict]
     error: NotRequired[str | None]

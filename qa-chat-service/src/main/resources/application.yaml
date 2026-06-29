@@ -2,9 +2,9 @@ spring:
   application:
     name: qa-chat-service
   datasource:
-    url: jdbc:mysql://127.0.0.1:3306/smart-km-report-gen?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+    url: jdbc:mysql://127.0.0.1:3306/smart_km_report_gen?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
     username: root
-    password: 1234
+    password: ${MYSQL_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
 mybatis-plus:
@@ -17,3 +17,7 @@ mybatis-plus:
 
 server:
   port: 8082
+
+model-config:
+  aes-key: smart-km-report-gen-2026-aes-key
+  default-timeout-seconds: 60
