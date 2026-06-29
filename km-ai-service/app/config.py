@@ -33,6 +33,17 @@ class Settings(BaseSettings):
 
     # Parser config (concurrency)
     max_concurrent_tasks: int = 3
+    # Embedding batch
+    embed_batch_size: int = 32
+
+    # Retry
+    task_retry_max: int = 3
+    task_retry_base_delay: float = 2.0
+
+    # Hybrid search weights
+    hybrid_vector_weight: float = 0.7
+    hybrid_keyword_weight: float = 0.3
+
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8", "extra": "ignore"}
 

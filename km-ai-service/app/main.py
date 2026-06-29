@@ -113,17 +113,57 @@ def rerank_passages(req: RerankRequest):
 @app.post("/internal/search", response_model=ApiResponse)
 def vector_search(req: VectorSearchRequest):
     try:
+        # 1. Vector search
         query_vec = embedder.embed([req.query], req.embed_model)
-        if not query_vec:
-            return ApiResponse.ok(VectorSearchResult(hits=[]))
-        hits = milvus.search(
-            query_vector=query_vec[0],
-            kb_ids=req.knowledge_base_ids if req.knowledge_base_ids else None,
-            top_k=req.top_k,
-            threshold=req.similarity_threshold,
-        )
-        result_hits = [VectorSearchHit(**h) for h in hits]
+        vector_hits = []
+        if query_vec:
+            vector_hits = milvus.search(
+                query_vector=query_vec[0],
+                kb_ids=req.knowledge_base_ids if req.knowledge_base_ids else None,
+                top_k=req.top_k * 2,
+                threshold=req.similarity_threshold * 0.5,  # lower threshold to get more candidates
+            )
+
+        # 2. Hybrid: fuse with keyword BM25-style scoring
+        from collections import Counter
+        query_terms = set(req.query.lower().split())
+        for hit in vector_hits:
+            content = hit.get("content", "").lower()
+            # Simple BM25-like term frequency scoring
+            score = 0.0
+            content_words = content.split()
+            word_count = len(content_words)
+            if word_count > 0:
+                term_freq = sum(1 for w in content_words if w in query_terms)
+                score = term_freq / max(word_count, 1) * 100  # normalize
+            hit["keyword_score"] = round(score, 4)
+
+        # Fuse vector + keyword scores
+        settings_local = _get_settings()
+        vw = getattr(settings_local, "hybrid_vector_weight", 0.7)
+        kw = getattr(settings_local, "hybrid_keyword_weight", 0.3)
+        for hit in vector_hits:
+            vec_score = hit.get("similarity_score", 0.0)
+            kw_score = hit.get("keyword_score", 0.0) / 100.0  # normalize
+            hit["hybrid_score"] = round(vw * vec_score + kw * kw_score, 4)
+
+        # Sort by hybrid score
+        vector_hits.sort(key=lambda h: h.get("hybrid_score", 0), reverse=True)
+
+        result_hits = [VectorSearchHit(
+            chunk_id=h["chunk_id"], document_id=h.get("document_id", h.get("doc_id", "")),
+            content=h["content"], chapter_path=h.get("chapter_path", ""),
+            similarity_score=h["similarity_score"]
+        ) for h in vector_hits[:req.top_k]]
+
         return ApiResponse.ok(VectorSearchResult(hits=result_hits))
     except Exception as e:
         logger.error("search failed: %s", e)
         return ApiResponse.fail(str(e))
+
+
+def _get_settings():
+    """Helper to access settings without circular imports."""
+    from app.config import settings
+    return settings
+
