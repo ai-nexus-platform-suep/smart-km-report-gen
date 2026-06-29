@@ -48,12 +48,26 @@ const searchModeMap: Record<string, string> = {
 
 export const kmHandlers = [
   // === 知识库 CRUD ===
-  http.get(API_KM.KB.LIST, async () => {
+  http.get(API_KM.KB.LIST, async ({ request }) => {
     await delay(400)
+    const url = new URL(request.url)
+    const docType = url.searchParams.get('docType') || ''
+    const keyword = url.searchParams.get('keyword') || ''
+    let filtered = [...mockKnowledgeBases]
+    if (docType) filtered = filtered.filter(kb => kb.type === docType)
+    if (keyword) filtered = filtered.filter(kb => kb.name.includes(keyword))
     return HttpResponse.json({
       code: 200, message: 'ok',
-      data: { records: mockKnowledgeBases, total: mockKnowledgeBases.length, page: 1, pageSize: 10 },
+      data: { records: filtered, total: filtered.length, page: 1, pageSize: 10 },
     })
+  }),
+
+  http.post(API_KM.KB.BATCH_DELETE, async ({ request }) => {
+    await delay(400)
+    const body = await request.json() as any
+    const ids: number[] = body?.ids || []
+    mockKnowledgeBases = mockKnowledgeBases.filter(kb => !ids.includes(kb.id))
+    return HttpResponse.json({ code: 200, message: '批量删除成功', data: null })
   }),
 
   http.post(API_KM.KB.CREATE, async ({ request }) => {

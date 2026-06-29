@@ -1,5 +1,5 @@
 // apps/km-web/src/api/knowledge.ts
-import { apiGet, apiPost, apiDelete, API_KM } from '@platform/core'
+import { apiGet, apiPost, apiDelete, apiPost as apiDeleteBatch, API_KM } from '@platform/core'
 
 export interface CreateKnowledgeBaseRequest {
   name: string
@@ -17,6 +17,11 @@ export interface CreateKnowledgeBaseRequest {
 
 export function getKnowledgeBaseList(params: any) {
   return apiGet(API_KM.KB.LIST, params)
+}
+
+// 批量删除知识库
+export function batchDeleteKnowledgeBase(ids: number[]) {
+  return apiDeleteBatch(API_KM.KB.BATCH_DELETE, { ids })
 }
 
 export function createKnowledgeBase(data: CreateKnowledgeBaseRequest) {
