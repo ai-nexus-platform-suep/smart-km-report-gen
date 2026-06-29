@@ -57,7 +57,7 @@ def health():
 def process_document(req: ProcessDocumentRequest):
     try:
         file_content = minio_reader.read_file(req.minio_path)
-        text = parser.parse(file_content, req.mime_type)
+        text = parser.parse(file_content, req.mime_type, req.minio_path)
         if not text.strip():
             raise ValueError("Empty document after parsing")
         chunker = create_chunker(req.chunk_strategy.model_dump())

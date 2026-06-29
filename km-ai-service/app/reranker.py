@@ -9,10 +9,19 @@ class Reranker:
         self.base_url = settings.siliconflow_base_url
         self.default_model = settings.rerank_model
         self._client = httpx.Client(timeout=30.0)
+        self._mock = not self.api_key or self.api_key == "sk-test" or self.api_key.startswith("sk-your")
 
     def rerank(self, query: str, passages: List[str], top_k: Optional[int] = None, model: str = "") -> List[dict]:
         if not passages:
             return []
+        if self._mock:
+            import random as rnd
+            n = len(passages)
+            k = min(top_k or n, n)
+            scores = sorted([rnd.Random(42 + i).random() for i in range(n)], reverse=True)
+            indices = list(range(n))
+            indices.sort(key=lambda i: scores[i], reverse=True)
+            return [{"index": indices[i], "score": scores[indices[i]]} for i in range(k)]
         model = model or self.default_model
         resp = self._client.post(
             f"{self.base_url}/rerank",

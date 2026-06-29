@@ -11,10 +11,13 @@ class Embedder:
         self.default_model = settings.embed_model
         self.dimension = settings.milvus_dimension
         self._client = httpx.Client(timeout=60.0)
+        self._mock = not self.api_key or self.api_key == "sk-test" or self.api_key.startswith("sk-your")
 
     def embed(self, texts: List[str], model: str = "") -> List[List[float]]:
         if not texts:
             return []
+        if self._mock:
+            return self._mock_embed(texts)
         model = model or self.default_model
         resp = self._client.post(
             f"{self.base_url}/embeddings",
@@ -25,3 +28,9 @@ class Embedder:
         data = resp.json()
         vectors = [item["embedding"] for item in data["data"]]
         return vectors
+
+    def _mock_embed(self, texts):
+        import random, math
+        dim = self.dimension
+        rng = random.Random(42)
+        return [[rng.gauss(0, 1) / math.sqrt(dim) for _ in range(dim)] for _ in texts]

@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: km-backend
+  profiles:
+    active: dev
+
+server:
+  port: 8091
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

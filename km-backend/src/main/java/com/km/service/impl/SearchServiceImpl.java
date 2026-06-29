@@ -31,13 +31,23 @@ public class SearchServiceImpl implements SearchService {
             List<String> kbIds = request.getKnowledgeBaseIds();
             if (kbIds == null) kbIds = Collections.emptyList();
 
+            @SuppressWarnings("unchecked")
             ApiResponse searchResp = aiClient.vectorSearch(
                     request.getQuery(), kbIds,
                     request.getTopK() * 2,
                     request.getSimilarityThreshold()
             );
 
-            List<Map<String, Object>> hits = (List<Map<String, Object>>) searchResp.getData();
+            Object dataObj = searchResp.getData();
+            List<Map<String, Object>> hits = new ArrayList<>();
+            if (dataObj instanceof List) {
+                hits = (List<Map<String, Object>>) dataObj;
+            } else if (dataObj instanceof Map) {
+                Object h = ((Map<String, Object>) dataObj).get("hits");
+                if (h instanceof List) {
+                    hits = (List<Map<String, Object>>) h;
+                }
+            }
             if (hits == null || hits.isEmpty()) {
                 return emptyResult();
             }
@@ -51,7 +61,16 @@ public class SearchServiceImpl implements SearchService {
                         .collect(Collectors.toList());
 
                 ApiResponse rerankResp = aiClient.rerank(request.getQuery(), passages, request.getTopK());
-                List<Map<String, Object>> rerankItems = (List<Map<String, Object>>) rerankResp.getData();
+                Object rerankObj = rerankResp.getData();
+                List<Map<String, Object>> rerankItems = new ArrayList<>();
+                if (rerankObj instanceof List) {
+                    rerankItems = (List<Map<String, Object>>) rerankObj;
+                } else if (rerankObj instanceof Map) {
+                    Object items = ((Map<String, Object>) rerankObj).get("items");
+                    if (items instanceof List) {
+                        rerankItems = (List<Map<String, Object>>) items;
+                    }
+                }
                 if (rerankItems != null) {
                     for (Map<String, Object> item : rerankItems) {
                         int idx = ((Number) item.get("index")).intValue();

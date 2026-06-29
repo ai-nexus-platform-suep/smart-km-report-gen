@@ -64,6 +64,7 @@ class MilvusClient:
                     continue
                 hits.append({
                     "chunk_id": hit.entity.get("chunk_id"),
+                    "document_id": hit.entity.get("doc_id"),
                     "doc_id": hit.entity.get("doc_id"),
                     "content": hit.entity.get("content"),
                     "chapter_path": hit.entity.get("chapter_path", ""),

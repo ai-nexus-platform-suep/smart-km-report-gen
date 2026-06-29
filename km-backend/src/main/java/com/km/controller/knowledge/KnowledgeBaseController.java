@@ -10,7 +10,7 @@ import com.km.service.KnowledgeBaseService;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/v1/knowledge-bases")
+@RequestMapping("/api/knowledge-bases")
 public class KnowledgeBaseController {
 
     private final KnowledgeBaseService kbService;

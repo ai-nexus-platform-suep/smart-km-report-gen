@@ -194,7 +194,7 @@ public class DocumentServiceImpl implements DocumentService {
         if (kb != null) {
             Map<String, Object> chunkStrategy = new HashMap<>();
             try {
-                chunkStrategy = JsonUtils.toJson(kb.getChunkStrategyJson());
+                chunkStrategy = com.fasterxml.jackson.databind.json.JsonMapper.builder().build().readValue(kb.getChunkStrategyJson(), java.util.Map.class);
             } catch (Exception e) { /* ignore */ }
             taskProducer.sendProcessTask(id, doc.getKbId(), doc.getFilePath(), doc.getMimeType(), chunkStrategy);
         }

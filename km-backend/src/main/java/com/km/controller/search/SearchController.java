@@ -7,7 +7,7 @@ import com.km.service.SearchService;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/v1")
+@RequestMapping("/api")
 public class SearchController {
 
     private final SearchService searchService;

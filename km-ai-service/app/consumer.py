@@ -83,7 +83,7 @@ class DocumentConsumer:
             file_content = self.minio.read_file(minio_path)
 
             # 3. Parse document to text
-            text = self.parser.parse(file_content, mime_type)
+            text = self.parser.parse(file_content, mime_type, minio_path)
             if not text.strip():
                 raise ValueError("Empty document after parsing")
 
@@ -116,8 +116,8 @@ class DocumentConsumer:
                     "doc_id": doc_id,
                     "kb_id": kb_id,
                     "embedding": vec,
-                    "content": cr.content,
-                    "chapter_path": cr.chapter_path,
+                    "content": cr.content[:60000] if len(cr.content) > 60000 else cr.content,
+                    "chapter_path": cr.chapter_path[:500] if len(cr.chapter_path) > 500 else cr.chapter_path,
                 })
                 chunk_records.append({
                     "id": chunk_uuid,
