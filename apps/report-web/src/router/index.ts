@@ -1,7 +1,7 @@
+import { h } from 'vue'
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { baseRoutes, createAuthGuard } from '@platform/ui'
 import AuthGuard from '@platform/ui/src/components/AuthGuard.vue'
-import { h } from 'vue'
 
 const moduleRoutes: RouteRecordRaw[] = [
   {
@@ -41,7 +41,7 @@ const moduleRoutes: RouteRecordRaw[] = [
   {
     path: '/admin/dashboard',
     name: 'AdminDashboard',
-    component: guarded('趋势监控', '后续任务 C-19 迁入总览指标、趋势图和异常数据'),
+    component: () => import('../pages/admin/AdminDashboardPage.vue'),
     meta: { title: '趋势监控', admin: true },
   },
   {
@@ -84,7 +84,7 @@ function Placeholder(title: string, description: string) {
     ]),
     h('div', { class: 'surface', style: 'padding: 28px;' }, [
       h('div', { class: 'terminal-label', style: 'color: var(--accent-blue);' }, 'ADMIN PLACEHOLDER'),
-      h('p', { style: 'margin: 12px 0 0; color: var(--text-secondary);' }, '当前只迁移用户侧报告功能，管理侧页面将在后续任务单独接入。'),
+      h('p', { style: 'margin: 12px 0 0; color: var(--text-secondary);' }, '当前管理功能按任务逐步迁入，未完成模块会保持占位。'),
     ]),
   ])
 }
