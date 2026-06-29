@@ -11,7 +11,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
-
+ 
 import com.powerreport.common.GlobalExceptionHandler;
 import com.powerreport.dto.OutlineConfirmRequest;
 import com.powerreport.dto.OutlineGenerateRequest;
