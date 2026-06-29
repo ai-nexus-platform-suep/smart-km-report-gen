@@ -19,3 +19,9 @@ Thumbs.db
 # Env
 .env
 *.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
