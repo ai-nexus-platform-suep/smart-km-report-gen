@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from typing import AsyncIterator
+from typing import Any, AsyncIterator
 
 import httpx
 
@@ -67,31 +67,65 @@ MOCK_SECTION_TEXT = (
 
 class LlmClient:
     def __init__(self) -> None:
-        self.api_url = os.getenv("LLM_API_URL", "https://api.deepseek.com/v1/chat/completions")
+        self.api_url = self._normalize_api_url(
+            os.getenv("LLM_API_URL", "https://api.deepseek.com/v1/chat/completions")
+        )
         self.api_key = os.getenv("LLM_API_KEY", "")
         self.model = os.getenv("LLM_MODEL", "deepseek-chat")
         self.timeout = float(os.getenv("LLM_TIMEOUT_SECONDS", "60"))
         self.mock = os.getenv("LLM_MOCK", "false").lower() in ("1", "true", "yes")
+        self.json_mode = os.getenv("LLM_JSON_MODE", "false").lower() in ("1", "true", "yes")
+
+    def _normalize_api_url(self, api_url: str) -> str:
+        url = api_url.strip().rstrip("/")
+        if url.endswith("/v1"):
+            return f"{url}/chat/completions"
+        return url
+
+    def _headers(self) -> dict[str, str]:
+        if not self.api_key:
+            raise RuntimeError("LLM_API_KEY 未配置")
+        return {
+            "Authorization": f"Bearer {self.api_key}",
+            "Content-Type": "application/json",
+        }
+
+    def _chat_body(self, messages: list[dict[str, str]], *, stream: bool = False) -> dict[str, Any]:
+        body: dict[str, Any] = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": 0.5 if stream else 0.3,
+        }
+        if stream:
+            body["stream"] = True
+        if self.json_mode and not stream:
+            body["response_format"] = {"type": "json_object"}
+        return body
+
+    def _upstream_error(self, exc: Exception) -> RuntimeError:
+        if isinstance(exc, httpx.HTTPStatusError):
+            response_text = exc.response.text[:1000] if exc.response is not None else ""
+            return RuntimeError(
+                f"上游 LLM 返回 HTTP {exc.response.status_code}: {response_text}"
+            )
+        if isinstance(exc, httpx.TimeoutException):
+            return RuntimeError(f"上游 LLM 请求超时: {type(exc).__name__}")
+        if isinstance(exc, httpx.RequestError):
+            return RuntimeError(f"上游 LLM 网络请求失败: {type(exc).__name__}: {exc}")
+        return RuntimeError(f"{type(exc).__name__}: {exc}")
 
     async def chat_completion(self, messages: list[dict[str, str]]) -> str:
         if self.mock:
             return json.dumps(MOCK_OUTLINE_SUMMER, ensure_ascii=False)
 
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
-        body = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": 0.3,
-            "response_format": {"type": "json_object"},
-        }
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            resp = await client.post(self.api_url, headers=headers, json=body)
-            resp.raise_for_status()
-            data = resp.json()
-            return data["choices"][0]["message"]["content"]
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                resp = await client.post(self.api_url, headers=self._headers(), json=self._chat_body(messages))
+                resp.raise_for_status()
+                data = resp.json()
+                return data["choices"][0]["message"]["content"]
+        except (httpx.HTTPError, KeyError, IndexError, json.JSONDecodeError) as exc:
+            raise self._upstream_error(exc) from exc
 
     async def chat_stream(self, messages: list[dict[str, str]]) -> AsyncIterator[str]:
         if self.mock:
@@ -105,30 +139,28 @@ class LlmClient:
                 await asyncio.sleep(0.05)
             return
 
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
-        body = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": 0.5,
-            "stream": True,
-        }
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            async with client.stream("POST", self.api_url, headers=headers, json=body) as resp:
-                resp.raise_for_status()
-                async for line in resp.aiter_lines():
-                    if not line or not line.startswith("data: "):
-                        continue
-                    payload = line[6:].strip()
-                    if payload == "[DONE]":
-                        break
-                    try:
-                        chunk = json.loads(payload)
-                        delta = chunk["choices"][0].get("delta", {})
-                        content = delta.get("content")
-                        if content:
-                            yield content
-                    except (json.JSONDecodeError, KeyError, IndexError):
-                        continue
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout) as client:
+                async with client.stream(
+                        "POST",
+                        self.api_url,
+                        headers=self._headers(),
+                        json=self._chat_body(messages, stream=True),
+                ) as resp:
+                    resp.raise_for_status()
+                    async for line in resp.aiter_lines():
+                        if not line or not line.startswith("data: "):
+                            continue
+                        payload = line[6:].strip()
+                        if payload == "[DONE]":
+                            break
+                        try:
+                            chunk = json.loads(payload)
+                            delta = chunk["choices"][0].get("delta", {})
+                            content = delta.get("content")
+                            if content:
+                                yield content
+                        except (json.JSONDecodeError, KeyError, IndexError):
+                            continue
+        except httpx.HTTPError as exc:
+            raise self._upstream_error(exc) from exc
