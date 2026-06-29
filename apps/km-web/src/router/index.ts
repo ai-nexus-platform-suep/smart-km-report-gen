@@ -15,6 +15,12 @@ const moduleRoutes: RouteRecordRaw[] = [
     meta: { title: '知识库管理' },
   },
   {
+    path: '/knowledge/:kbId/documents',
+    name: 'DocumentList',
+    component: () => import('../pages/DocumentList.vue'),
+    meta: { title: '文档管理' },
+  },
+  {
     path: '/search',
     name: 'Search',
     component: () => import('../pages/SearchPage.vue'),
@@ -58,7 +64,7 @@ function guarded(name: string) {
 
 function Placeholder(name: string) {
   return h('div', { style: 'padding:40px;text-align:center;color:#999' }, [
-    h('h2', '🚧 ' + name),
+    h('h2', '🔧 ' + name),
     h('p', '此页面待开发'),
   ])
 }
