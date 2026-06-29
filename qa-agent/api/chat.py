@@ -1,4 +1,4 @@
-"""POST /chat → SSE 流式 (人员 B 独占)"""
+"""POST /chat SSE 流式接口与 Agent 事件转换。"""
 
 import json
 from collections.abc import AsyncIterator
@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
-from .schemas import ChatReq
+from .schemas import ChatReq, ChatTestReq, ChatTestResp
 from ..core.constants import SSEEventType
 from ..db.constants import (
     DEFAULT_USER_ID,
@@ -17,8 +17,10 @@ from ..db.constants import (
     ROLE_USER,
 )
 from ..db.repository import get_conversation, get_messages, save_message, update_message
-from ..db.session import async_session_factory
+from ..db.session import get_session_factory
 from ..graph.workflow import agent_graph
+from ..service.citation_service import citation_to_sse
+from ..service.thinking_service import to_sse_event
 
 router = APIRouter(tags=["chat"])
 
@@ -29,6 +31,13 @@ def _sse_payload(event_type: SSEEventType, data: dict) -> dict:
 
 def _history_messages(messages: list) -> list[dict]:
     return [{"role": message.role, "content": message.content} for message in messages]
+
+
+def _test_history_messages(req: ChatTestReq) -> list[dict]:
+    messages = [message.model_dump() for message in req.messages]
+    if not messages or messages[-1].get("role") != "user" or messages[-1].get("content") != req.question:
+        messages.append({"role": "user", "content": req.question})
+    return messages
 
 
 async def _stream_chat(
@@ -107,9 +116,10 @@ async def _stream_chat(
 
                 steps = update.get("thinking_steps") or []
                 for step in steps[emitted_steps:]:
+                    payload = to_sse_event(step) if isinstance(step, dict) else {"message": str(step)}
                     yield _sse_payload(
                         SSEEventType.THINKING,
-                        step if isinstance(step, dict) else {"message": str(step)},
+                        payload,
                     )
                 emitted_steps = len(steps)
 
@@ -130,8 +140,8 @@ async def _stream_chat(
             yield _sse_payload(SSEEventType.DONE, {})
             return
 
-        for citation in citations:
-            yield _sse_payload(SSEEventType.CITATION, citation)
+        if citations:
+            yield _sse_payload(SSEEventType.CITATION, citation_to_sse(citations))
 
         if not streamed_tokens and answer:
             yield _sse_payload(
@@ -186,7 +196,14 @@ async def chat(req: ChatReq) -> EventSourceResponse:
         raise HTTPException(status_code=400, detail="问题不能为空")
 
     async def event_generator() -> AsyncIterator[dict]:
-        async with async_session_factory() as db:
+        try:
+            session_factory = get_session_factory()
+        except Exception as exc:
+            yield _sse_payload(SSEEventType.ERROR, {"message": f"数据库会话初始化失败: {exc}"})
+            yield _sse_payload(SSEEventType.DONE, {})
+            return
+
+        async with session_factory() as db:
             try:
                 async for event in _stream_chat(req, db):
                     yield event
@@ -196,3 +213,29 @@ async def chat(req: ChatReq) -> EventSourceResponse:
                 raise
 
     return EventSourceResponse(event_generator())
+
+
+@router.post("/chat/test", response_model=ChatTestResp)
+async def chat_test(req: ChatTestReq) -> ChatTestResp:
+    if not req.question.strip():
+        raise HTTPException(status_code=400, detail="问题不能为空")
+
+    agent_input = {
+        "messages": _test_history_messages(req),
+        "question": req.question,
+        "user_id": req.user_id,
+        "selected_kb_ids": req.selected_kb_ids,
+    }
+    final_state = await agent_graph.ainvoke(agent_input)
+    retrieved_docs = final_state.get("retrieved_docs") or []
+
+    return ChatTestResp(
+        intent=final_state.get("intent"),
+        mode=final_state.get("mode"),
+        needs_clarification=bool(final_state.get("needs_clarification", False)),
+        classification_source=final_state.get("classification_source"),
+        retrieved_docs_count=len(retrieved_docs),
+        thinking_steps=final_state.get("thinking_steps") or [],
+        citations=final_state.get("citations") or [],
+        final_response=final_state.get("final_response") or final_state.get("error") or "",
+    )

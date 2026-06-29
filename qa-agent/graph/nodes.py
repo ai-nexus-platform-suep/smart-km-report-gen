@@ -1,4 +1,4 @@
-"""LangGraph 各节点实现 (人员 A 独占)"""
+"""LangGraph 节点实现与共享上下文/引用集成。"""
 
 import json
 from collections.abc import AsyncIterator
@@ -8,9 +8,12 @@ from langgraph.config import get_stream_writer
 
 from qa_agent.client.knowledge_client import search_knowledge
 from qa_agent.core.config import settings
+from qa_agent.graph.context import build_context
 from qa_agent.graph.state import AgentState
 from qa_agent.model.embedding import embed_query
 from qa_agent.model.reranker import rerank
+from qa_agent.service.citation_service import build_citations, merge_consecutive_citations
+from qa_agent.service.thinking_service import add_thinking_step
 
 
 KNOWLEDGE_INTENT = "KNOWLEDGE_QA"
@@ -45,9 +48,7 @@ def _question_from_state(state: AgentState) -> str:
 
 
 def _append_step(state: AgentState, event_type: str, message: str) -> list[dict]:
-    steps = list(state.get("thinking_steps") or [])
-    steps.append({"event_type": event_type, "message": message})
-    return steps
+    return add_thinking_step(list(state.get("thinking_steps") or []), event_type, message)
 
 
 def _intent_decision(
@@ -217,6 +218,40 @@ def _format_documents(documents: list[dict]) -> str:
     return "\n\n".join(formatted)
 
 
+def _message_role_content(message: object) -> tuple[str, str]:
+    if isinstance(message, dict):
+        role = str(message.get("role") or "user")
+        content = str(message.get("content") or "")
+    else:
+        role = str(getattr(message, "role", None) or getattr(message, "type", None) or "user")
+        content = str(getattr(message, "content", "") or "")
+
+    role = {"human": "user", "ai": "assistant"}.get(role, role)
+    return role, content
+
+
+def _normalize_history_messages(messages: list) -> list[dict]:
+    normalized: list[dict] = []
+    for message in messages or []:
+        role, content = _message_role_content(message)
+        normalized.append({"role": role, "content": content})
+    return normalized
+
+
+def _history_without_current_question(messages: list, question: str) -> list:
+    history = _normalize_history_messages(messages)
+    if not history:
+        return history
+
+    last_message = history[-1]
+    role = last_message.get("role")
+    content = last_message.get("content")
+
+    if role == "user" and str(content or "") == question:
+        return history[:-1]
+    return history
+
+
 async def _stream_chat_model(messages: list[dict]) -> AsyncIterator[str]:
     """流式调用 DeepSeek，逐 token yield 文本片段。"""
     if not settings.llm_api_key:
@@ -263,18 +298,33 @@ async def _call_chat_model(messages: list[dict]) -> str:
     return "".join(parts) or "LLM 服务未返回有效回答。"
 
 
-def _build_messages(question: str, documents: list[dict], no_knowledge: bool) -> list[dict]:
+def _build_messages(
+    question: str,
+    documents: list[dict],
+    no_knowledge: bool,
+    history_messages: list | None = None,
+) -> list[dict]:
     system_prompt = (
         "你是电力行业智能问答助手。回答要准确、简洁。"
         "如果提供了知识库片段，优先依据片段回答；如果没有相关片段，要明确说明未找到相关知识库信息。"
     )
+    context = build_context(
+        _history_without_current_question(history_messages or [], question),
+        system_prompt=system_prompt,
+        current_question=question,
+    )
+    prompt_parts: list[str] = []
+
+    if context:
+        prompt_parts.append(f"历史对话上下文:\n{context}")
 
     if documents:
-        user_prompt = f"知识库片段:\n{_format_documents(documents)}\n\n用户问题:{question}"
+        prompt_parts.append(f"知识库片段:\n{_format_documents(documents)}")
     elif no_knowledge:
-        user_prompt = f"未找到相关知识库信息。请基于通用能力谨慎回答用户问题，并说明该限制。\n用户问题:{question}"
-    else:
-        user_prompt = question
+        prompt_parts.append("未找到相关知识库信息。请基于通用能力谨慎回答用户问题，并说明该限制。")
+
+    prompt_parts.append(f"用户问题:{question}")
+    user_prompt = "\n\n".join(prompt_parts)
 
     return [
         {"role": "system", "content": system_prompt},
@@ -362,7 +412,7 @@ async def generate_node(state: AgentState) -> dict:
     question = _question_from_state(state)
     documents = state.get("retrieved_docs") or []
     no_knowledge = state.get("intent") in RAG_INTENTS and not documents
-    llm_messages = _build_messages(question, documents, no_knowledge)
+    llm_messages = _build_messages(question, documents, no_knowledge, state.get("messages") or [])
 
     try:
         writer = get_stream_writer()
@@ -379,16 +429,7 @@ async def generate_node(state: AgentState) -> dict:
     if no_knowledge and "未找到相关知识库信息" not in answer:
         answer = f"未找到相关知识库信息。{answer}"
 
-    citations = [
-        {
-            "index": index,
-            "doc_id": document.get("doc_id"),
-            "doc_name": document.get("doc_name"),
-            "snippet": document.get("snippet"),
-            "score": document.get("score"),
-        }
-        for index, document in enumerate(documents, start=1)
-    ]
+    citations = merge_consecutive_citations(build_citations(documents))
     return {
         "final_response": answer,
         "citations": citations,
