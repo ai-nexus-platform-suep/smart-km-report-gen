@@ -96,26 +96,5 @@ public class KmAiClient {
             throw e;
         }
     }  @SuppressWarnings("unchecked")
-    private <T> AiApiResponse<T> post(String path, Object request) {
-        String url = baseUrl + path;
-        try {
-            ResponseEntity<AiApiResponse<T>> resp = restTemplate.exchange(
-                    url, HttpMethod.POST, new HttpEntity<>(request),
-                    new ParameterizedTypeReference<AiApiResponse<T>>() {});
-            AiApiResponse<T> body = resp.getBody();
-            if (body == null) {
-                log.warn("AI service returned null body: {}", url);
-                return null;
-            }
-            if (body.getCode() != 0) {
-                log.warn("AI service error: code={}, msg={}, url={}",
-                        body.getCode(), body.getMessage(), url);
-                return null;
-            }
-            return body;
-        } catch (Exception e) {
-            log.warn("AI call failed: {}, url={}", e.getMessage(), url);
-            throw e;
-        }
-    }
+    
 }
