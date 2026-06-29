@@ -3,104 +3,112 @@ package com.km.service.impl;
 import com.km.common.dto.PageResult;
 import com.km.common.exception.BusinessException;
 import com.km.common.exception.ErrorCode;
+import com.km.common.util.JsonUtils;
 import com.km.dto.request.CreateKnowledgeBaseRequest;
 import com.km.dto.request.UpdateKnowledgeBaseRequest;
 import com.km.dto.response.KnowledgeBaseVO;
 import com.km.entity.KnowledgeBase;
 import com.km.repository.KnowledgeBaseMapper;
 import com.km.service.KnowledgeBaseService;
-import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
-@RequiredArgsConstructor
 public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
-    private final KnowledgeBaseMapper knowledgeBaseMapper;
+    private final KnowledgeBaseMapper kbMapper;
 
-    @Override
-    public PageResult<KnowledgeBaseVO> list(String docType, String keyword, int page, int pageSize) {
-        int offset = (page - 1) * pageSize;
-        List<KnowledgeBase> list = knowledgeBaseMapper.findAll(docType, keyword, offset, pageSize);
-        int total = knowledgeBaseMapper.countAll(docType, keyword);
-        List<KnowledgeBaseVO> voList = list.stream().map(this::toVO).collect(Collectors.toList());
-        return new PageResult<>(voList, total, page, pageSize);
+    public KnowledgeBaseServiceImpl(KnowledgeBaseMapper kbMapper) {
+        this.kbMapper = kbMapper;
     }
 
     @Override
     @Transactional
     public KnowledgeBaseVO create(CreateKnowledgeBaseRequest request, Long ownerId) {
-        KnowledgeBase kb = new KnowledgeBase();
-        kb.setId(UUID.randomUUID().toString().replace("-", ""));
-        kb.setName(request.getName());
-        kb.setDescription(request.getDescription());
-        kb.setDocType(request.getDocType() != null ? request.getDocType() : "通用文档");
-        kb.setChunkStrategyJson(request.getChunkStrategy());
-        kb.setSearchStrategy(request.getSearchStrategy() != null ? request.getSearchStrategy() : "vector_rerank");
-        kb.setOwnerId(ownerId);
-        knowledgeBaseMapper.insert(kb);
-        return toVO(kb);
-    }
-
-    @Override
-    public KnowledgeBaseVO getById(String id) {
-        KnowledgeBase kb = knowledgeBaseMapper.getById(id);
-        if (kb == null) {
-            throw new BusinessException(ErrorCode.KM_KB_001);
-        }
-        return toVO(kb);
+        KnowledgeBase entity = new KnowledgeBase();
+        entity.setId(UUID.randomUUID().toString());
+        entity.setName(request.getName());
+        entity.setDescription(request.getDescription());
+        entity.setDocType(request.getDocType());
+        entity.setChunkStrategyJson(JsonUtils.toJson(request.getChunkStrategy()));
+        entity.setSearchStrategy(request.getSearchStrategy());
+        entity.setDocCount(0);
+        entity.setOwnerId(ownerId);
+        entity.setCreatedAt(LocalDateTime.now());
+        entity.setUpdatedAt(LocalDateTime.now());
+        kbMapper.insert(entity);
+        return toVO(entity);
     }
 
     @Override
     @Transactional
     public KnowledgeBaseVO update(String id, UpdateKnowledgeBaseRequest request) {
-        KnowledgeBase existing = knowledgeBaseMapper.getById(id);
-        if (existing == null) {
+        KnowledgeBase entity = kbMapper.getById(id);
+        if (entity == null) {
             throw new BusinessException(ErrorCode.KM_KB_001);
         }
-        KnowledgeBase kb = new KnowledgeBase();
-        kb.setId(id);
-        kb.setName(request.getName());
-        kb.setDescription(request.getDescription());
-        kb.setChunkStrategyJson(request.getChunkStrategy());
-        kb.setSearchStrategy(request.getSearchStrategy());
-        knowledgeBaseMapper.updateById(kb);
-        return getById(id);
+        if (request.getName() != null) entity.setName(request.getName());
+        if (request.getDescription() != null) entity.setDescription(request.getDescription());
+        if (request.getChunkStrategy() != null) entity.setChunkStrategyJson(JsonUtils.toJson(request.getChunkStrategy()));
+        if (request.getSearchStrategy() != null) entity.setSearchStrategy(request.getSearchStrategy());
+        entity.setUpdatedAt(LocalDateTime.now());
+        kbMapper.update(entity);
+        return toVO(entity);
     }
 
     @Override
     @Transactional
-    public void deleteById(String id) {
-        KnowledgeBase existing = knowledgeBaseMapper.getById(id);
-        if (existing == null) {
-            throw new BusinessException(ErrorCode.KM_KB_001);
-        }
-        knowledgeBaseMapper.deleteById(id);
+    public void delete(String id) {
+        KnowledgeBase entity = kbMapper.getById(id);
+        if (entity == null) throw new BusinessException(ErrorCode.KM_KB_001);
+        kbMapper.deleteById(id);
     }
 
     @Override
     @Transactional
     public void batchDelete(List<String> ids) {
-        knowledgeBaseMapper.batchDelete(ids);
+        kbMapper.batchDeleteByIds(ids);
     }
 
-    private KnowledgeBaseVO toVO(KnowledgeBase kb) {
+    @Override
+    public KnowledgeBaseVO getById(String id) {
+        KnowledgeBase entity = kbMapper.getById(id);
+        if (entity == null) throw new BusinessException(ErrorCode.KM_KB_001);
+        return toVO(entity);
+    }
+
+    @Override
+    public PageResult<KnowledgeBaseVO> list(String keyword, String docType, int page, int pageSize) {
+        int offset = (page - 1) * pageSize;
+        List<KnowledgeBase> list = kbMapper.list(keyword, docType, offset, pageSize);
+        long total = kbMapper.count(keyword, docType);
+        List<KnowledgeBaseVO> voList = list.stream().map(this::toVO).collect(Collectors.toList());
+        return new PageResult<>(voList, total, page, pageSize);
+    }
+
+    @SuppressWarnings("unchecked")
+    private KnowledgeBaseVO toVO(KnowledgeBase entity) {
         KnowledgeBaseVO vo = new KnowledgeBaseVO();
-        vo.setId(kb.getId());
-        vo.setName(kb.getName());
-        vo.setDescription(kb.getDescription());
-        vo.setDocType(kb.getDocType());
-        vo.setDocCount(kb.getDocCount());
-        vo.setChunkStrategy(kb.getChunkStrategyJson());
-        vo.setSearchStrategy(kb.getSearchStrategy());
-        vo.setOwnerId(kb.getOwnerId());
-        vo.setCreatedAt(kb.getCreatedAt());
-        vo.setUpdatedAt(kb.getUpdatedAt());
+        vo.setId(entity.getId());
+        vo.setName(entity.getName());
+        vo.setDescription(entity.getDescription());
+        vo.setDocType(entity.getDocType());
+        try {
+            vo.setChunkStrategy(JsonUtils.toJson(entity.getChunkStrategyJson()));
+        } catch (Exception e) {
+            vo.setChunkStrategy(entity.getChunkStrategyJson());
+        }
+        vo.setSearchStrategy(entity.getSearchStrategy());
+        vo.setDocCount(entity.getDocCount());
+        vo.setOwnerId(entity.getOwnerId());
+        vo.setCreatedAt(entity.getCreatedAt());
+        vo.setUpdatedAt(entity.getUpdatedAt());
         return vo;
     }
 }

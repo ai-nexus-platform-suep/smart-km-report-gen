@@ -1,26 +1,19 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
-        "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.km.repository.SystemConfigMapper">
 
-    <resultMap id="SystemConfigMap" type="com.km.entity.SystemConfig">
+    <resultMap id="BaseMap" type="com.km.entity.SystemConfig">
         <id column="config_key" property="configKey"/>
         <result column="config_value" property="configValue"/>
         <result column="updated_at" property="updatedAt"/>
     </resultMap>
 
-    <select id="getByKey" resultMap="SystemConfigMap">
-        SELECT config_key, config_value, updated_at
-        FROM system_config
-        WHERE config_key = #{configKey}
-    </select>
+    <select id="getByKey" resultMap="BaseMap">SELECT * FROM system_config WHERE config_key = #{configKey}</select>
 
     <insert id="upsert">
-        INSERT INTO system_config (config_key, config_value)
-        VALUES (#{configKey}, #{configValue})
-        ON DUPLICATE KEY UPDATE
-            config_value = VALUES(config_value),
-            updated_at = CURRENT_TIMESTAMP
+        INSERT INTO system_config (config_key, config_value, updated_at)
+        VALUES (#{configKey}, #{configValue}, NOW())
+        ON DUPLICATE KEY UPDATE config_value = VALUES(config_value), updated_at = NOW()
     </insert>
 
 </mapper>

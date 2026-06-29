@@ -25,12 +25,13 @@ mybatis:
 
 km:
   minio:
-    enabled: false
-  storage:
-    type: local
-    local-path: D:\kb\uploads
+    endpoint: http://localhost:9000
+    access-key: minioadmin
+    secret-key: minioadmin
+    bucket: km-documents
+  ai-service:
+    base-url: http://localhost:8092
+    callback-url: http://localhost:8091/internal/document/status
   jwt:
     secret: change-me-in-production-km-platform-2026
     expire-hours: 24
-  ai-service:
-    base-url: http://localhost:8092

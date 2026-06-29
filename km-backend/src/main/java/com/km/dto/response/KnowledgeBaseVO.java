@@ -7,9 +7,9 @@ public class KnowledgeBaseVO {
     private String name;
     private String description;
     private String docType;
-    private Integer docCount;
-    private String chunkStrategy;
+    private Object chunkStrategy;
     private String searchStrategy;
+    private Integer docCount;
     private Long ownerId;
     private String ownerName;
     private LocalDateTime createdAt;
@@ -23,12 +23,12 @@ public class KnowledgeBaseVO {
     public void setDescription(String description) { this.description = description; }
     public String getDocType() { return docType; }
     public void setDocType(String docType) { this.docType = docType; }
-    public Integer getDocCount() { return docCount; }
-    public void setDocCount(Integer docCount) { this.docCount = docCount; }
-    public String getChunkStrategy() { return chunkStrategy; }
-    public void setChunkStrategy(String chunkStrategy) { this.chunkStrategy = chunkStrategy; }
+    public Object getChunkStrategy() { return chunkStrategy; }
+    public void setChunkStrategy(Object chunkStrategy) { this.chunkStrategy = chunkStrategy; }
     public String getSearchStrategy() { return searchStrategy; }
     public void setSearchStrategy(String searchStrategy) { this.searchStrategy = searchStrategy; }
+    public Integer getDocCount() { return docCount; }
+    public void setDocCount(Integer docCount) { this.docCount = docCount; }
     public Long getOwnerId() { return ownerId; }
     public void setOwnerId(Long ownerId) { this.ownerId = ownerId; }
     public String getOwnerName() { return ownerName; }

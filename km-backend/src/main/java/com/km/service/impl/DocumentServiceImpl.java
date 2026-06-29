@@ -4,264 +4,236 @@ import com.km.common.constant.DocumentStatus;
 import com.km.common.dto.PageResult;
 import com.km.common.exception.BusinessException;
 import com.km.common.exception.ErrorCode;
-import com.km.dto.response.DocumentBatchDeleteResponse;
-import com.km.dto.response.DocumentDeleteResponse;
-import com.km.dto.response.DocumentUploadResponse;
+import com.km.common.util.JsonUtils;
+import com.km.dto.response.*;
+import com.km.entity.Chunk;
 import com.km.entity.Document;
 import com.km.entity.KnowledgeBase;
+import com.km.pipeline.producer.DocumentTaskProducer;
 import com.km.repository.ChunkMapper;
 import com.km.repository.DocumentMapper;
 import com.km.repository.KnowledgeBaseMapper;
-import com.km.service.DocumentConverter;
 import com.km.service.DocumentService;
-import com.km.storage.FileStorageService;
-import com.km.vo.ChunkVO;
-import com.km.vo.DocumentVO;
-import com.km.common.util.JsonUtils;
-import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
+import io.minio.MinioClient;
+import io.minio.PutObjectArgs;
+import io.minio.RemoveObjectArgs;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import javax.servlet.http.HttpServletResponse;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.net.URLEncoder;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.time.LocalDateTime;
+import java.util.*;
 import java.util.stream.Collectors;
 
-@Slf4j
 @Service
-@RequiredArgsConstructor
 public class DocumentServiceImpl implements DocumentService {
 
-    private static final long MAX_FILE_SIZE = 50 * 1024 * 1024L;
+    private static final Logger log = LoggerFactory.getLogger(DocumentServiceImpl.class);
 
-    private static final List<String> ALLOWED_EXTENSIONS = Arrays.asList(
-            "pdf", "docx", "pptx", "xlsx", "md", "txt", "jpg", "png");
-
-    private final DocumentMapper documentMapper;
+    private final DocumentMapper docMapper;
     private final ChunkMapper chunkMapper;
-    private final KnowledgeBaseMapper knowledgeBaseMapper;
-    private final FileStorageService fileStorageService;
+    private final KnowledgeBaseMapper kbMapper;
+    private final DocumentTaskProducer taskProducer;
+    private final MinioClient minioClient;
+
+    @Value("${km.minio.bucket}")
+    private String minioBucket;
+
+    public DocumentServiceImpl(DocumentMapper docMapper, ChunkMapper chunkMapper,
+                                KnowledgeBaseMapper kbMapper, DocumentTaskProducer taskProducer,
+                                MinioClient minioClient) {
+        this.docMapper = docMapper;
+        this.chunkMapper = chunkMapper;
+        this.kbMapper = kbMapper;
+        this.taskProducer = taskProducer;
+        this.minioClient = minioClient;
+    }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
-    public DocumentUploadResponse uploadDocument(String kbId, MultipartFile file, String tagsJson, Long userId) {
-        KnowledgeBase kb = knowledgeBaseMapper.getById(kbId);
-        if (kb == null) {
-            throw new BusinessException(ErrorCode.KM_KB_001);
-        }
-        validateFile(file);
+    @Transactional
+    public DocumentUploadResultVO upload(String kbId, MultipartFile file, String tags, Long createdBy) {
+        KnowledgeBase kb = kbMapper.getById(kbId);
+        if (kb == null) throw new BusinessException(ErrorCode.KM_KB_001);
 
-        String docId = UUID.randomUUID().toString().replace("-", "");
-        String objectName = kbId + "/" + docId + "/" + file.getOriginalFilename();
+        String docId = UUID.randomUUID().toString();
+        String objectPath = kbId + "/" + docId + "_" + file.getOriginalFilename();
+
         try {
-            fileStorageService.store(objectName, file.getInputStream(), file.getSize(), file.getContentType());
-        } catch (Exception e) {
-            log.error("File storage upload failed, kbId={}, filename={}", kbId, file.getOriginalFilename(), e);
-            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "File upload to storage failed");
-        }
+            // Upload to MinIO
+            minioClient.putObject(PutObjectArgs.builder()
+                    .bucket(minioBucket)
+                    .object(objectPath)
+                    .stream(file.getInputStream(), file.getSize(), -1)
+                    .contentType(file.getContentType())
+                    .build());
 
-        Document doc = new Document();
-        doc.setId(docId);
-        doc.setKbId(kbId);
-        doc.setFilename(file.getOriginalFilename());
-        doc.setFilePath(objectName);
-        doc.setFileSize(file.getSize());
-        doc.setMimeType(file.getContentType());
-        doc.setStatus(DocumentStatus.UPLOADED);
-        doc.setTagsJson(tagsJson);
-        doc.setCreatedBy(userId);
-        documentMapper.insert(doc);
+            // Save document record
+            Document doc = new Document();
+            doc.setId(docId);
+            doc.setKbId(kbId);
+            doc.setFilename(file.getOriginalFilename());
+            doc.setFilePath(objectPath);
+            doc.setFileSize(file.getSize());
+            doc.setMimeType(file.getContentType());
+            doc.setStatus(DocumentStatus.UPLOADED);
+            doc.setTagsJson(tags);
+            doc.setCreatedBy(createdBy);
+            doc.setCreatedAt(LocalDateTime.now());
+            doc.setUpdatedAt(LocalDateTime.now());
+            docMapper.insert(doc);
 
-        knowledgeBaseMapper.incrementDocCount(kbId);
+            // Update KB doc count
+            kbMapper.updateDocCount(kbId, 1);
 
-        DocumentVO vo = DocumentConverter.toVO(doc);
-        KnowledgeBase updatedKb = knowledgeBaseMapper.getById(kbId);
-        return new DocumentUploadResponse(vo, updatedKb.getDocCount());
-    }
-
-    @Override
-    public PageResult<DocumentVO> listDocuments(String kbId, String status, int page, int pageSize) {
-        KnowledgeBase kb = knowledgeBaseMapper.getById(kbId);
-        if (kb == null) {
-            throw new BusinessException(ErrorCode.KM_KB_001);
-        }
-
-        int offset = (page - 1) * pageSize;
-        List<Document> documents = documentMapper.listByKbId(kbId, status, offset, pageSize);
-        long total = documentMapper.countByKbId(kbId, status);
-
-        List<DocumentVO> list = documents.stream()
-                .map(DocumentConverter::toVO)
-                .collect(Collectors.toList());
-
-        return new PageResult<>(list, total, page, pageSize);
-    }
-
-    @Override
-    public DocumentVO getDocument(String docId) {
-        Document doc = documentMapper.getById(docId);
-        if (doc == null) {
-            throw new BusinessException(ErrorCode.KM_DOC_001);
-        }
-        return DocumentConverter.toVO(doc);
-    }
-
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public DocumentDeleteResponse deleteDocument(String kbId, String docId) {
-        KnowledgeBase kb = knowledgeBaseMapper.getById(kbId);
-        if (kb == null) {
-            throw new BusinessException(ErrorCode.KM_KB_001);
-        }
-
-        Document doc = documentMapper.getById(docId);
-        if (doc == null) {
-            throw new BusinessException(ErrorCode.KM_DOC_001);
-        }
-
-        fileStorageService.delete(doc.getFilePath());
-        chunkMapper.deleteByDocId(docId);
-        documentMapper.deleteById(docId);
-        knowledgeBaseMapper.decrementDocCount(kbId, 1);
-
-        return new DocumentDeleteResponse(docId, kb.getDocCount() - 1);
-    }
-
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public DocumentBatchDeleteResponse batchDeleteDocuments(String kbId, List<String> ids) {
-        KnowledgeBase kb = knowledgeBaseMapper.getById(kbId);
-        if (kb == null) {
-            throw new BusinessException(ErrorCode.KM_KB_001);
-        }
-
-        for (String id : ids) {
-            Document doc = documentMapper.getById(id);
-            if (doc != null && doc.getFilePath() != null) {
-                fileStorageService.delete(doc.getFilePath());
+            // Send to processing queue
+            @SuppressWarnings("unchecked")
+            Map<String, Object> chunkStrategy = new java.util.HashMap<>();
+            try {
+                com.fasterxml.jackson.databind.ObjectMapper om = new com.fasterxml.jackson.databind.ObjectMapper();
+                chunkStrategy = om.readValue(kb.getChunkStrategyJson(), java.util.Map.class);
+            } catch (Exception e) {
+                // fallback to empty
             }
-        }
+            taskProducer.sendProcessTask(docId, kbId, objectPath, file.getContentType(), chunkStrategy);
 
-        chunkMapper.deleteByDocIds(ids);
-        documentMapper.deleteByIds(ids);
-        knowledgeBaseMapper.decrementDocCount(kbId, ids.size());
+            log.info("Document uploaded: docId={}, kbId={}, size={}", docId, kbId, file.getSize());
 
-        return new DocumentBatchDeleteResponse(ids, Math.max(0, kb.getDocCount() - ids.size()));
-    }
+            DocumentUploadResultVO result = new DocumentUploadResultVO();
+            result.setDocument(toVO(doc));
+            result.setKbDocCount(kb.getDocCount() + 1);
+            return result;
 
-    @Override
-    public PageResult<ChunkVO> listChunks(String docId, int page, int pageSize) {
-        Document doc = documentMapper.getById(docId);
-        if (doc == null) {
-            throw new BusinessException(ErrorCode.KM_DOC_001);
-        }
-
-        int offset = (page - 1) * pageSize;
-        List<ChunkVO> list = chunkMapper.listByDocId(docId, offset, pageSize)
-                .stream()
-                .map(DocumentConverter::toChunkVO)
-                .collect(Collectors.toList());
-        long total = chunkMapper.countByDocId(docId);
-
-        return new PageResult<>(list, total, page, pageSize);
-    }
-
-    @Override
-    public void downloadDocument(String docId, HttpServletResponse response) {
-        Document doc = documentMapper.getById(docId);
-        if (doc == null) {
-            throw new BusinessException(ErrorCode.KM_DOC_001);
-        }
-
-        try (InputStream is = fileStorageService.retrieve(doc.getFilePath())) {
-            response.setContentType(doc.getMimeType() != null ? doc.getMimeType() : "application/octet-stream");
-            response.setHeader("Content-Disposition",
-                    "attachment;filename=" + URLEncoder.encode(doc.getFilename(), "UTF-8"));
-            response.setContentLengthLong(doc.getFileSize() != null ? doc.getFileSize() : 0);
-
-            OutputStream os = response.getOutputStream();
-            byte[] buffer = new byte[8192];
-            int bytesRead;
-            while ((bytesRead = is.read(buffer)) != -1) {
-                os.write(buffer, 0, bytesRead);
-            }
-            os.flush();
         } catch (Exception e) {
-            log.error("Document download failed, docId={}", docId, e);
-            throw new BusinessException(ErrorCode.INTERNAL_ERROR, "File download failed");
+            log.error("Upload failed", e);
+            throw new RuntimeException("File upload failed", e);
         }
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
-    public DocumentVO retryProcess(String docId) {
-        Document doc = documentMapper.getById(docId);
-        if (doc == null) {
-            throw new BusinessException(ErrorCode.KM_DOC_001);
+    public DocumentVO getById(String id) {
+        Document doc = docMapper.getById(id);
+        if (doc == null) throw new BusinessException(ErrorCode.KM_DOC_001);
+        return toVO(doc);
+    }
+
+    @Override
+    public PageResult<DocumentVO> listByKbId(String kbId, String status, int page, int pageSize) {
+        int offset = (page - 1) * pageSize;
+        List<Document> list = docMapper.listByKbId(kbId, status, offset, pageSize);
+        long total = docMapper.countByKbId(kbId, status);
+        List<DocumentVO> voList = list.stream().map(this::toVO).collect(Collectors.toList());
+        return new PageResult<>(voList, total, page, pageSize);
+    }
+
+    @Override
+    @Transactional
+    public DocumentDeleteResultVO delete(String kbId, String docId) {
+        Document doc = docMapper.getById(docId);
+        if (doc == null) throw new BusinessException(ErrorCode.KM_DOC_001);
+
+        // Delete from MinIO
+        try {
+            minioClient.removeObject(RemoveObjectArgs.builder()
+                    .bucket(minioBucket)
+                    .object(doc.getFilePath())
+                    .build());
+        } catch (Exception e) {
+            log.warn("Failed to delete MinIO object: {}", doc.getFilePath());
         }
+
+        docMapper.deleteById(docId);
+        kbMapper.updateDocCount(kbId, -1);
+
+        DocumentDeleteResultVO result = new DocumentDeleteResultVO();
+        result.setDeletedDocumentId(docId);
+        KnowledgeBase kb = kbMapper.getById(kbId);
+        result.setKbDocCount(kb != null ? kb.getDocCount() : 0);
+        return result;
+    }
+
+    @Override
+    @Transactional
+    public DocumentBatchDeleteResultVO batchDelete(String kbId, List<String> ids) {
+        docMapper.batchDeleteByIds(kbId, ids);
+        kbMapper.updateDocCount(kbId, -ids.size());
+        DocumentBatchDeleteResultVO result = new DocumentBatchDeleteResultVO();
+        result.setDeletedIds(ids);
+        KnowledgeBase kb = kbMapper.getById(kbId);
+        result.setKbDocCount(kb != null ? kb.getDocCount() : 0);
+        return result;
+    }
+
+    @Override
+    @Transactional
+    public DocumentVO updateTags(String id, Map<String, String> tags) {
+        Document doc = docMapper.getById(id);
+        if (doc == null) throw new BusinessException(ErrorCode.KM_DOC_001);
+        doc.setTagsJson(JsonUtils.toJson(tags));
+        doc.setUpdatedAt(LocalDateTime.now());
+        docMapper.updateStatus(id, doc.getStatus(), doc.getErrorMsg());
+        // Note: for tags only we need a dedicated update method
+        return toVO(doc);
+    }
+
+    @Override
+    @Transactional
+    public DocumentVO retryProcess(String id) {
+        Document doc = docMapper.getById(id);
+        if (doc == null) throw new BusinessException(ErrorCode.KM_DOC_001);
         if (!DocumentStatus.FAILED.equals(doc.getStatus())) {
-            throw new BusinessException(ErrorCode.KM_DOC_005);
+            throw new BusinessException(ErrorCode.KM_DOC_002, "Document is not in FAILED status");
         }
-
-        documentMapper.updateStatus(docId, DocumentStatus.UPLOADED, null);
-
         doc.setStatus(DocumentStatus.UPLOADED);
         doc.setErrorMsg(null);
-        return DocumentConverter.toVO(doc);
-    }
-
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public DocumentVO updateTags(String docId, Map<String, String> tags) {
-        Document doc = documentMapper.getById(docId);
-        if (doc == null) {
-            throw new BusinessException(ErrorCode.KM_DOC_001);
-        }
-
-        String tagsJson = null;
-        if (tags != null && !tags.isEmpty()) {
+        doc.setUpdatedAt(LocalDateTime.now());
+        docMapper.updateStatus(id, DocumentStatus.UPLOADED, null);
+        KnowledgeBase kb = kbMapper.getById(doc.getKbId());
+        if (kb != null) {
+            Map<String, Object> chunkStrategy = new HashMap<>();
             try {
-                tagsJson = JsonUtils.getMapper().writeValueAsString(tags);
-            } catch (Exception e) {
-                throw new BusinessException(ErrorCode.INTERNAL_ERROR, "Tags serialization failed");
-            }
+                chunkStrategy = JsonUtils.toJson(kb.getChunkStrategyJson());
+            } catch (Exception e) { /* ignore */ }
+            taskProducer.sendProcessTask(id, doc.getKbId(), doc.getFilePath(), doc.getMimeType(), chunkStrategy);
         }
-
-        doc.setTagsJson(tagsJson);
-        documentMapper.updateById(doc);
-
-        return DocumentConverter.toVO(doc);
+        return toVO(doc);
     }
 
     @Override
-    @Transactional(rollbackFor = Exception.class)
-    public void updateStatus(String docId, String status, String errorMsg) {
-        documentMapper.updateStatus(docId, status, errorMsg);
+    public PageResult<?> listChunks(String docId, int page, int pageSize) {
+        int offset = (page - 1) * pageSize;
+        List<Chunk> chunks = chunkMapper.listByDocId(docId, offset, pageSize);
+        long total = chunkMapper.countByDocId(docId);
+        List<ChunkVO> voList = chunks.stream().map(this::toChunkVO).collect(Collectors.toList());
+        return new PageResult<>(voList, total, page, pageSize);
     }
 
-    private void validateFile(MultipartFile file) {
-        if (file == null || file.isEmpty()) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "File is empty");
-        }
-        if (file.getSize() > MAX_FILE_SIZE) {
-            throw new BusinessException(ErrorCode.KM_DOC_004);
-        }
+    private DocumentVO toVO(Document doc) {
+        DocumentVO vo = new DocumentVO();
+        vo.setId(doc.getId());
+        vo.setKbId(doc.getKbId());
+        vo.setFilename(doc.getFilename());
+        vo.setFileSize(doc.getFileSize());
+        vo.setMimeType(doc.getMimeType());
+        vo.setStatus(doc.getStatus());
+        vo.setErrorMsg(doc.getErrorMsg());
+        vo.setCreatedBy(doc.getCreatedBy());
+        vo.setCreatedAt(doc.getCreatedAt());
+        vo.setUpdatedAt(doc.getUpdatedAt());
+        return vo;
+    }
 
-        String originalFilename = file.getOriginalFilename();
-        if (originalFilename == null || !originalFilename.contains(".")) {
-            throw new BusinessException(ErrorCode.KM_DOC_003);
-        }
-
-        String extension = originalFilename.substring(originalFilename.lastIndexOf(".") + 1).toLowerCase();
-        if (!ALLOWED_EXTENSIONS.contains(extension)) {
-            throw new BusinessException(ErrorCode.KM_DOC_003);
-        }
+    private ChunkVO toChunkVO(Chunk chunk) {
+        ChunkVO vo = new ChunkVO();
+        vo.setId(chunk.getId());
+        vo.setDocId(chunk.getDocId());
+        vo.setContent(chunk.getContent());
+        vo.setChapterPath(chunk.getChapterPath());
+        vo.setChunkIndex(chunk.getChunkIndex());
+        vo.setChunkType(chunk.getChunkType());
+        vo.setCharCount(chunk.getCharCount());
+        return vo;
     }
 }

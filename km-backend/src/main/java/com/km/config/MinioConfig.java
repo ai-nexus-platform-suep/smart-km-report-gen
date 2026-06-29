@@ -1,22 +1,21 @@
 package com.km.config;
 
 import io.minio.MinioClient;
-import lombok.Data;
-import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 
-@Data
 @Configuration
-@ConfigurationProperties(prefix = "km.minio")
-@ConditionalOnProperty(name = "km.minio.enabled", havingValue = "true", matchIfMissing = true)
 public class MinioConfig {
 
+    @Value("${km.minio.endpoint}")
     private String endpoint;
+
+    @Value("${km.minio.access-key}")
     private String accessKey;
+
+    @Value("${km.minio.secret-key}")
     private String secretKey;
-    private String bucket;
 
     @Bean
     public MinioClient minioClient() {

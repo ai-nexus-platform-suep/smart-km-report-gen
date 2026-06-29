@@ -6,8 +6,6 @@ import org.apache.ibatis.annotations.Param;
 
 @Mapper
 public interface SystemConfigMapper {
-
     SystemConfig getByKey(@Param("configKey") String configKey);
-
     int upsert(SystemConfig config);
 }

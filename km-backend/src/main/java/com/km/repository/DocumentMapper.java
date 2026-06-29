@@ -1,41 +1,20 @@
 package com.km.repository;
 
 import com.km.entity.Document;
+import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
-
 import java.util.List;
 
-/**
- * 文档 Mapper 接口
- */
+@Mapper
 public interface DocumentMapper {
-
-    int insert(Document document);
-
-    int updateById(Document document);
-
+    int insert(Document doc);
+    int updateStatus(@Param("id") String id, @Param("status") String status, @Param("errorMsg") String errorMsg);
     int deleteById(@Param("id") String id);
-
-    int deleteByIds(@Param("ids") List<String> ids);
-
-    int deleteByKbId(@Param("kbId") String kbId);
-
+    int batchDeleteByIds(@Param("kbId") String kbId, @Param("ids") List<String> ids);
     Document getById(@Param("id") String id);
-
-    List<Document> listByKbId(@Param("kbId") String kbId,
-                              @Param("status") String status,
-                              @Param("offset") int offset,
-                              @Param("limit") int limit);
-
-    long countByKbId(@Param("kbId") String kbId,
-                     @Param("status") String status);
-
-    int updateStatus(@Param("id") String id,
-                     @Param("status") String status,
-                     @Param("errorMsg") String errorMsg);
-
-    /**
-     * 批量查询文档（用于检索结果回填文档名称）。
-     */
-    List<Document> listByIds(@Param("ids") List<String> ids);
+    List<Document> listByKbId(@Param("kbId") String kbId, @Param("status") String status,
+                               @Param("offset") int offset, @Param("limit") int limit);
+    long countByKbId(@Param("kbId") String kbId, @Param("status") String status);
+    long countAll();
+    long countByStatus(@Param("status") String status);
 }
