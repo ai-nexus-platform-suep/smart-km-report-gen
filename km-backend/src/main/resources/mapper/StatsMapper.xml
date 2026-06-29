@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.km.repository.StatsMapper">
+
+    <select id="countKnowledgeBases" resultType="long">
+        SELECT COUNT(*) FROM knowledge_base
+    </select>
+
+    <select id="countDocuments" resultType="long">
+        SELECT COUNT(*) FROM document
+    </select>
+
+    <select id="countChunks" resultType="long">
+        SELECT COUNT(*) FROM chunk
+    </select>
+
+    <select id="countReadyDocuments" resultType="long">
+        SELECT COUNT(*) FROM document WHERE status = 'READY'
+    </select>
+
+    <select id="dailyUploadTrend" resultType="java.util.Map">
+        SELECT DATE(created_at) AS date, COUNT(*) AS count
+        FROM document
+        WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL #{days} DAY)
+        GROUP BY DATE(created_at)
+        ORDER BY date ASC
+    </select>
+
+</mapper>
