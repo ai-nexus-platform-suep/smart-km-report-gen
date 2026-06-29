@@ -1,0 +1,5 @@
+﻿.idea/
+target/
+__pycache__/
+*.pyc
+*.pyo
