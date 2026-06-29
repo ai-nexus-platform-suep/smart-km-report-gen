@@ -10,11 +10,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
-/**
- * km-ai-service (Python FastAPI) 的 HTTP 客户端。
- * 负责调用嵌入、向量检索、重排序等 AI 能力。
- * 契约见 docs/ai-service-contract.yaml。
- */
 @Slf4j
 @Component
 public class KmAiClient {
@@ -28,58 +23,56 @@ public class KmAiClient {
         this.baseUrl = baseUrl;
     }
 
-    /**
-     * 文本批量嵌入，调用 /internal/embed。
-     */
     public EmbedResponse embed(EmbedRequest request) {
-        String url = baseUrl + "/internal/embed";
-        log.debug("Calling AI embed service: {}", url);
-        ResponseEntity<AiApiResponse<EmbedResponse>> resp = restTemplate.exchange(
-                url, HttpMethod.POST,
-                new HttpEntity<>(request),
-                new ParameterizedTypeReference<AiApiResponse<EmbedResponse>>() {});
-        return resp.getBody().getData();
+        AiApiResponse<EmbedResponse> body = post("/internal/embed", request);
+        return body != null ? body.getData() : null;
     }
 
-    /**
-     * 向量检索，调用 /internal/search。
-     */
     public VectorSearchResponse vectorSearch(VectorSearchRequest request) {
-        String url = baseUrl + "/internal/search";
-        log.debug("Calling AI vector search service: {}", url);
-        ResponseEntity<AiApiResponse<VectorSearchResponse>> resp = restTemplate.exchange(
-                url, HttpMethod.POST,
-                new HttpEntity<>(request),
-                new ParameterizedTypeReference<AiApiResponse<VectorSearchResponse>>() {});
-        return resp.getBody().getData();
+        AiApiResponse<VectorSearchResponse> body = post("/internal/search", request);
+        return body != null ? body.getData() : null;
     }
 
-    /**
-     * 重排序，调用 /internal/rerank。
-     */
     public RerankResponse rerank(RerankRequest request) {
-        String url = baseUrl + "/internal/rerank";
-        log.debug("Calling AI rerank service: {}", url);
-        ResponseEntity<AiApiResponse<RerankResponse>> resp = restTemplate.exchange(
-                url, HttpMethod.POST,
-                new HttpEntity<>(request),
-                new ParameterizedTypeReference<AiApiResponse<RerankResponse>>() {});
-        return resp.getBody().getData();
+        AiApiResponse<RerankResponse> body = post("/internal/rerank", request);
+        return body != null ? body.getData() : null;
     }
 
-    /**
-     * 健康检查，调用 /internal/health。
-     */
     public boolean healthCheck() {
         try {
             String url = baseUrl + "/internal/health";
             ResponseEntity<AiApiResponse<Void>> resp = restTemplate.exchange(
                     url, HttpMethod.GET, null,
                     new ParameterizedTypeReference<AiApiResponse<Void>>() {});
-            return resp.getBody().getCode() == 0;
+            AiApiResponse<Void> body = resp.getBody();
+            return body != null && body.getCode() == 0;
         } catch (Exception e) {
-            log.warn("AI service health check failed: {}", e.getMessage());
+            log.warn("AI health check failed: {}", e.getMessage());
             return false;
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> AiApiResponse<T> post(String path, Object request) {
+        String url = baseUrl + path;
+        try {
+            ResponseEntity<AiApiResponse<T>> resp = restTemplate.exchange(
+                    url, HttpMethod.POST, new HttpEntity<>(request),
+                    new ParameterizedTypeReference<AiApiResponse<T>>() {});
+            AiApiResponse<T> body = resp.getBody();
+            if (body == null) {
+                log.warn("AI service returned null body: {}", url);
+                return null;
+            }
+            if (body.getCode() != 0) {
+                log.warn("AI service error: code={}, msg={}, url={}",
+                        body.getCode(), body.getMessage(), url);
+                return null;
+            }
+            return body;
+        } catch (Exception e) {
+            log.warn("AI call failed: {}, url={}", e.getMessage(), url);
+            throw e;
         }
     }
 }

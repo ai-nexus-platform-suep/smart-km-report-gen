@@ -56,4 +56,13 @@
         WHERE doc_id = #{docId}
     </select>
 
+    <!-- AI 服务降级时使用的关键词模糊匹配 -->
+    <select id="searchByKeyword" resultMap="BaseResultMap">
+        SELECT <include refid="BaseColumns"/>
+        FROM chunk
+        WHERE content LIKE CONCAT('%', #{keyword}, '%')
+        ORDER BY chunk_index ASC
+        LIMIT #{limit}
+    </select>
+
 </mapper>

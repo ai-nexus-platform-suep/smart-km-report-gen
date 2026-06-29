@@ -23,4 +23,8 @@ public interface ChunkMapper {
                             @Param("limit") int limit);
 
     long countByDocId(@Param("docId") String docId);
+
+    /** AI 服务降级时使用的关键词模糊匹配 */
+    List<Chunk> searchByKeyword(@Param("keyword") String keyword,
+                                @Param("limit") int limit);
 }

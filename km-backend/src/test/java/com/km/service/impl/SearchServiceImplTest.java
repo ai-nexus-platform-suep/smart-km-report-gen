@@ -3,6 +3,8 @@ package com.km.service.impl;
 import com.km.client.KmAiClient;
 import com.km.common.exception.BusinessException;
 import com.km.dto.ai.*;
+import com.km.repository.ChunkMapper;
+import com.km.repository.DocumentMapper;
 import com.km.dto.request.SearchRequest;
 import com.km.dto.response.SearchResultItemVO;
 import com.km.dto.response.SearchResultVO;
@@ -28,13 +30,19 @@ class SearchServiceImplTest {
     @Mock
     private KmAiClient kmAiClient;
 
+    @Mock
+    private DocumentMapper documentMapper;
+
+    @Mock
+    private ChunkMapper chunkMapper;
+
     private SearchServiceImpl searchService;
 
     private final Long mockUserId = 1L;
 
     @BeforeEach
     void setUp() {
-        searchService = new SearchServiceImpl(kmAiClient);
+        searchService = new SearchServiceImpl(kmAiClient, documentMapper, chunkMapper);
     }
 
     @Test
