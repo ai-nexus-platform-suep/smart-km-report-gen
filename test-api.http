@@ -1,0 +1,55 @@
+﻿### 1. 健康检查
+GET http://localhost:8091/api/health
+
+### 2. 上传文档
+POST http://localhost:8091/api/knowledge-bases/kb-test-001/documents
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="file"; filename="test.txt"
+
+这是一个测试文档的内容。
+电力设备运行规程中规定，变压器油温异常时应立即检查冷却系统。
+
+--boundary123
+Content-Disposition: form-data; name="tags"
+
+{"专业":"电力"}
+--boundary123--
+
+### 3. 文档列表
+GET http://localhost:8091/api/knowledge-bases/kb-test-001/documents?page=1&pageSize=20
+
+### 4. 文档详情（替换为你的文档ID）
+GET http://localhost:8091/api/documents/2b5f269c6e9f44f48dda1dca5bf5c42f
+
+### 5. 查看切片
+GET http://localhost:8091/api/documents/2b5f269c6e9f44f48dda1dca5bf5c42f/chunks?page=1&pageSize=50
+
+### 6. 下载文档
+GET http://localhost:8091/api/documents/2b5f269c6e9f44f48dda1dca5bf5c42f/download
+
+### 7. 更新标签
+PUT http://localhost:8091/api/documents/2b5f269c6e9f44f48dda1dca5bf5c42f/tags
+Content-Type: application/json
+
+{
+  "tags": {
+    "专业": "电力",
+    "设备": "变压器"
+  }
+}
+
+### 8. 删除文档
+DELETE http://localhost:8091/api/knowledge-bases/kb-test-001/documents/2b5f269c6e9f44f48dda1dca5bf5c42f
+
+### 9. 批量删除
+POST http://localhost:8091/api/knowledge-bases/kb-test-001/documents/batch-delete
+Content-Type: application/json
+
+{
+  "ids": ["文档ID1", "文档ID2"]
+}
+
+### 10. 重试处理
+POST http://localhost:8091/api/documents/2b5f269c6e9f44f48dda1dca5bf5c42f/retry
