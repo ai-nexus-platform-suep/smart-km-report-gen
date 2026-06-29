@@ -29,3 +29,8 @@ Thumbs.db
 # Upload / temp
 uploads/
 tmp/
+km-backend/data/
+server.log
+server.err
+
+data/

@@ -33,4 +33,9 @@ public interface DocumentMapper {
     int updateStatus(@Param("id") String id,
                      @Param("status") String status,
                      @Param("errorMsg") String errorMsg);
+
+    /**
+     * 批量查询文档（用于检索结果回填文档名称）。
+     */
+    List<Document> listByIds(@Param("ids") List<String> ids);
 }
