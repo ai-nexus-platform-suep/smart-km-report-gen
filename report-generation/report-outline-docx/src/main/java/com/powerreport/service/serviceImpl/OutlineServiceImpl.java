@@ -12,6 +12,7 @@ import com.powerreport.dto.OutlineNodeResponse;
 import com.powerreport.dto.OutlineTempState;
 import com.powerreport.entity.ReportEntity;
 import com.powerreport.entity.ReportOutlineNodeEntity;
+import com.powerreport.enums.ReportStatus;
 import com.powerreport.enums.ReportType;
 import com.powerreport.mapper.ReportMapper;
 import com.powerreport.mapper.ReportOutlineNodeMapper;
@@ -38,7 +39,6 @@ public class OutlineServiceImpl implements OutlineService {
 
     private static final String OUTLINE_TEMP_KEY_PREFIX = "report-outline-docx:outline:";
     private static final String DEFAULT_OWNER = "local_user";
-    private static final String STATUS_DRAFT = "DRAFT";
 
     private final ReportAiProperties aiProperties;
     private final ObjectMapper objectMapper;
@@ -126,7 +126,7 @@ public class OutlineServiceImpl implements OutlineService {
         report.setSpecialty(request.getSpecialty());
         report.setPowerPlant(request.getPowerPlant());
         report.setReportYear(request.getReportYear());
-        report.setStatus(STATUS_DRAFT);
+        report.setStatus(ReportStatus.OUTLINE_READY.name());
         report.setOwnerName(DEFAULT_OWNER);
         report.setTotalSections(outlineCount);
         report.setCompletedSections(0);
@@ -139,7 +139,7 @@ public class OutlineServiceImpl implements OutlineService {
             redisTemplate.delete(tempKey(request.getTempId()));
         }
 
-        return new OutlineConfirmResponse(reportId, STATUS_DRAFT, outlineCount, normalizedOutline);
+        return new OutlineConfirmResponse(reportId, ReportStatus.OUTLINE_READY.name(), outlineCount, normalizedOutline);
     }
 
     private List<OutlineNodeResponse> requestAiOutline(OutlineGenerateRequest request) {
