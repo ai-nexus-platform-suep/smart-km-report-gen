@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any, Generic, Literal, TypeVar
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_serializer
 
 T = TypeVar("T")
 
@@ -36,6 +36,10 @@ class ConversationVO(BaseModel):
     last_message_at: datetime
     created_at: datetime
 
+    @field_serializer("session_id")
+    def serialize_session_id(self, value: int) -> str:
+        return str(value)
+
 
 class MessageVO(BaseModel):
     message_id: int
@@ -50,12 +54,20 @@ class MessageVO(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    @field_serializer("message_id")
+    def serialize_message_id(self, value: int) -> str:
+        return str(value)
+
 
 class ConversationDetailVO(BaseModel):
     session_id: int
     title: str
     messages: list[MessageVO]
     total: int
+
+    @field_serializer("session_id")
+    def serialize_session_id(self, value: int) -> str:
+        return str(value)
 
 
 class ChatReq(BaseModel):

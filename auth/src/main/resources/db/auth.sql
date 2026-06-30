@@ -31,3 +31,10 @@ CREATE TABLE IF NOT EXISTS refresh_token (
     INDEX idx_user_id (user_id),
     INDEX idx_expires_at (expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='Refresh Token 持久化表';
+
+-- ============================================================
+-- 初始管理员（密码: admin123，首次部署后请修改）
+-- BCrypt 哈希通过 Spring Security BCryptPasswordEncoder 生成
+-- ============================================================
+INSERT IGNORE INTO sys_user (username, password, roles, enabled)
+VALUES ('admin', '$2b$10$AzF/zuUg9UmBHcsxsiD.teyhV9XiL6FrTJjrvmK3oIeiriWn1PLXe', 'ROLE_ADMIN,ROLE_USER', 1);

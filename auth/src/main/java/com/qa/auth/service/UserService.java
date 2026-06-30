@@ -42,7 +42,7 @@ public class UserService {
     public boolean register(String username, String password, String roles) {
         // 检查用户名是否已存在
         if (findByUsername(username).isPresent()) {
-            log.warn("注册失败，用户名已存在: {}", username);
+            log.info("注册跳过，用户名已存在: {}", username);
             return false;
         }
 

@@ -6,6 +6,7 @@ import com.myenglish.qachat.service.ModelConfigService;
 import com.myenglish.qacommon.dto.ApiResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -21,6 +22,7 @@ import java.util.List;
 /**
  * 模型配置管理接口
  */
+@Slf4j
 @RestController
 @RequestMapping("/api/model-configs")
 @RequiredArgsConstructor
@@ -30,6 +32,7 @@ public class ModelConfigController {
 
     @GetMapping
     public ApiResponse<List<ModelConfigVO>> list(@RequestHeader("X-User-Id") Long userId) {
+        log.info("查询模型配置列表 userId={}", userId);
         return ApiResponse.success(modelConfigService.listByUser(userId));
     }
 
@@ -37,6 +40,7 @@ public class ModelConfigController {
     public ApiResponse<ModelConfigVO> create(
             @RequestHeader("X-User-Id") Long userId,
             @Valid @RequestBody SaveModelConfigReq req) {
+        log.info("新增模型配置 userId={} provider={} model={}", userId, req.getProvider(), req.getModelName());
         return ApiResponse.success(modelConfigService.create(userId, req));
     }
 
@@ -45,6 +49,7 @@ public class ModelConfigController {
             @RequestHeader("X-User-Id") Long userId,
             @PathVariable Long id,
             @Valid @RequestBody SaveModelConfigReq req) {
+        log.info("修改模型配置 userId={} id={}", userId, id);
         return ApiResponse.success(modelConfigService.update(userId, id, req));
     }
 
@@ -52,6 +57,7 @@ public class ModelConfigController {
     public ApiResponse<Void> delete(
             @RequestHeader("X-User-Id") Long userId,
             @PathVariable Long id) {
+        log.info("删除模型配置 userId={} id={}", userId, id);
         modelConfigService.delete(userId, id);
         return ApiResponse.success(null);
     }
@@ -60,6 +66,7 @@ public class ModelConfigController {
     public ApiResponse<Void> setDefault(
             @RequestHeader("X-User-Id") Long userId,
             @PathVariable Long id) {
+        log.info("设为默认配置 userId={} id={}", userId, id);
         modelConfigService.setDefault(userId, id);
         return ApiResponse.success(null);
     }

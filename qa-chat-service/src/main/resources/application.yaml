@@ -19,5 +19,5 @@ server:
   port: 8082
 
 model-config:
-  aes-key: smart-km-report-gen-2026-aes-key
+  aes-key: ${AES_KEY:smart-km-report-gen-2026-aes-key}
   default-timeout-seconds: 60

@@ -33,6 +33,11 @@ spring:
 server:
   port: 8080
 
+logging:
+  level:
+    com.qa.gateway: INFO
+    org.springframework.cloud.gateway: INFO
+
 app:
   jwt:
     secret: ${JWT_SECRET:/O+iqksxQ8P7xHjF9z0bxKXvEClBvG3ORdIdL440AA0=}

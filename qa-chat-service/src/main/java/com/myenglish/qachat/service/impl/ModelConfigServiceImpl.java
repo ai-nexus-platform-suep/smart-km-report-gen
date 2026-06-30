@@ -62,6 +62,7 @@ public class ModelConfigServiceImpl implements ModelConfigService {
         config.setIsDefault(count == 0 ? 1 : 0);
 
         modelConfigMapper.insert(config);
+        log.info("创建模型配置 userId={} id={} provider={} scenario={}", userId, config.getId(), req.getProvider(), req.getScenario());
         return toVO(config);
     }
 
@@ -88,6 +89,7 @@ public class ModelConfigServiceImpl implements ModelConfigService {
     public void delete(Long userId, Long configId) {
         ModelConfig config = getOwnConfig(userId, configId);
         modelConfigMapper.deleteById(config.getId());
+        log.info("删除模型配置 userId={} id={}", userId, configId);
     }
 
     @Override
@@ -106,6 +108,7 @@ public class ModelConfigServiceImpl implements ModelConfigService {
         // 设置当前为默认
         config.setIsDefault(1);
         modelConfigMapper.updateById(config);
+        log.info("设为默认配置 userId={} id={} scenario={}", userId, configId, config.getScenario());
     }
 
     @Override

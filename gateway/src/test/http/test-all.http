@@ -13,7 +13,7 @@
 ### USE smart_km_report_gen;
 ### SOURCE qa-chat-service/src/main/resources/db/conversation.sql;
 ### SOURCE qa-chat-service/src/main/resources/db/model_config.sql;
-### SOURCE qa-chat-service/src/main/resources/db/mock_data.sql;
+### （可选，仅开发测试） SOURCE qa-chat-service/src/main/resources/db/mock_data.sql;
 
 ### ================================================================
 ### 启动服务（4 个终端）
