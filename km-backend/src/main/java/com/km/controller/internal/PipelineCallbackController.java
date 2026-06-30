@@ -59,6 +59,9 @@ public class PipelineCallbackController {
                 chunk.setChunkIndex(((Number) c.getOrDefault("chunk_index", 0)).intValue());
                 chunk.setChunkType((String) c.getOrDefault("chunk_type", "paragraph"));
                 chunk.setVectorId((String) c.getOrDefault("vector_id", ""));
+                chunk.setPageNo((Integer) c.getOrDefault("page_no", null));
+                chunk.setBbox((String) c.getOrDefault("bbox", ""));
+                chunk.setBlockId((String) c.getOrDefault("block_id", ""));
                 Object cc = c.get("char_count");
                 chunk.setCharCount(cc != null ? ((Number) cc).intValue() : ((String) c.get("content")).length());
                 chunk.setCreatedAt(LocalDateTime.now());
