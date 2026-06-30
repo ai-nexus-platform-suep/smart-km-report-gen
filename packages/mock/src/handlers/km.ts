@@ -4,7 +4,7 @@ import type { KnowledgeBase, Document, SearchResultItem } from '@platform/core/t
 
 const now = new Date().toISOString()
 
-let nextKbId = 100
+let nextKbId = 5
 let mockKnowledgeBases: KnowledgeBase[] = [
   {
     id: 1, name: '汽轮机检修规程', description: '火力发电厂汽轮机设备检修标准规范',
@@ -48,6 +48,14 @@ const searchModeMap: Record<string, string> = {
 
 export const kmHandlers = [
   // === 知识库 CRUD ===
+  http.get(`/api/knowledge-bases/:id`, async ({ params }) => {
+    await delay(200)
+    const id = Number(params.id)
+    const kb = mockKnowledgeBases.find(k => k.id === id)
+    if (!kb) return HttpResponse.json({ code: 404, message: '知识库不存在', data: null }, { status: 404 })
+    return HttpResponse.json({ code: 200, message: 'ok', data: kb })
+  }),
+
   http.get(API_KM.KB.LIST, async ({ request }) => {
     await delay(400)
     const url = new URL(request.url)
@@ -80,15 +88,22 @@ export const kmHandlers = [
       type: typeMap[body.docType] || 'GENERAL',
       searchMode: searchModeMap[body.searchStrategy] || 'VECTOR_RERANK',
       documentCount: 0,
-      creator: '当前用户',
+      creator: '管理员',
       createdAt: new Date().toISOString(),
     }
     mockKnowledgeBases.unshift(newKb)
     return HttpResponse.json({ code: 200, message: '创建成功', data: newKb })
   }),
 
-  http.put(API_KM.KB.UPDATE, async () => {
+  http.put(API_KM.KB.UPDATE, async ({ request }) => {
     await delay(500)
+    const url = new URL(request.url)
+    const id = Number(url.searchParams.get('id'))
+    const body = await request.json() as any
+    const idx = mockKnowledgeBases.findIndex(k => k.id === id)
+    if (idx > -1) {
+      mockKnowledgeBases[idx] = { ...mockKnowledgeBases[idx], name: body.name || mockKnowledgeBases[idx].name, description: body.description ?? mockKnowledgeBases[idx].description }
+    }
     return HttpResponse.json({ code: 200, message: '更新成功', data: null })
   }),
 

@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="page">
     <div class="page-header">
       <h2>知识库管理</h2>
@@ -17,7 +17,7 @@
       </el-select>
       <el-input
         v-model="searchKeyword"
-        placeholder="搜索知识库名称.."
+        placeholder="搜索知识库名称..."
         clearable
         style="width:280px"
         @input="onSearchInput"
@@ -42,7 +42,13 @@
     <el-table v-else :data="list" style="width: 100%" v-loading="loading" @selection-change="onSelectionChange">
       <el-table-column type="selection" width="50" />
       <el-table-column prop="id" label="ID" width="80" />
-      <el-table-column prop="name" label="名称" min-width="200" />
+      <el-table-column label="名称" min-width="200">
+        <template #default="{ row }">
+          <el-link type="primary" :underline="false" @click="router.push(`/knowledge/${row.id}`)">
+            {{ row.name }}
+          </el-link>
+        </template>
+      </el-table-column>
       <el-table-column label="文档类型" width="120">
         <template #default="{ row }">
           {{ typeLabel(row.type) }}
@@ -58,7 +64,7 @@
       </el-table-column>
       <el-table-column label="操作" width="180" fixed="right">
         <template #default="{ row }">
-          <el-button text type="primary" size="small" @click="goToDocuments(row)">管理文档</el-button>
+          <el-button text type="primary" size="small" @click="handleEdit(row)">编辑</el-button>
           <el-button text type="danger" size="small" @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
@@ -117,10 +123,7 @@ async function handleBatchDelete() {
 }
 
 const handleCreate = () => router.push('/knowledge/create')
-
-function goToDocuments(row: any) {
-  router.push({ name: 'DocumentList', params: { kbId: row.id }, query: { name: row.name } })
-}
+const handleEdit = (row: any) => router.push(`/knowledge/${row.id}`)
 
 async function fetchList() {
   loading.value = true
