@@ -6,6 +6,7 @@ import com.km.service.StatsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -18,5 +19,10 @@ public class StatsController {
     @GetMapping("/summary")
     public ApiResponse<StatsSummaryVO> summary() {
         return ApiResponse.ok(statsService.getSummary());
+    }
+
+    @GetMapping("/knowledge-bases/{kbId}")
+    public ApiResponse<com.km.vo.KbStatsVO> kbStats(@PathVariable String kbId) {
+        return ApiResponse.ok(statsService.getKbStats(kbId));
     }
 }

@@ -9,5 +9,10 @@ public interface StatsMapper {
     long countDocuments();
     long countChunks();
     long countReadyDocuments();
+    long countProcessingDocuments();
+    long countFailedDocuments();
+    long countKbDocuments(String kbId);
+    long countKbChunks(String kbId);
+    String getKbNameById(String kbId);
     List<Map<String, Object>> dailyUploadTrend(@Param("days") int days);
 }
