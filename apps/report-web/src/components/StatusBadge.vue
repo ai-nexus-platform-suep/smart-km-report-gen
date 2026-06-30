@@ -16,11 +16,11 @@ const props = defineProps<{
 const reportStatusLabels: Record<string, string> = {
   DRAFT: '草稿',
   OUTLINE_READY: '大纲就绪',
-  GENERATING: '生成中',
+  CONTENT_GENERATING: '正文生成中',
+  CONTENT_INCOMPLETE: '正文待补全',
   CONTENT_READY: '正文就绪',
-  EXPORTING: '导出中',
   EXPORTED: '已导出',
-  FAILED: '失败',
+  FAILED: '生成失败',
   DELETED: '已删除',
 }
 
@@ -38,9 +38,9 @@ const label = computed(() => {
 })
 
 const tone = computed(() => {
-  if (props.status === 'GENERATING' || props.status === 'EXPORTING') return 'generating'
+  if (props.status === 'CONTENT_GENERATING' || props.status === 'GENERATING') return 'generating'
   if (props.status === 'CONTENT_READY' || props.status === 'EXPORTED' || props.status === 'GENERATED') return 'success'
-  if (props.status === 'OUTLINE_READY' || props.status === 'USER_EDITED') return 'warning'
+  if (props.status === 'OUTLINE_READY' || props.status === 'CONTENT_INCOMPLETE' || props.status === 'USER_EDITED') return 'warning'
   if (props.status === 'FAILED') return 'danger'
   return 'blue'
 })

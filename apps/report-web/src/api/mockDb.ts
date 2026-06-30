@@ -5,6 +5,7 @@ import type {
   ReportDetail,
   ReportFile,
   ReportSection,
+  ReportStatus,
   ReportType,
   TemplateRecord
 } from "@/types/domain";
@@ -130,7 +131,7 @@ function seedReport(): ReportDetail {
     specialty: "电气",
     powerPlant: "示范电厂",
     reportYear: 2026,
-    status: "GENERATING",
+    status: "CONTENT_GENERATING",
     ownerId: 1,
     totalSections: sections.length,
     completedSections: sections.filter((section) => section.status === "GENERATED").length,
@@ -197,10 +198,32 @@ function initialDb(): MockDb {
   };
 }
 
+function normalizeReportStatus(status: unknown): ReportStatus {
+  if (status === "GENERATING" || status === "EXPORTING") return "CONTENT_GENERATING";
+  const known: ReportStatus[] = [
+    "DRAFT",
+    "OUTLINE_READY",
+    "CONTENT_GENERATING",
+    "CONTENT_INCOMPLETE",
+    "CONTENT_READY",
+    "EXPORTED",
+    "FAILED",
+    "DELETED"
+  ];
+  return known.includes(status as ReportStatus) ? (status as ReportStatus) : "DRAFT";
+}
+
+function normalizeReport(report: ReportDetail): ReportDetail {
+  return {
+    ...report,
+    status: normalizeReportStatus(report.status)
+  };
+}
+
 function normalizeDb(db: Partial<MockDb>): MockDb {
   const initial = initialDb();
   return {
-    reports: db.reports ?? initial.reports,
+    reports: (db.reports ?? initial.reports).map(normalizeReport),
     templates: db.templates ?? initial.templates,
     llmConfigs: db.llmConfigs ?? initial.llmConfigs,
     nextId: db.nextId ?? initial.nextId

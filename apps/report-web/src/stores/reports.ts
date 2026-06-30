@@ -8,6 +8,7 @@ const defaultQuery: ReportQuery = {
   page: 1,
   pageSize: 8,
   keyword: "",
+  specialty: null,
   type: null,
   status: null,
   year: null
@@ -80,7 +81,7 @@ export const useReportStore = defineStore("reports", () => {
     stopStream();
     await reportApi.startGenerate(id);
     if (!current.value || !sameId(current.value.id, id)) await fetchDetail(id);
-    if (current.value) current.value.status = "GENERATING";
+    if (current.value) current.value.status = "CONTENT_GENERATING";
     streaming.value = true;
     streamMessage.value = "SSE CONNECTED";
     streamController = reportApi.createGenerateStream(
@@ -120,8 +121,8 @@ export const useReportStore = defineStore("reports", () => {
     }
   }
 
-  async function exportDocx(reportId: EntityId, fileName?: string) {
-    const file = await reportApi.exportDocx(reportId, { fileName });
+  async function exportDocx(reportId: EntityId) {
+    const file = await reportApi.exportDocx(reportId);
     await fetchDetail(reportId);
     return file;
   }

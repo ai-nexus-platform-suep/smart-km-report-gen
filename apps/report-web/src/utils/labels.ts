@@ -8,11 +8,11 @@ export const reportTypeLabels: Record<ReportType, string> = {
 export const reportStatusLabels: Record<ReportStatus, string> = {
   DRAFT: "草稿",
   OUTLINE_READY: "大纲就绪",
-  GENERATING: "生成中",
+  CONTENT_GENERATING: "正文生成中",
+  CONTENT_INCOMPLETE: "正文待补全",
   CONTENT_READY: "正文就绪",
-  EXPORTING: "导出中",
   EXPORTED: "已导出",
-  FAILED: "失败",
+  FAILED: "生成失败",
   DELETED: "已删除"
 };
 
@@ -25,9 +25,9 @@ export const sectionStatusLabels: Record<SectionStatus, string> = {
 };
 
 export function statusTone(status: ReportStatus | SectionStatus) {
-  if (status === "GENERATING" || status === "EXPORTING") return "generating";
+  if (status === "CONTENT_GENERATING" || status === "GENERATING") return "generating";
   if (status === "CONTENT_READY" || status === "EXPORTED" || status === "GENERATED") return "success";
-  if (status === "OUTLINE_READY" || status === "USER_EDITED") return "warning";
+  if (status === "OUTLINE_READY" || status === "CONTENT_INCOMPLETE" || status === "USER_EDITED") return "warning";
   if (status === "FAILED") return "danger";
   return "blue";
 }

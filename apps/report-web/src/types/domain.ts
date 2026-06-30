@@ -5,9 +5,9 @@ export type EntityId = string | number;
 export type ReportStatus =
   | "DRAFT"
   | "OUTLINE_READY"
-  | "GENERATING"
+  | "CONTENT_GENERATING"
+  | "CONTENT_INCOMPLETE"
   | "CONTENT_READY"
-  | "EXPORTING"
   | "EXPORTED"
   | "FAILED"
   | "DELETED";
@@ -102,6 +102,7 @@ export interface ReportQuery {
   page: number;
   pageSize: number;
   keyword?: string;
+  specialty?: string | null;
   type?: ReportType | null;
   status?: ReportStatus | null;
   year?: number | null;

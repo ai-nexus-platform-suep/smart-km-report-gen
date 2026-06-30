@@ -1,4 +1,3 @@
-import { apiRequest, enableMock } from "@/api/http";
 import { mockDb } from "@/api/mockDb";
 import type { EntityId, LlmConfig, TemplateRecord } from "@/types/domain";
 
@@ -103,35 +102,16 @@ const metricDefs = [
   ["templates", "TPL", "报告模板", "templateCount", "orange"],
   ["reportGenerations", "RPT", "报告生成", "reportGenerationCount", "pink"],
   ["exportedReports", "EXP", "DOCX 导出", "exportedReportCount", "blue"],
-  ["contentReadyReports", "RDY", "正文完成", "contentReadyReportCount", "green"],
-  ["generatingReports", "RUN", "生成中", "generatingReportCount", "cyan"],
-  ["failedTasks", "ERR", "失败任务", "failureTaskCount", "red"]
+  ["contentReadyReports", "RDY", "正文就绪", "contentReadyReportCount", "green"],
+  ["generatingReports", "RUN", "正文生成中", "generatingReportCount", "cyan"],
+  ["failedTasks", "ERR", "生成失败", "failureTaskCount", "red"]
 ] as const;
 
 const distributionColors = ["#1e6bff", "#00b8d9", "#16a34a", "#f59e0b", "#dc2626", "#8b5cf6"];
 const reportTrendKeys = new Set(["reportGeneration", "reportExport", "reportFailure", "reportRunning"]);
 
 export async function fetchDashboardData(days = 30): Promise<DashboardData> {
-  if (enableMock) return buildMockDashboard(days, "mock");
-
-  try {
-    const [overview, trends, distribution] = await Promise.all([
-      apiRequest<DashboardOverviewDto>("/api/admin/dashboard/overview"),
-      apiRequest<ActivityTrend[]>(`/api/admin/dashboard/activity-trends?days=${days}`),
-      apiRequest<DashboardDistributionDto>("/api/admin/dashboard/distribution")
-    ]);
-
-    const fallback = buildMockDashboard(days, "api");
-    return {
-      ...fallback,
-      source: "api",
-      metrics: normalizeMetrics(overview),
-      trends: normalizeReportTrends(trends, fallback.trends),
-      distributions: normalizeDistributions(distribution)
-    };
-  } catch {
-    return buildMockDashboard(days, "mock");
-  }
+  return buildMockDashboard(days, "mock");
 }
 
 function normalizeMetrics(overview: DashboardOverviewDto): DashboardMetric[] {
@@ -173,7 +153,8 @@ function buildMockDashboard(days: number, source: DashboardData["source"]): Dash
   const reports = mockDb.data.reports.filter((item) => item.status !== "DELETED");
   const failed = reports.filter((item) => item.status === "FAILED").length;
   const exported = reports.filter((item) => item.status === "EXPORTED").length;
-  const generating = reports.filter((item) => item.status === "GENERATING" || item.status === "EXPORTING").length;
+  const generating = reports.filter((item) => item.status === "CONTENT_GENERATING").length;
+  const incomplete = reports.filter((item) => item.status === "CONTENT_INCOMPLETE").length;
   const contentReady = reports.filter((item) => item.status === "CONTENT_READY").length;
   const totalReports = Math.max(1, reports.length);
 
@@ -193,7 +174,7 @@ function buildMockDashboard(days: number, source: DashboardData["source"]): Dash
     trends: [
       buildTrend("reportGeneration", "报告生成 · 近30天", "#ec5da5", days, [0, 0, 0, 0, totalReports]),
       buildTrend("reportExport", "DOCX 导出 · 近30天", "#1e6bff", days, [0, 0, 0, exported]),
-      buildTrend("reportRunning", "生成中任务 · 近30天", "#00b8d9", days, [0, 0, 0, generating]),
+      buildTrend("reportRunning", "正文生成中 · 近30天", "#00b8d9", days, [0, 0, 0, generating]),
       buildTrend("reportFailure", "生成失败 · 近30天", "#dc2626", days, [0, 0, 0, failed])
     ],
     distributions: [
@@ -209,10 +190,11 @@ function buildMockDashboard(days: number, source: DashboardData["source"]): Dash
         key: "reportStatus",
         title: "报告状态分布",
         items: [
-          { name: "生成中", value: generating, color: "#00b8d9" },
-          { name: "正文完成", value: contentReady, color: "#16a34a" },
+          { name: "正文生成中", value: generating, color: "#00b8d9" },
+          { name: "正文待补全", value: incomplete, color: "#f59e0b" },
+          { name: "正文就绪", value: contentReady, color: "#16a34a" },
           { name: "已导出", value: exported, color: "#1e6bff" },
-          { name: "失败", value: failed, color: "#dc2626" }
+          { name: "生成失败", value: failed, color: "#dc2626" }
         ]
       }
     ],

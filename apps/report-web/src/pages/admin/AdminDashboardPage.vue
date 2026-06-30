@@ -276,18 +276,18 @@ function statusLabel(status: string) {
   const labels: Record<string, string> = {
     DRAFT: '草稿',
     OUTLINE_READY: '大纲就绪',
-    GENERATING: '生成中',
-    CONTENT_READY: '正文完成',
-    EXPORTING: '导出中',
+    CONTENT_GENERATING: '正文生成中',
+    CONTENT_INCOMPLETE: '正文待补全',
+    CONTENT_READY: '正文就绪',
     EXPORTED: '已导出',
-    FAILED: '失败'
+    FAILED: '生成失败'
   }
   return labels[status] || status
 }
 
 function statusTag(status: string) {
   if (status === 'FAILED') return 'danger'
-  if (status === 'GENERATING' || status === 'EXPORTING') return 'warning'
+  if (status === 'CONTENT_GENERATING' || status === 'CONTENT_INCOMPLETE') return 'warning'
   if (status === 'CONTENT_READY' || status === 'EXPORTED') return 'success'
   return 'info'
 }
