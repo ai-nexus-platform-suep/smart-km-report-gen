@@ -23,7 +23,7 @@ export const API_QA = {
   ADMIN: {
     QA_CONFIG: '/api/admin/qa-config',
     RETRIEVAL_TEST: '/api/admin/retrieval-test',
-    STATS: '/api/admin/stats',
+    STATS: '/api/stats/qa/overview',
     QA_TREND: '/api/admin/stats/qa-trend',
   },
   MODEL_CONFIG: {

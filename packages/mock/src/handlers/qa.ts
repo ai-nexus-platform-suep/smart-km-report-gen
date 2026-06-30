@@ -41,28 +41,28 @@ const mockCitations = [
 
 const conversations: ConversationSchema[] = [
   {
-    session_id: 1,
+    session_id: '1',
     title: '汽轮机检修周期判断',
     message_count: 2,
     last_message_at: now(),
     created_at: now(),
   },
   {
-    session_id: 2,
+    session_id: '2',
     title: '锅炉安全规范相关问题',
     message_count: 0,
     last_message_at: now(),
     created_at: now(),
   },
   {
-    session_id: 3,
+    session_id: '3',
     title: '电气设备试验报告解释',
     message_count: 0,
     last_message_at: now(),
     created_at: now(),
   },
   {
-    session_id: 4,
+    session_id: '4',
     title: '煤库存审计口径确认',
     message_count: 0,
     last_message_at: now(),
@@ -70,12 +70,12 @@ const conversations: ConversationSchema[] = [
   },
 ]
 
-const messagesByConversation = new Map<number, MessageSchema[]>([
+const messagesByConversation = new Map<string, MessageSchema[]>([
   [
-    1,
+    '1',
     [
       {
-        message_id: 1,
+        message_id: '1',
         seq: 1,
         role: 'user',
         content: '汽轮机的大修周期一般是多久？如果运行状态良好，可以延期吗？',
@@ -85,7 +85,7 @@ const messagesByConversation = new Map<number, MessageSchema[]>([
         updated_at: now(),
       },
       {
-        message_id: 2,
+        message_id: '2',
         seq: 2,
         role: 'assistant',
         content:
@@ -135,7 +135,7 @@ function ok<T>(data: T, message = 'ok') {
   return HttpResponse.json({ code: 200, message, data })
 }
 
-function findConversation(id: number) {
+function findConversation(id: string) {
   return conversations.find((item) => item.session_id === id)
 }
 
@@ -143,11 +143,11 @@ function buildAnswer(question: string) {
   return `针对“${question}”，建议不要把技术监督结论建立在单一固定阈值上。应先确认适用规程和设备对象，再结合运行小时数、启停次数、缺陷记录、试验数据和检修历史进行综合判断。若监督指标稳定且缺陷闭环充分，可以形成状态评估意见；若关键指标持续异常，应优先安排专项诊断、风险评估或提前检修。`
 }
 
-function appendChatMessages(conversationId: number, question: string, answer: string) {
+function appendChatMessages(conversationId: string, question: string, answer: string) {
   const list = messagesByConversation.get(conversationId) ?? []
   const timestamp = now()
   const userMessage: MessageSchema = {
-    message_id: nextMessageId++,
+    message_id: String(nextMessageId++),
     seq: list.length + 1,
     role: 'user',
     content: question,
@@ -157,7 +157,7 @@ function appendChatMessages(conversationId: number, question: string, answer: st
     updated_at: timestamp,
   }
   const assistantMessage: MessageSchema = {
-    message_id: nextMessageId++,
+    message_id: String(nextMessageId++),
     seq: list.length + 2,
     role: 'assistant',
     content: answer,
@@ -201,7 +201,7 @@ export const qaHandlers = [
     const body = (await request.json().catch(() => ({}))) as { title?: string }
     const title = body.title?.trim() || '新对话'
     const conversation: ConversationSchema = {
-      session_id: nextConversationId++,
+      session_id: String(nextConversationId++),
       title,
       message_count: 0,
       last_message_at: now(),
@@ -215,7 +215,7 @@ export const qaHandlers = [
 
   http.patch(API_QA.CHAT.UPDATE_TITLE, async ({ params, request }) => {
     await delay(220)
-    const id = Number(params.id)
+    const id = String(params.id)
     const conversation = findConversation(id)
     if (!conversation) {
       return HttpResponse.json({ code: 404, message: '会话不存在', data: null }, { status: 404 })
@@ -229,7 +229,7 @@ export const qaHandlers = [
 
   http.delete(API_QA.CHAT.DELETE, async ({ params }) => {
     await delay(220)
-    const id = Number(params.id)
+    const id = String(params.id)
     const index = conversations.findIndex((item) => item.session_id === id)
     if (index < 0) {
       return HttpResponse.json({ code: 404, message: '会话不存在', data: null }, { status: 404 })
@@ -242,7 +242,7 @@ export const qaHandlers = [
 
   http.get(API_QA.CHAT.HISTORY, async ({ params, request }) => {
     await delay(260)
-    const id = Number(params.id)
+    const id = String(params.id)
     const conversation = findConversation(id)
     if (!conversation) {
       return HttpResponse.json({ code: 404, message: '会话不存在', data: null }, { status: 404 })
@@ -282,7 +282,7 @@ export const qaHandlers = [
   http.post(API_QA.CHAT.STREAM, async ({ request }) => {
     await delay(520)
     const body = (await request.json()) as {
-      conversation_id: number
+      conversation_id: string
       question: string
       selected_kb_ids?: number[]
       user_id?: number | null
@@ -311,6 +311,11 @@ export const qaHandlers = [
     await delay(220)
     const totalMessages = conversations.reduce((sum, item) => sum + item.message_count, 0)
     return ok({
+      totalCount: totalMessages,
+      trend: Array.from({ length: 14 }, (_, i) => ({
+        date: `2026-06-${String(16 + i).padStart(2, '0')}`,
+        count: Math.floor(8 + Math.random() * 22),
+      })),
       totalConversations: conversations.length,
       totalMessages,
       totalCitations: totalMessages === 0 ? 0 : Math.max(2, Math.round(totalMessages / 2)),

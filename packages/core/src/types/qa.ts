@@ -10,11 +10,11 @@ export type IntentType =
   | 'TASK_ACTION'
 export type GenerateStatus = 0 | 1 | 2
 export type ThinkingStatus = 'pending' | 'running' | 'done'
-export type ModelProvider = 'deepseek' | 'openai' | 'qwen' | 'siliconflow'
+export type ModelProvider = 'deepseek' | 'openai' | 'qwen' | 'siliconflow' | 'zhipu' | 'custom'
 export type ModelScenario = 'chat' | 'report_generate'
 
 export interface ConversationSchema {
-  session_id: number
+  session_id: string
   title: string
   message_count: number
   last_message_at: string
@@ -29,7 +29,7 @@ export interface ConversationListResult {
 }
 
 export interface MessageSchema {
-  message_id: number
+  message_id: string
   seq: number
   role: MessageRole
   content: string
@@ -43,23 +43,35 @@ export interface MessageSchema {
 }
 
 export interface ConversationMessagesResult {
-  session_id: number
+  session_id: string
   title: string
   total: number
   messages: MessageSchema[]
 }
 
 export interface Citation {
+  index?: number
+  indices?: number[]
   documentId?: number
+  docId?: string | number
   documentName: string
+  docName?: string
   content: string
+  snippet?: string
+  fullSnippet?: string
+  chapterPath?: string
   score: number
   source?: string
+  chunkType?: string
 }
 
 export interface ThinkingStep {
-  label: string
-  content: string
+  label?: string
+  content?: string
+  step_type?: string
+  message?: string
+  elapsed_ms?: number | null
+  phase?: 'start' | 'done' | 'error' | string
   status: ThinkingStatus
 }
 
@@ -74,7 +86,7 @@ export interface ChatTestRequest {
 }
 
 export interface ChatStreamRequest {
-  conversation_id: number
+  conversation_id: string
   question: string
   user_id?: number | null
   selected_kb_ids?: number[]
@@ -91,8 +103,40 @@ export interface ChatTestResponse {
 }
 
 export interface SseEvent {
+  event?: 'thinking' | 'message' | 'citation' | 'done' | 'error'
   type: 'thinking' | 'message' | 'citation' | 'done' | 'error'
   data: unknown
+}
+
+export interface ChatSseThinkingData {
+  type?: 'thinking'
+  step_type?: string
+  message?: string
+  elapsed_ms?: number | null
+  phase?: 'start' | 'done' | 'error' | string
+}
+
+export interface ChatSseMessageData {
+  delta?: string
+  content?: string
+  message_id?: string
+  intent?: IntentType | string
+  finished?: boolean
+}
+
+export interface ChatSseCitationData {
+  type?: 'citation'
+  citations?: Citation[]
+  merged?: boolean
+}
+
+export interface ChatSseDoneData {
+  message_id?: string
+  conversation_id?: string
+}
+
+export interface ChatSseErrorData {
+  message?: string
 }
 
 export interface ModelConfigVO {
@@ -118,7 +162,7 @@ export interface ModelConfigPayload {
 }
 
 export interface Conversation {
-  id: number
+  id: string
   title: string
   summary: string
   messageCount: number
@@ -128,8 +172,8 @@ export interface Conversation {
 }
 
 export interface Message {
-  id: number
-  conversationId: number
+  id: string
+  conversationId: string
   seq?: number
   role: Exclude<MessageRole, 'system'>
   content: string
@@ -141,7 +185,7 @@ export interface Message {
 }
 
 export interface ChatRequest {
-  conversationId?: number
+  conversationId?: string
   message: string
   knowledgeBaseIds?: number[]
   searchMode?: SearchMode

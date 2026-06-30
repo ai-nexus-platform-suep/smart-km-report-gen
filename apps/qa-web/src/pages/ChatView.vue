@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowDown,
   ChatDotRound,
@@ -21,49 +21,26 @@ import {
   createConversation,
   listConversations,
   listMessages,
-  sendChatMessage,
+  streamChatMessage,
   type ChatMessageView,
   type ConversationView,
 } from '../api'
-import type { Citation, ThinkingStep } from '@platform/core'
+import type { ThinkingStep } from '@platform/core'
 
 const query = ref('')
 const prompt = ref('汽轮机大修周期是否必须固定为 4 年？请结合规程说明判断依据。')
 const followUp = ref('')
-const selectedMode = ref('knowledge')
-const activeConversationId = ref<number | null>(null)
+const activeConversationId = ref<string | null>(null)
 const isGenerating = ref(false)
-const activeAssistantId = ref<number | null>(null)
+const activeAssistantId = ref<string | null>(null)
 const streamTimer = ref<number | null>(null)
+const streamController = ref<AbortController | null>(null)
 const loadingConversations = ref(false)
 const loadingMessages = ref(false)
 const conversations = ref<ConversationView[]>([])
 const messages = ref<ChatMessageView[]>([])
 const route = useRoute()
-
-// 右侧思考过程，对应后续问答接口中的 thinkingSteps 字段。
-const defaultThinkingSteps: ThinkingStep[] = [
-  { label: '意图识别', content: '识别为知识问答，主题为汽轮机检修周期判断。', status: 'done' },
-  { label: '知识检索', content: '命中 2 份规程文档，最高相关度 0.92。', status: 'done' },
-  { label: '生成回答', content: '正在按规程依据、适用条件、建议动作组织回答。', status: 'running' },
-]
-
-const fallbackCitations: Citation[] = [
-  {
-    documentId: 1,
-    documentName: '汽轮机检修规程_v3.0.pdf',
-    content: '汽轮机大修周期一般为 4-6 年，需结合运行小时数、启停次数和设备健康状态综合确定。',
-    score: 0.92,
-    source: '知识库 / 设备检修',
-  },
-  {
-    documentId: 2,
-    documentName: '发电设备技术监督导则.docx',
-    content: '当振动、油质、效率等关键指标出现持续异常时，应提前组织状态评估和检修论证。',
-    score: 0.86,
-    source: '知识库 / 技术监督',
-  },
-]
+const router = useRouter()
 
 const filteredConversations = computed(() => {
   const keyword = query.value.trim()
@@ -74,7 +51,7 @@ const filteredConversations = computed(() => {
 const activeConversation = computed(() => {
   return (
     conversations.value.find((item) => item.id === activeConversationId.value) ?? {
-      id: 0,
+      id: '',
       title: '新对话',
       summary: '开始一次技术监督问答',
       description: '开始一次技术监督问答',
@@ -83,27 +60,31 @@ const activeConversation = computed(() => {
       lastMessageAt: '',
       updatedAt: '--',
       createdAt: '',
-      knowledgeBases: ['设备检修', '技术监督'],
+      knowledgeBases: [],
       owner: '当前用户',
-      status: 'active' as const,
-      tag: '技术监督',
+      status: 'empty' as const,
+      tag: '待提问',
     }
   )
 })
 
 const activeAssistant = computed(() => messages.value.find((item) => item.id === activeAssistantId.value))
 const latestAssistant = computed(() => [...messages.value].reverse().find((item) => item.role === 'assistant'))
-const insightThinkingSteps = computed(() => activeAssistant.value?.thinkingSteps ?? latestAssistant.value?.thinkingSteps ?? defaultThinkingSteps)
-const citations = computed(() => activeAssistant.value?.citations ?? latestAssistant.value?.citations ?? fallbackCitations)
+const insightThinkingSteps = computed(() => activeAssistant.value?.thinkingSteps ?? latestAssistant.value?.thinkingSteps ?? [])
+const citations = computed(() => activeAssistant.value?.citations ?? latestAssistant.value?.citations ?? [])
 const composerHint = computed(() =>
-  isGenerating.value ? '正在生成中，可停止，也可以补充一句让回答更聚焦。' : '当前将基于「设备检修」「技术监督」知识库回答',
+  isGenerating.value ? '正在生成中，可停止；补充问题会在本轮结束后作为下一轮发送。' : '当前将通过真实 SSE 接口发送到 B 组问答服务',
 )
 const conversationCount = computed(() => conversations.value.length)
-const knowledgeBaseCount = computed(() => new Set(conversations.value.flatMap((item) => item.knowledgeBases)).size || 2)
+const knowledgeBaseCount = computed(() => new Set(conversations.value.flatMap((item) => item.knowledgeBases)).size)
 
-async function selectConversation(id: number) {
+async function selectConversation(id: string) {
+  if (isGenerating.value) {
+    stopGeneration(false)
+  }
   if (activeConversationId.value === id && messages.value.length) return
   activeConversationId.value = id
+  await router.replace({ path: '/chat', query: { conversationId: id } })
   await loadMessages(id)
 }
 
@@ -119,49 +100,42 @@ function toggleThinking(message: ChatMessageView) {
   message.thinkingCollapsed = !message.thinkingCollapsed
 }
 
-function runMockStream(message: ChatMessageView, answer: string, finalCitations: Citation[], finalThinkingSteps: ThinkingStep[]) {
-  let index = 0
-  const chars = Array.from(answer)
-  streamTimer.value = window.setInterval(() => {
-    if (index >= chars.length) {
-      finishGeneration(message, finalCitations, finalThinkingSteps)
-      return
-    }
-
-    message.content += chars[index]
-    index += 1
-
-    if (index > chars.length * 0.35 && message.thinkingSteps?.[1]) {
-      message.thinkingSteps[1].status = 'done'
-    }
-    if (index > chars.length * 0.7 && message.thinkingSteps?.[2]) {
-      message.thinkingSteps[2].status = 'running'
-    }
-  }, 28)
+function normalizeFinalThinkingSteps(steps: ThinkingStep[] = []) {
+  return steps.map((step) => ({ ...step, status: 'done' as const }))
 }
 
-function finishGeneration(message: ChatMessageView, finalCitations = citations.value, finalThinkingSteps = defaultThinkingSteps) {
+function finishGeneration(message: ChatMessageView, finalCitations = message.citations ?? [], finalThinkingSteps = message.thinkingSteps ?? []) {
   if (streamTimer.value) {
     window.clearInterval(streamTimer.value)
     streamTimer.value = null
   }
+  streamController.value = null
   message.streaming = false
   message.citations = finalCitations
-  message.thinkingSteps = finalThinkingSteps.map((step) => ({ ...step, status: 'done' }))
+  message.thinkingSteps = normalizeFinalThinkingSteps(finalThinkingSteps)
   isGenerating.value = false
 }
 
-async function loadConversations() {
+async function loadConversations(targetConversationId = activeConversationId.value) {
   loadingConversations.value = true
   try {
     const result = await listConversations({ page: 1, size: 20, user_id: 1 })
     conversations.value = result.items
 
     if (result.items.length) {
-      const routeConversationId = Number(route.query.conversationId)
+      const routeConversationId = String(route.query.conversationId ?? '')
       const hasRouteConversation = result.items.some((item) => item.id === routeConversationId)
-      const targetId = activeConversationId.value ?? (hasRouteConversation ? routeConversationId : result.items[0].id)
+      const hasTargetConversation = result.items.some((item) => item.id === targetConversationId)
+      const targetId = hasTargetConversation
+        ? targetConversationId
+        : hasRouteConversation
+          ? routeConversationId
+          : result.items[0].id
       await selectConversation(targetId)
+    } else {
+      activeConversationId.value = null
+      messages.value = []
+      activeAssistantId.value = null
     }
   } catch (error) {
     console.error(error)
@@ -171,7 +145,7 @@ async function loadConversations() {
   }
 }
 
-async function loadMessages(conversationId: number) {
+async function loadMessages(conversationId: string) {
   loadingMessages.value = true
   try {
     const result = await listMessages(conversationId)
@@ -194,6 +168,7 @@ async function createNewConversation() {
     activeConversationId.value = conversation.id
     messages.value = []
     activeAssistantId.value = null
+    await router.replace({ path: '/chat', query: { conversationId: conversation.id } })
     prompt.value = '请说明技术监督问答可以如何帮助我定位规程依据。'
   } catch (error) {
     console.error(error)
@@ -208,26 +183,27 @@ async function sendMessage(extraText = '') {
     await createNewConversation()
   }
   if (!activeConversationId.value) return
+  const conversationId = activeConversationId.value
 
   const createdAt = formatCreatedAt()
   const userMessage: ChatMessageView = {
-    id: Date.now(),
-    conversationId: activeConversationId.value,
+    id: `local-user-${Date.now()}`,
+    conversationId,
     role: 'user',
     content: text,
     createdAt,
     time: formatTime(),
   }
   const assistantMessage: ChatMessageView = {
-    id: Date.now() + 1,
-    conversationId: activeConversationId.value,
+    id: `local-assistant-${Date.now()}`,
+    conversationId,
     role: 'assistant',
     content: '',
     createdAt,
     time: formatTime(),
     thinkingSteps: [
       { label: '意图识别', content: '正在判断问题类型、设备对象和监督场景。', status: 'done' },
-      { label: '知识检索', content: '正在从设备检修、技术监督知识库召回相关片段。', status: 'running' },
+      { label: '知识检索', content: '正在由 qa-agent 根据 selected_kb_ids 和工作流召回相关片段。', status: 'running' },
       { label: '回答组织', content: '等待检索完成后按依据、判断、建议输出。', status: 'pending' },
     ],
     thinkingCollapsed: false,
@@ -238,39 +214,105 @@ async function sendMessage(extraText = '') {
   activeAssistantId.value = assistantMessage.id
   isGenerating.value = true
   prompt.value = ''
+  const abortController = new AbortController()
+  streamController.value = abortController
 
   try {
-    const result = await sendChatMessage({
-      conversation_id: activeConversationId.value,
-      question: text,
-      user_id: 1,
-      selected_kb_ids: [1, 2],
-    })
-    runMockStream(
-      assistantMessage,
-      result.final_response,
-      result.citations?.length ? result.citations : fallbackCitations,
-      result.thinking_steps?.length ? result.thinking_steps : defaultThinkingSteps,
+    const doneData = await streamChatMessage(
+      {
+        conversation_id: conversationId,
+        question: text,
+        user_id: 1,
+        selected_kb_ids: [],
+      },
+      {
+        signal: abortController.signal,
+        onThinking(step) {
+          const existingIndex = assistantMessage.thinkingSteps?.findIndex((item) => item.step_type === step.step_type)
+          if (existingIndex != null && existingIndex >= 0 && assistantMessage.thinkingSteps) {
+            assistantMessage.thinkingSteps[existingIndex] = step
+          } else {
+            assistantMessage.thinkingSteps = [...(assistantMessage.thinkingSteps ?? []), step]
+          }
+        },
+        onMessage(data) {
+          if (data.message_id) {
+            assistantMessage.id = data.message_id
+            activeAssistantId.value = data.message_id
+          }
+          if (typeof data.content === 'string') {
+            assistantMessage.content = data.content
+          } else if (data.delta) {
+            assistantMessage.content += data.delta
+          }
+          if (data.intent) {
+            assistantMessage.intentType = data.intent as ChatMessageView['intentType']
+          }
+          if (data.finished) {
+            finishGeneration(
+              assistantMessage,
+              assistantMessage.citations?.length ? assistantMessage.citations : [],
+              assistantMessage.thinkingSteps?.length ? assistantMessage.thinkingSteps : [],
+            )
+          }
+        },
+        onCitation(nextCitations) {
+          assistantMessage.citations = nextCitations
+        },
+        onError(message) {
+          assistantMessage.content = message
+          assistantMessage.generateStatus = 2
+          assistantMessage.thinkingSteps = [{ label: '请求失败', content: message, status: 'done' }]
+          finishGeneration(assistantMessage, [], assistantMessage.thinkingSteps)
+          ElMessage.error(message)
+        },
+        onDone() {
+          finishGeneration(
+            assistantMessage,
+            assistantMessage.citations?.length ? assistantMessage.citations : [],
+            assistantMessage.thinkingSteps?.length ? assistantMessage.thinkingSteps : [],
+          )
+        },
+      },
     )
+    if (!assistantMessage.content) {
+      assistantMessage.content = '本次请求没有返回回答内容。'
+    }
+    if (!abortController.signal.aborted) {
+      const nextConversationId = doneData?.conversation_id ?? conversationId
+      await loadMessages(nextConversationId)
+      await loadConversations(nextConversationId)
+    }
   } catch (error) {
+    if (abortController.signal.aborted) return
     console.error(error)
     assistantMessage.streaming = false
     assistantMessage.content = '问答服务暂时不可用，请稍后重试。'
     assistantMessage.thinkingSteps = [{ label: '请求失败', content: '未能从 mock 或后端服务取得回答。', status: 'done' }]
     isGenerating.value = false
+    streamController.value = null
     ElMessage.error('发送失败，请检查 mock 或后端服务。')
+  } finally {
+    if (!abortController.signal.aborted) {
+      isGenerating.value = false
+      streamController.value = null
+    }
   }
 }
 
-function stopGeneration() {
+function stopGeneration(showMessage = true) {
   if (!isGenerating.value || !activeAssistant.value) return
+  streamController.value?.abort()
+  streamController.value = null
   if (streamTimer.value) {
     window.clearInterval(streamTimer.value)
     streamTimer.value = null
   }
   activeAssistant.value.streaming = false
   activeAssistant.value.interrupted = true
-  activeAssistant.value.content += activeAssistant.value.content ? '\n\n已停止生成。' : '已停止生成。'
+  if (showMessage) {
+    activeAssistant.value.content += activeAssistant.value.content ? '\n\n已停止生成。' : '已停止生成。'
+  }
   activeAssistant.value.thinkingSteps = activeAssistant.value.thinkingSteps?.map((step) => ({
     ...step,
     status: step.status === 'running' ? 'done' : step.status,
@@ -283,17 +325,32 @@ function appendFollowUp() {
   if (!text) return
   followUp.value = ''
   if (activeAssistant.value?.streaming) {
-    activeAssistant.value.content += `\n\n补充要求：${text}`
+    ElMessage.info('当前回答仍在生成，请停止或等待完成后再发送补充问题。')
+    followUp.value = text
     return
   }
   sendMessage(text)
+}
+
+function openModelConfig() {
+  router.push('/admin/qa/llm')
 }
 
 onMounted(() => {
   loadConversations()
 })
 
+watch(
+  () => route.query.conversationId,
+  async (conversationId) => {
+    const nextId = String(conversationId ?? '')
+    if (!nextId || nextId === activeConversationId.value) return
+    await selectConversation(nextId)
+  },
+)
+
 onBeforeUnmount(() => {
+  streamController.value?.abort()
   if (streamTimer.value) {
     window.clearInterval(streamTimer.value)
   }
@@ -320,7 +377,7 @@ onBeforeUnmount(() => {
         <strong>企业知识问答空间</strong>
         <p>基于规程、报告和检修记录生成可追溯回答。</p>
         <div class="hero-stats">
-          <span><b>{{ knowledgeBaseCount }}</b> 知识库</span>
+          <span><b>{{ knowledgeBaseCount }}</b> 已选知识库</span>
           <span><b>{{ conversationCount }}</b> 最近会话</span>
         </div>
       </div>
@@ -363,20 +420,13 @@ onBeforeUnmount(() => {
         <div>
           <div class="header-kicker">
             <el-icon><Connection /></el-icon>
-            已连接知识库
+            已连接问答服务
           </div>
           <h1>{{ activeConversation.title }}</h1>
         </div>
         <div class="header-actions">
-          <el-segmented
-            v-model="selectedMode"
-            :options="[
-              { label: '知识问答', value: 'knowledge' },
-              { label: '文档检索', value: 'search' },
-              { label: '自由对话', value: 'chat' },
-            ]"
-          />
-          <el-button :icon="Setting">参数</el-button>
+          <el-tag effect="plain" type="success">自动意图识别</el-tag>
+          <el-button :icon="Setting" @click="openModelConfig">模型配置</el-button>
         </div>
       </header>
 
@@ -384,22 +434,22 @@ onBeforeUnmount(() => {
       <section class="context-strip">
         <div class="context-card">
           <span class="context-icon blue"><Collection /></span>
-          <span><strong>2 个知识库</strong><small>设备检修、技术监督</small></span>
+          <span><strong>知识库</strong><small>由 selected_kb_ids 交给后端处理</small></span>
         </div>
         <div class="context-card">
           <span class="context-icon green"><DocumentChecked /></span>
-          <span><strong>Top K 5</strong><small>相似度阈值 0.70</small></span>
+          <span><strong>检索流程</strong><small>qa-agent 根据工作流执行召回与生成</small></span>
         </div>
         <div class="context-card">
           <span class="context-icon amber"><MagicStick /></span>
-          <span><strong>DeepSeek Chat</strong><small>流式生成待接入</small></span>
+          <span><strong>DeepSeek Chat</strong><small>SSE 流式生成</small></span>
         </div>
       </section>
 
       <!-- 消息流区域：用户消息靠右，助手消息靠左。 -->
       <section v-loading="loadingMessages" class="message-stream">
         <article v-for="message in messages" :key="message.id" class="message-row" :class="message.role">
-          <div class="avatar">{{ message.role === 'user' ? '用' : '问' }}</div>
+          <div class="avatar">{{ message.role === 'user' ? '我' : 'AI' }}</div>
           <div class="message-body">
             <div class="message-meta">
               <strong>{{ message.role === 'user' ? '用户' : '智能问答助手' }}</strong>
@@ -416,14 +466,14 @@ onBeforeUnmount(() => {
                 <div v-show="!message.thinkingCollapsed" class="inline-thinking-list">
                   <div
                     v-for="step in message.thinkingSteps"
-                    :key="step.label"
+                    :key="`${step.step_type ?? step.label}-${step.phase ?? ''}`"
                     class="inline-thinking-step"
                     :class="step.status"
                   >
                     <span class="inline-dot" />
                     <div>
                       <strong>{{ step.label }}</strong>
-                      <p>{{ step.content }}</p>
+                      <p>{{ step.content || step.message }}</p>
                     </div>
                   </div>
                 </div>
@@ -432,7 +482,7 @@ onBeforeUnmount(() => {
               <p v-else class="streaming-placeholder">正在组织回答...</p>
               <div v-if="message.citations?.length || message.streaming" class="message-tools">
                 <el-button text :icon="CopyDocument">复制</el-button>
-                <el-button text :icon="ArrowDown">查看引用</el-button>
+                <el-button text :icon="ArrowDown">引用 {{ message.citations?.length ?? 0 }}</el-button>
               </div>
             </div>
           </div>
@@ -455,7 +505,7 @@ onBeforeUnmount(() => {
         <div v-if="isGenerating" class="follow-up-bar">
           <el-input
             v-model="followUp"
-            placeholder="生成中也可以补充要求，例如：请重点说明延期条件"
+            placeholder="本轮完成后发送补充问题，例如：请重点说明延期条件"
             @keyup.enter="appendFollowUp"
           />
           <el-button @click="appendFollowUp">补充</el-button>
@@ -484,11 +534,17 @@ onBeforeUnmount(() => {
           <el-tag size="small" type="success">运行中</el-tag>
         </div>
         <div class="timeline">
-          <div v-for="step in insightThinkingSteps" :key="step.label" class="timeline-item" :class="step.status">
+          <el-empty v-if="!insightThinkingSteps.length" description="暂无思考过程" />
+          <div
+            v-for="step in insightThinkingSteps"
+            :key="`${step.step_type ?? step.label}-${step.phase ?? ''}`"
+            class="timeline-item"
+            :class="step.status"
+          >
             <span class="timeline-dot" />
             <div>
               <strong>{{ step.label }}</strong>
-              <p>{{ step.content }}</p>
+              <p>{{ step.content || step.message }}</p>
             </div>
           </div>
         </div>
@@ -500,13 +556,14 @@ onBeforeUnmount(() => {
           <span class="section-count">{{ citations.length }}</span>
         </div>
         <div class="citation-list">
-          <article v-for="item in citations" :key="`${item.documentName}-${item.score}`" class="citation-card">
+          <el-empty v-if="!citations.length" description="暂无引用来源" />
+          <article v-for="item in citations" :key="`${item.documentName}-${item.index ?? item.score}`" class="citation-card">
             <div class="citation-head">
               <strong>{{ item.documentName }}</strong>
               <span>{{ Math.round(item.score * 100) }}%</span>
             </div>
             <p>{{ item.content }}</p>
-            <small>{{ item.source }}</small>
+            <small>{{ item.chapterPath || item.source }}</small>
           </article>
         </div>
       </section>

@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Delete, Plus, Star } from '@element-plus/icons-vue'
+import { Delete, Plus, Refresh, Star } from '@element-plus/icons-vue'
 import {
   createModelConfig,
   deleteModelConfig,
@@ -21,12 +21,52 @@ const form = reactive<ModelConfigPayload>({
   scenario: 'chat',
 })
 
-const providerOptions: Array<{ label: string; value: ModelProvider }> = [
-  { label: 'DeepSeek', value: 'deepseek' },
-  { label: 'OpenAI', value: 'openai' },
-  { label: '通义千问', value: 'qwen' },
-  { label: 'SiliconFlow', value: 'siliconflow' },
+const providerPresets: Array<{
+  label: string
+  value: ModelProvider
+  baseUrl: string
+  models: string[]
+}> = [
+  {
+    label: 'DeepSeek',
+    value: 'deepseek',
+    baseUrl: 'https://api.deepseek.com',
+    models: ['deepseek-chat', 'deepseek-reasoner'],
+  },
+  {
+    label: 'OpenAI',
+    value: 'openai',
+    baseUrl: 'https://api.openai.com/v1',
+    models: ['gpt-4o-mini', 'gpt-4o', 'gpt-4.1-mini'],
+  },
+  {
+    label: '通义千问',
+    value: 'qwen',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    models: ['qwen-plus', 'qwen-max', 'qwen-turbo'],
+  },
+  {
+    label: 'SiliconFlow',
+    value: 'siliconflow',
+    baseUrl: 'https://api.siliconflow.cn/v1',
+    models: ['Qwen/Qwen2.5-72B-Instruct', 'deepseek-ai/DeepSeek-V3'],
+  },
+  {
+    label: '智谱 GLM',
+    value: 'zhipu',
+    baseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    models: ['glm-4-flash', 'glm-4-plus'],
+  },
+  {
+    label: '自定义',
+    value: 'custom',
+    baseUrl: '',
+    models: [],
+  },
 ]
+
+const activePreset = computed(() => providerPresets.find((item) => item.value === form.provider))
+const modelOptions = computed(() => activePreset.value?.models ?? [])
 
 async function loadConfigs() {
   loading.value = true
@@ -42,13 +82,27 @@ async function loadConfigs() {
 
 function resetForm() {
   form.provider = 'deepseek'
-  form.baseUrl = 'https://api.deepseek.com'
-  form.modelName = 'deepseek-chat'
+  applyProviderPreset()
   form.apiKey = ''
   form.scenario = 'chat'
 }
 
+function applyProviderPreset() {
+  const preset = activePreset.value
+  if (!preset || preset.value === 'custom') return
+  form.baseUrl = preset.baseUrl
+  form.modelName = preset.models[0] ?? ''
+}
+
 async function handleCreate() {
+  if (!form.baseUrl.trim()) {
+    ElMessage.warning('请输入 Base URL。')
+    return
+  }
+  if (!form.modelName.trim()) {
+    ElMessage.warning('请输入模型名称。')
+    return
+  }
   if (!form.apiKey.trim()) {
     ElMessage.warning('请输入 API Key。')
     return
@@ -96,6 +150,11 @@ async function handleDelete(row: ModelConfigVO) {
     }
   }
 }
+
+watch(
+  () => form.provider,
+  () => applyProviderPreset(),
+)
 
 onMounted(loadConfigs)
 </script>
@@ -147,14 +206,29 @@ onMounted(loadConfigs)
         <el-form label-position="top">
           <el-form-item label="供应商">
             <el-select v-model="form.provider" style="width: 100%">
-              <el-option v-for="item in providerOptions" :key="item.value" :label="item.label" :value="item.value" />
+              <el-option v-for="item in providerPresets" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </el-form-item>
           <el-form-item label="Base URL">
-            <el-input v-model="form.baseUrl" placeholder="https://api.deepseek.com" />
+            <el-input v-model="form.baseUrl" placeholder="https://api.deepseek.com">
+              <template #append>
+                <el-button :icon="Refresh" @click="applyProviderPreset" />
+              </template>
+            </el-input>
           </el-form-item>
           <el-form-item label="模型名称">
-            <el-input v-model="form.modelName" placeholder="deepseek-chat" />
+            <el-select
+              v-if="modelOptions.length"
+              v-model="form.modelName"
+              filterable
+              allow-create
+              default-first-option
+              style="width: 100%"
+              placeholder="选择或输入模型名称"
+            >
+              <el-option v-for="model in modelOptions" :key="model" :label="model" :value="model" />
+            </el-select>
+            <el-input v-else v-model="form.modelName" placeholder="输入自定义模型名称" />
           </el-form-item>
           <el-form-item label="API Key">
             <el-input v-model="form.apiKey" type="password" show-password placeholder="输入明文密钥，后端保存时加密" />
