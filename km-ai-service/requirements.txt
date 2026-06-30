@@ -14,3 +14,4 @@ openpyxl==3.1.2
 markdown==3.5.2
 beautifulsoup4==4.12.3
 lxml==5.1.0
+magic-pdf>=0.7.0  # MinerU OCR engine for scanned PDFs

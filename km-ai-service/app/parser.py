@@ -45,7 +45,8 @@ class DocumentParser:
             return content.decode("utf-8", errors="replace")
 
     def _parse_pdf(self, content: bytes) -> str:
-        """Parse PDF with fallback to UTF-8 decode if text extraction yields nothing."""
+        """Parse PDF: try pypdf first, then MinerU (OCR), then UTF-8 fallback."""
+        # Try pypdf (fast, for text-based PDFs)
         try:
             reader = pypdf.PdfReader(io.BytesIO(content))
             pages_text = []
@@ -59,11 +60,36 @@ class DocumentParser:
             if pages_text:
                 return "\n\n".join(pages_text)
         except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f"_parse_pdf failed: {e}, falling back to UTF-8")
-        # Fallback: try plain text decode
+            logging.getLogger(__name__).warning(f"pypdf failed: {e}")
+
+        # Try MinerU (for scanned PDFs / OCR)
+        try:
+            return self._parse_pdf_with_mineru(content)
+        except ImportError:
+            pass
+        except Exception as e:
+            logging.getLogger(__name__).warning(f"MinerU failed: {e}, falling back to UTF-8")
+
+        # Final fallback
         return content.decode("utf-8", errors="replace")
 
+    def _parse_pdf_with_mineru(self, content: bytes) -> str:
+        """Parse PDF using MinerU (magic-pdf) for OCR/layout analysis."""
+        from magic_pdf.pipe import UNIPipe
+        from magic_pdf.rw import AbsReaderWriter
+
+        jso_useful_key = {"pdf_bytes": content}
+        pipe = UNIPipe(content, jso_useful_key)
+        pipe.pipe_classify()
+        pipe.pipe_analyze()
+        pipe.pipe_parse()
+        result = pipe.get_result()
+        md_content = result.get("md_content", "") or ""
+
+        # Clean up markdown formatting, keep plain text
+        text = re.sub(r"[#*_~`>|\\-]+", "", md_content)
+        text = re.sub(r"\n{3,}", "\n\n", text).strip()
+        return text if text else ""
     def _parse_docx(self, content: bytes) -> str:
         doc = docx.Document(io.BytesIO(content))
         return "\n\n".join(p.text for p in doc.paragraphs if p.text.strip())
