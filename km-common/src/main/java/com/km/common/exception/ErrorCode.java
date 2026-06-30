@@ -21,7 +21,8 @@ public enum ErrorCode {
     KM_DOC_004(1003004, "文件超出大小限制"),
     KM_DOC_005(1003005, "非FAILED状态不可重试"),
     KM_SEARCH_001(1004001, "检索失败"),
-    KM_CFG_001(1005001, "系统配置不存在");
+    KM_CFG_001(1005001, "系统配置不存在"),
+    KM_CFG_002(1005002, "模型配置连通性测试失败");
 
     private final int code;
     private final String message;
