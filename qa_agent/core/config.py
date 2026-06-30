@@ -1,6 +1,10 @@
 """全局配置 (人员 A 先写定，B/C 只读)"""
 
+from pathlib import Path
+
 from pydantic_settings import BaseSettings
+
+_ENV_FILE = str(Path(__file__).resolve().parent.parent / ".env")
 
 
 class Settings(BaseSettings):
@@ -26,7 +30,7 @@ class Settings(BaseSettings):
     default_rerank_threshold: float = 0.0
     retrieval_timeout: int = 10
 
-    model_config = {"env_file": (".env", "qa-agent/.env"), "extra": "ignore"}
+    model_config = {"env_file": _ENV_FILE, "extra": "ignore"}
 
 
 settings = Settings()
