@@ -1,5 +1,7 @@
 package com.powerreport.gateway.common;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.web.reactive.error.ErrorWebExceptionHandler;
 import org.springframework.context.support.DefaultMessageSourceResolvable;
@@ -15,6 +17,8 @@ import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
@@ -24,6 +28,8 @@ import java.util.stream.Collectors;
 @Order(-1)
 @Component
 public class GlobalExceptionHandler implements ErrorWebExceptionHandler {
+
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @Override
     public Mono<Void> handle(ServerWebExchange exchange, Throwable ex) {
@@ -48,12 +54,22 @@ public class GlobalExceptionHandler implements ErrorWebExceptionHandler {
 
         log.error("Gateway error: status={}, message={}", status, message, ex);
 
-        String body = String.format(
-                "{\"code\":%d,\"message\":\"%s\",\"data\":null}",
-                status, message
-        );
-        DataBuffer buffer = response.bufferFactory()
-                .wrap(body.getBytes(StandardCharsets.UTF_8));
+        // 使用 ObjectMapper 序列化 Map 生成标准 JSON，避免手动拼接导致特殊字符破坏 JSON 格式
+        Map<String, Object> bodyMap = new HashMap<>();
+        bodyMap.put("code", status);
+        bodyMap.put("message", message);
+        bodyMap.put("data", null);
+
+        byte[] bodyBytes;
+        try {
+            bodyBytes = objectMapper.writeValueAsBytes(bodyMap);
+        } catch (JsonProcessingException e) {
+            log.error("Failed to serialize error response", e);
+            bodyBytes = ("{\"code\":500,\"message\":\"服务器内部错误\",\"data\":null}")
+                    .getBytes(StandardCharsets.UTF_8);
+        }
+
+        DataBuffer buffer = response.bufferFactory().wrap(bodyBytes);
         return response.writeWith(Mono.just(buffer));
     }
 }
