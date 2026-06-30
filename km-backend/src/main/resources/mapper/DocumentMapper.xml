@@ -41,6 +41,14 @@
         WHERE id = #{id}
     </update>
 
+    <!-- 专用标签更新，仅改 tags_json，不与 updateStatus 混用 -->
+    <update id="updateTags">
+        UPDATE document
+        SET tags_json = #{tagsJson},
+            updated_at = NOW()
+        WHERE id = #{id}
+    </update>
+
     <delete id="deleteById">
         DELETE FROM document WHERE id = #{id}
     </delete>
