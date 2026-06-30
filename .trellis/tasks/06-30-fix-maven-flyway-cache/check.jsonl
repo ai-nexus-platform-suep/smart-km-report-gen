@@ -1,0 +1,2 @@
+{"file":".trellis/tasks/06-30-fix-maven-flyway-cache/research.md","reason":"Verification must confirm whether remaining diagnostics are dependency-cache, IDE annotation-processing, or Maven compile failures."}
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Backend quality context for avoiding unrelated source or configuration changes during verification."}
