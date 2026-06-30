@@ -6,7 +6,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 echo "==> 启动 Docker 中间件..."
-docker-compose up -d
+docker compose up -d
 
 echo "==> 等待 MySQL 就绪..."
 sleep 15

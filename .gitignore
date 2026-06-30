@@ -34,3 +34,10 @@ server.log
 server.err
 
 data/
+
+# Python (km-ai-service)
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
