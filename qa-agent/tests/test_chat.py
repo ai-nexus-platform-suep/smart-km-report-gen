@@ -148,6 +148,17 @@ class TestThinkingService:
         assert event["type"] == "thinking"
         assert event["step_type"] == "retrieve"
         assert event["elapsed_ms"] == 320
+        assert event["phase"] == "done"
+
+    def test_to_sse_event_keeps_start_phase(self):
+        event = to_sse_event({"type": "generate", "message": "正在生成回答", "phase": "start"})
+        assert event == {
+            "type": "thinking",
+            "step_type": "generate",
+            "message": "正在生成回答",
+            "elapsed_ms": None,
+            "phase": "start",
+        }
 
     def test_steps_total_time(self):
         steps = [
@@ -310,6 +321,7 @@ class TestABCIntegrationContracts:
 
         assert step_payload["type"] == "thinking"
         assert step_payload["step_type"] == "retrieve"
+        assert step_payload["phase"] == "done"
         assert "event_type" not in step_payload
         assert citation_payload["type"] == "citation"
         assert citation_payload["merged"] is True
@@ -348,11 +360,25 @@ class TestABCIntegrationContracts:
                 del agent_input, stream_mode
                 first_step = add_thinking_step([], "intent", "识别意图: KNOWLEDGE_QA")[0]
                 second_step = add_thinking_step([first_step], "generate", "回答生成完成")[1]
+                yield "custom", {
+                    "type": "thinking",
+                    "step_type": "intent",
+                    "message": "正在识别用户意图",
+                    "elapsed_ms": None,
+                    "phase": "start",
+                }
                 yield "updates", {
                     "intent": {
                         "intent": "KNOWLEDGE_QA",
                         "thinking_steps": [first_step],
                     }
+                }
+                yield "custom", {
+                    "type": "thinking",
+                    "step_type": "generate",
+                    "message": "正在生成回答",
+                    "elapsed_ms": None,
+                    "phase": "start",
                 }
                 yield "custom", {"delta": "答"}
                 yield "updates", {
@@ -385,6 +411,12 @@ class TestABCIntegrationContracts:
 
         assert thinking_payloads[0]["type"] == "thinking"
         assert thinking_payloads[0]["step_type"] == "intent"
+        assert [(payload["step_type"], payload["phase"]) for payload in thinking_payloads] == [
+            ("intent", "start"),
+            ("intent", "done"),
+            ("generate", "start"),
+            ("generate", "done"),
+        ]
         assert citation_payloads == [
             {"type": "citation", "citations": [{"doc_id": "d1", "indices": [1, 2], "doc_name": "A.pdf"}], "merged": True}
         ]

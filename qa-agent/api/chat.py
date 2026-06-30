@@ -93,6 +93,9 @@ async def _stream_chat(
             if mode == "custom":
                 if not isinstance(chunk, dict):
                     continue
+                if chunk.get("type") == "thinking":
+                    yield _sse_payload(SSEEventType.THINKING, chunk)
+                    continue
                 delta = chunk.get("delta") or ""
                 if not delta:
                     continue
