@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="page">
     <div class="page-header">
       <h2>知识库管理</h2>
@@ -17,7 +17,7 @@
       </el-select>
       <el-input
         v-model="searchKeyword"
-        placeholder="搜索知识库名称..."
+        placeholder="搜索知识库名称.."
         clearable
         style="width:280px"
         @input="onSearchInput"
@@ -56,9 +56,10 @@
           {{ formatTime(row.createdAt) }}
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="120" fixed="right">
+      <el-table-column label="操作" width="180" fixed="right">
         <template #default="{ row }">
-          <el-button text type="primary" size="small" @click="handleDelete(row)">删除</el-button>
+          <el-button text type="primary" size="small" @click="goToDocuments(row)">管理文档</el-button>
+          <el-button text type="danger" size="small" @click="handleDelete(row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -66,10 +67,13 @@
     <div class="pagination" v-if="total > 0">
       <el-pagination
         v-model:current-page="page"
-        :page-size="pageSize"
+        v-model:page-size="pageSize"
         :total="total"
-        layout="prev, pager, next, total"
+        :page-sizes="[10, 20, 50]"
+        layout="total, sizes, prev, pager, next"
+        background
         @current-change="fetchList"
+        @size-change="fetchList"
       />
     </div>
   </div>
@@ -103,7 +107,7 @@ function onSelectionChange(rows: any[]) {
 }
 
 async function handleBatchDelete() {
-  await ElMessageBox.confirm(`确定删除选中的 ${selectedIds.value.length} 个知识库吗？`, '批量删除', {
+  await ElMessageBox.confirm(`确定删除选中的${selectedIds.value.length}个知识库吗？`, '批量删除', {
     type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消',
   })
   await batchDeleteKnowledgeBase(selectedIds.value)
@@ -113,6 +117,10 @@ async function handleBatchDelete() {
 }
 
 const handleCreate = () => router.push('/knowledge/create')
+
+function goToDocuments(row: any) {
+  router.push({ name: 'DocumentList', params: { kbId: row.id }, query: { name: row.name } })
+}
 
 async function fetchList() {
   loading.value = true
