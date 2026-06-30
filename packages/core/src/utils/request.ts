@@ -4,10 +4,26 @@ import { CODE } from '../constants'
 
 const BASE_URL = import.meta.env.VITE_API_BASE || ''
 
+function quoteUnsafeJsonNumbers(json: string) {
+  return json
+    .replace(/(:\s*)(-?\d{16,})(\s*[,}])/g, '$1"$2"$3')
+    .replace(/([\[,]\s*)(-?\d{16,})(\s*[,\]])/g, '$1"$2"$3')
+}
+
 const instance: AxiosInstance = axios.create({
   baseURL: BASE_URL,
   timeout: 30000,
   headers: { 'Content-Type': 'application/json' },
+  transformResponse: [
+    (data) => {
+      if (typeof data !== 'string' || !data) return data
+      try {
+        return JSON.parse(quoteUnsafeJsonNumbers(data))
+      } catch {
+        return data
+      }
+    },
+  ],
 })
 
 // 请求拦截：自动带 token

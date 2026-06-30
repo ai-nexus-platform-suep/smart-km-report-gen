@@ -1,4 +1,9 @@
 import { setupWorker } from 'msw/browser'
-import { handlers } from './handlers'
+import { createHandlers } from './handlers'
+import type { MockModule } from './handlers'
 
-export const worker = setupWorker(...handlers)
+export function createWorker(modules?: MockModule[]) {
+  return setupWorker(...createHandlers(modules))
+}
+
+export const worker = createWorker()

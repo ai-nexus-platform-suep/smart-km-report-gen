@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { ChatLineSquare, Document, Files, TrendCharts } from '@element-plus/icons-vue'
+import { Calendar, Files, TrendCharts } from '@element-plus/icons-vue'
 import { getQaStats, type QaStats } from '../../api'
 
 const loading = ref(false)
@@ -12,9 +12,8 @@ const stats = ref<QaStats>({
 })
 
 const cards = computed(() => [
-  { label: '会话总数', value: stats.value.totalConversations, icon: ChatLineSquare, tone: 'blue' },
-  { label: '消息总数', value: stats.value.totalMessages, icon: Files, tone: 'green' },
-  { label: '引用片段', value: stats.value.totalCitations, icon: Document, tone: 'amber' },
+  { label: '知识问答总次数', value: stats.value.totalMessages, icon: Files, tone: 'green' },
+  { label: '趋势天数', value: stats.value.trend?.length ?? 0, icon: Calendar, tone: 'blue' },
 ])
 
 async function loadStats() {
@@ -38,7 +37,7 @@ onMounted(loadStats)
       <div>
         <p>问答统计</p>
         <h1>智能问答运行概览</h1>
-        <span>用于观察会话规模、消息数量和引用片段使用情况。</span>
+        <span>用于观察 Spring Boot 统计接口返回的知识问答总次数和近 30 天趋势。</span>
       </div>
       <el-button :icon="TrendCharts" @click="loadStats">刷新</el-button>
     </header>
@@ -55,7 +54,7 @@ onMounted(loadStats)
 
     <section class="panel">
       <h2>联调说明</h2>
-      <p>当前统计数据来自 <code>GET /api/admin/stats</code>。后端完成后只要保持字段一致，页面无需改动。</p>
+      <p>当前统计数据来自 <code>GET /api/stats/qa/overview</code>，返回字段为 <code>totalCount</code> 与 <code>trend</code>。</p>
     </section>
   </div>
 </template>

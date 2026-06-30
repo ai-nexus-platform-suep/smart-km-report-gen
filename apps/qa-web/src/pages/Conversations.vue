@@ -18,15 +18,17 @@ import {
   deleteConversation,
   getQaStats,
   listConversations,
+  updateConversationTitle,
   type ConversationView,
   type QaStats,
 } from '../api'
 
 const keyword = ref('')
 const status = ref('all')
-const activeRowId = ref<number | null>(null)
+const activeRowId = ref<string | null>(null)
 const loading = ref(false)
 const rows = ref<ConversationView[]>([])
+const conversationTotal = ref(0)
 const qaStats = ref<QaStats>({
   totalConversations: 0,
   totalMessages: 0,
@@ -38,7 +40,7 @@ const router = useRouter()
 const filteredRows = computed(() => {
   const text = keyword.value.trim()
   return rows.value.filter((row) => {
-    const matchesKeyword = !text || `${row.title}${row.description}${row.knowledgeBases.join('')}`.includes(text)
+    const matchesKeyword = !text || `${row.id}${row.title}${row.description}`.includes(text)
     const matchesStatus = status.value === 'all' || row.status === status.value
     return matchesKeyword && matchesStatus
   })
@@ -47,14 +49,13 @@ const filteredRows = computed(() => {
 // 右侧详情面板跟随列表选中项变化。
 const activeRow = computed(() => rows.value.find((row) => row.id === activeRowId.value) ?? rows.value[0])
 
-// 顶部统计卡片，后续可以替换为 API_QA.ADMIN.STATS 返回值。
 const stats = computed(() => [
-  { label: '会话总数', value: qaStats.value.totalConversations || rows.value.length, icon: ChatLineSquare, tone: 'blue' },
-  { label: '消息总数', value: qaStats.value.totalMessages, icon: Files, tone: 'green' },
-  { label: '引用片段', value: qaStats.value.totalCitations, icon: Document, tone: 'amber' },
+  { label: '会话总数', value: conversationTotal.value || rows.value.length, icon: ChatLineSquare, tone: 'blue' },
+  { label: '知识问答次数', value: qaStats.value.totalMessages, icon: Files, tone: 'green' },
+  { label: '空会话', value: rows.value.filter((row) => row.status === 'empty').length, icon: Document, tone: 'amber' },
 ])
 
-function selectRow(id: number) {
+function selectRow(id: string) {
   activeRowId.value = id
 }
 
@@ -66,6 +67,7 @@ async function loadPageData() {
       getQaStats(),
     ])
     rows.value = conversationResult.items
+    conversationTotal.value = conversationResult.total
     qaStats.value = statsResult
     activeRowId.value = rows.value[0]?.id ?? null
   } catch (error) {
@@ -88,7 +90,30 @@ async function handleCreateConversation() {
   }
 }
 
-function openConversation(id: number) {
+async function handleRenameConversation(row: ConversationView) {
+  try {
+    const nextTitle = await ElMessageBox.prompt('请输入新的会话标题', '重命名会话', {
+      inputValue: row.title,
+      inputValidator(value) {
+        return Boolean(value.trim()) || '标题不能为空'
+      },
+      confirmButtonText: '保存',
+      cancelButtonText: '取消',
+    })
+    const title = nextTitle.value.trim()
+    const updated = await updateConversationTitle(row.id, title)
+    rows.value = rows.value.map((item) => (item.id === row.id ? updated : item))
+    activeRowId.value = updated.id
+    ElMessage.success('会话标题已更新')
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error(error)
+      ElMessage.error('重命名失败。')
+    }
+  }
+}
+
+function openConversation(id: string) {
   router.push({ path: '/chat', query: { conversationId: id } })
 }
 
@@ -123,7 +148,7 @@ onMounted(() => {
       <div>
         <p class="eyebrow">会话管理</p>
         <h1>智能问答工作台</h1>
-        <span>管理技术监督问答记录、引用来源和知识库上下文。</span>
+        <span>严格对接 qa-agent 的会话列表、消息数量、最近更新时间与删除/重命名能力。</span>
       </div>
       <el-button type="primary" :icon="Plus" :loading="loading" @click="handleCreateConversation">新建对话</el-button>
     </header>
@@ -150,14 +175,14 @@ onMounted(() => {
             v-model="keyword"
             class="search-input"
             :prefix-icon="Search"
-            placeholder="搜索会话、知识库、监督主题"
+            placeholder="搜索会话标题或会话 ID"
           />
           <el-segmented
             v-model="status"
             :options="[
               { label: '全部', value: 'all' },
               { label: '进行中', value: 'active' },
-              { label: '已归档', value: 'archived' },
+              { label: '空会话', value: 'empty' },
             ]"
           />
         </div>
@@ -165,9 +190,9 @@ onMounted(() => {
         <!-- 表头采用自定义 grid，方便后续改成更像 FastGPT 的工作台列表。 -->
         <div class="table-head">
           <span>会话</span>
-          <span>知识库</span>
+          <span>会话ID</span>
           <span>统计</span>
-          <span>负责人</span>
+          <span>状态</span>
           <span>操作</span>
         </div>
 
@@ -194,21 +219,18 @@ onMounted(() => {
               </div>
             </div>
 
-            <div class="kb-tags">
-              <el-tag v-for="kb in row.knowledgeBases" :key="kb" size="small" effect="plain">
-                {{ kb }}
-              </el-tag>
+            <div class="session-id">
+              #{{ row.id }}
             </div>
 
             <div class="row-stats">
               <span>{{ row.messageCount }} 条消息</span>
-              <span>{{ row.citationCount }} 个引用</span>
+              <span>创建于 {{ row.createdAt ? new Date(row.createdAt).toLocaleDateString('zh-CN') : '--' }}</span>
             </div>
 
             <div class="owner">
-              <span>{{ row.owner }}</span>
               <el-tag size="small" :type="row.status === 'active' ? 'success' : 'info'">
-                {{ row.status === 'active' ? '进行中' : '已归档' }}
+                {{ row.status === 'active' ? '已有消息' : '空会话' }}
               </el-tag>
             </div>
 
@@ -217,7 +239,7 @@ onMounted(() => {
                 <el-button text circle :icon="View" @click.stop="openConversation(row.id)" />
               </el-tooltip>
               <el-tooltip content="重命名" placement="top">
-                <el-button text circle :icon="EditPen" />
+                <el-button text circle :icon="EditPen" @click.stop="handleRenameConversation(row)" />
               </el-tooltip>
               <el-tooltip content="删除" placement="top">
                 <el-button text circle :icon="Delete" @click.stop="handleDeleteConversation(row)" />
@@ -247,12 +269,12 @@ onMounted(() => {
             <dd>{{ activeRow.updatedAt }}</dd>
           </div>
           <div>
-            <dt>关联知识库</dt>
-            <dd>{{ activeRow.knowledgeBases.join('、') }}</dd>
+            <dt>会话 ID</dt>
+            <dd>#{{ activeRow.id }}</dd>
           </div>
           <div>
-            <dt>消息 / 引用</dt>
-            <dd>{{ activeRow.messageCount }} / {{ activeRow.citationCount }}</dd>
+            <dt>消息数量</dt>
+            <dd>{{ activeRow.messageCount }}</dd>
           </div>
         </dl>
 
@@ -263,7 +285,7 @@ onMounted(() => {
 
         <div class="detail-actions">
           <el-button type="primary" plain :icon="View" @click="openConversation(activeRow.id)">打开会话</el-button>
-          <el-button :icon="EditPen">编辑信息</el-button>
+          <el-button :icon="EditPen" @click="handleRenameConversation(activeRow)">重命名</el-button>
         </div>
       </aside>
     </section>
