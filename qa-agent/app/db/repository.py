@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.constants import (
     DEFAULT_TITLE,
-    DEFAULT_USER_ID,
     GENERATE_STATUS_COMPLETED,
     ROLE_USER,
     STATUS_ACTIVE,
@@ -27,7 +26,7 @@ def _build_title_from_content(content: str) -> str:
 
 async def create_conversation(
     session: AsyncSession,
-    user_id: int = DEFAULT_USER_ID,
+    user_id: int,
     title: str | None = None,
 ) -> QaSession:
     now = datetime.now()
@@ -49,7 +48,7 @@ async def create_conversation(
 
 async def list_conversations(
     session: AsyncSession,
-    user_id: int = DEFAULT_USER_ID,
+    user_id: int,
     page: int = 1,
     size: int = 20,
 ) -> tuple[list[QaSession], int]:
@@ -143,7 +142,7 @@ async def save_message(
     role: str,
     content: str,
     *,
-    user_id: int = DEFAULT_USER_ID,
+    user_id: int,
     intent_type: str | None = None,
     thinking_steps: str | None = None,
     citations: str | None = None,

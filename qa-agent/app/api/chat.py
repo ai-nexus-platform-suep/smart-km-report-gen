@@ -3,14 +3,13 @@
 import json
 from collections.abc import AsyncIterator
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
 from .schemas import ChatReq, ChatTestReq, ChatTestResp
 from ..core.constants import SSEEventType
 from ..db.constants import (
-    DEFAULT_USER_ID,
     GENERATE_STATUS_COMPLETED,
     GENERATE_STATUS_FAILED,
     ROLE_ASSISTANT,
@@ -44,8 +43,8 @@ def _test_history_messages(req: ChatTestReq) -> list[dict]:
 async def _stream_chat(
     req: ChatReq,
     db: AsyncSession,
+    user_id: int,
 ) -> AsyncIterator[dict]:
-    user_id = req.user_id or DEFAULT_USER_ID
     conversation = await get_conversation(db, req.conversation_id)
     if conversation is None:
         yield _sse_payload(SSEEventType.ERROR, {"message": "会话不存在"})
@@ -197,7 +196,10 @@ async def _stream_chat(
 
 
 @router.post("/chat")
-async def chat(req: ChatReq) -> EventSourceResponse:
+async def chat(
+    req: ChatReq,
+    x_user_id: int = Header(alias="X-User-Id"),
+) -> EventSourceResponse:
     if not req.question.strip():
         raise HTTPException(status_code=400, detail="问题不能为空")
 
@@ -211,7 +213,7 @@ async def chat(req: ChatReq) -> EventSourceResponse:
 
         async with session_factory() as db:
             try:
-                async for event in _stream_chat(req, db):
+                async for event in _stream_chat(req, db, x_user_id):
                     yield event
                 await db.commit()
             except Exception:
@@ -222,11 +224,14 @@ async def chat(req: ChatReq) -> EventSourceResponse:
 
 
 @router.post("/chat/test", response_model=ChatTestResp)
-async def chat_test(req: ChatTestReq) -> ChatTestResp:
+async def chat_test(
+    req: ChatTestReq,
+    x_user_id: int = Header(alias="X-User-Id"),
+) -> ChatTestResp:
     if not req.question.strip():
         raise HTTPException(status_code=400, detail="问题不能为空")
 
-    user_id = req.user_id or DEFAULT_USER_ID
+    user_id = req.user_id or x_user_id
     model_config = await fetch_llm_config(user_id=user_id)
     agent_input = {
         "messages": _test_history_messages(req),
