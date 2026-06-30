@@ -5,17 +5,17 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>3.3.0</version>
+        <version>3.3.6</version>
         <relativePath/> <!-- lookup parent from repository -->
     </parent>
     <groupId>com.myenglish</groupId>
-    <artifactId>tech-supervision-platform</artifactId>
+    <artifactId>smart-km-report-gen</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>smart-km-report-gen</name>
     <description>smart-km-report-gen</description>
     <packaging>pom</packaging>
     <modules>
-        <module>qa-common</module>
+        <module>common</module>
         <module>qa-chat-service</module>
         <module>gateway</module>
         <module>auth</module>
@@ -44,7 +44,7 @@
             </dependency>
             <dependency>
                 <groupId>com.myenglish</groupId>
-                <artifactId>qa-common</artifactId>
+                <artifactId>common</artifactId>
                 <version>${project.version}</version>
             </dependency>
         </dependencies>
