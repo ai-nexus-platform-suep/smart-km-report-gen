@@ -1,4 +1,3 @@
-import { apiDownload, apiRequest, enableMock } from "@/api/http";
 import { mockDb } from "@/api/mockDb";
 import type {
   CreateReportPayload,
@@ -19,134 +18,12 @@ import { renumberOutline } from "@/utils/outline";
 const wait = (ms = 300) => new Promise((resolve) => window.setTimeout(resolve, ms));
 const sameId = (a?: EntityId, b?: EntityId) => String(a) === String(b);
 
-interface BackendOutlineNode {
-  id?: string;
-  number: string;
-  title: string;
-  level: number;
-  promptHint?: string;
-  children?: BackendOutlineNode[];
-}
-
-interface BackendOutlineGenerateData {
-  tempId: string;
-  source: "AI" | "LOCAL_TEMPLATE";
-  expireSeconds: number;
-  outline: BackendOutlineNode[];
-}
-
-interface BackendOutlineConfirmData {
-  reportId: string;
-  status: string;
-  outlineCount: number;
-  outline: BackendOutlineNode[];
-}
-
-interface BackendExportData {
-  fileId: string;
-  reportId: string;
-  fileName: string;
-  fileSize: number;
-  sha256: string;
-  downloadUrl: string;
-}
-
-interface ExportDocxOptions {
-  fileName?: string;
-}
-
 function touch(report: ReportDetail) {
   report.updatedAt = new Date().toISOString();
 }
 
 function findReport(id: EntityId) {
   return mockDb.data.reports.find((item) => sameId(item.id, id) && item.status !== "DELETED");
-}
-
-function upsertReport(report: ReportDetail, replacedId?: EntityId) {
-  const db = mockDb.data;
-  db.reports = db.reports.filter((item) => !sameId(item.id, report.id) && !sameId(item.id, replacedId));
-  db.reports.unshift(report);
-  mockDb.save(db);
-}
-
-function toGeneratePayload(report: Report | CreateReportPayload) {
-  return {
-    reportType: report.type,
-    subject: report.subject,
-    name: report.name,
-    specialty: report.specialty,
-    powerPlant: report.powerPlant,
-    reportYear: report.reportYear,
-    context: {}
-  };
-}
-
-function flattenBackendOutline(nodes: BackendOutlineNode[], reportId: EntityId, parentId?: EntityId, result: OutlineNode[] = []) {
-  nodes.forEach((node, index) => {
-    const nodeId = node.id || `${parentId ?? "root"}-${index + 1}`;
-    result.push({
-      id: nodeId,
-      reportId,
-      parentId,
-      level: node.level,
-      sortOrder: index + 1,
-      number: node.number,
-      title: node.title,
-      promptHint: node.promptHint
-    });
-    if (node.children?.length) flattenBackendOutline(node.children, reportId, nodeId, result);
-  });
-  return result;
-}
-
-function nestOutline(outline: OutlineNode[]) {
-  const byParent = new Map<string, OutlineNode[]>();
-  outline.forEach((node) => {
-    const key = node.parentId === undefined ? "ROOT" : String(node.parentId);
-    byParent.set(key, [...(byParent.get(key) || []), node]);
-  });
-
-  const build = (parentKey = "ROOT"): BackendOutlineNode[] =>
-    (byParent.get(parentKey) || [])
-      .sort((a, b) => a.sortOrder - b.sortOrder)
-      .map((node) => ({
-        number: node.number,
-        title: node.title,
-        level: node.level,
-        promptHint: node.promptHint,
-        children: build(String(node.id))
-      }));
-
-  return build();
-}
-
-function createLocalDraft(payload: CreateReportPayload, generated: BackendOutlineGenerateData) {
-  const now = new Date().toISOString();
-  const outline = flattenBackendOutline(generated.outline, generated.tempId);
-  const report: ReportDetail = {
-    id: generated.tempId,
-    tempId: generated.tempId,
-    outlineSource: generated.source,
-    outlineExpireSeconds: generated.expireSeconds,
-    ...payload,
-    status: "OUTLINE_READY",
-    ownerId: 1,
-    totalSections: outline.length,
-    completedSections: 0,
-    createdAt: now,
-    updatedAt: now,
-    outline,
-    sections: mockDb.outlineToSections(outline),
-    files: []
-  };
-  upsertReport(report);
-  return report;
-}
-
-function normalizeBackendStatus(status: string): ReportStatus {
-  const known: ReportStatus[] = ["DRAFT", "OUTLINE_READY", "GENERATING", "CONTENT_READY", "EXPORTING", "EXPORTED", "FAILED", "DELETED"];
-  return known.includes(status as ReportStatus) ? (status as ReportStatus) : "DRAFT";
 }
 
 export async function listReports(query: ReportQuery): Promise<PageResult<Report>> {
@@ -160,8 +37,13 @@ export async function listReports(query: ReportQuery): Promise<PageResult<Report
       (report) =>
         report.name.toLowerCase().includes(keyword) ||
         report.subject.toLowerCase().includes(keyword) ||
+        report.specialty.toLowerCase().includes(keyword) ||
         report.powerPlant.toLowerCase().includes(keyword)
     );
+  }
+  if (query.specialty) {
+    const specialty = query.specialty.toLowerCase();
+    items = items.filter((report) => report.specialty.toLowerCase().includes(specialty));
   }
   if (query.type) items = items.filter((report) => report.type === query.type);
   if (query.status) items = items.filter((report) => report.status === query.status);
@@ -179,14 +61,6 @@ export async function listReports(query: ReportQuery): Promise<PageResult<Report
 }
 
 export async function createReport(payload: CreateReportPayload) {
-  if (!enableMock) {
-    const generated = await apiRequest<BackendOutlineGenerateData>("/api/reports/outline/generate", {
-      method: "POST",
-      body: JSON.stringify(toGeneratePayload(payload))
-    });
-    return createLocalDraft(payload, generated);
-  }
-
   await wait();
   const db = mockDb.data;
   const id = mockDb.nextId(db);
@@ -230,24 +104,6 @@ export async function generateOutline(id: EntityId) {
   const report = db.reports.find((item) => sameId(item.id, id));
   if (!report) throw new Error("报告不存在");
 
-  if (!enableMock) {
-    const generated = await apiRequest<BackendOutlineGenerateData>("/api/reports/outline/generate", {
-      method: "POST",
-      body: JSON.stringify(toGeneratePayload(report))
-    });
-    report.tempId = generated.tempId;
-    report.outlineSource = generated.source;
-    report.outlineExpireSeconds = generated.expireSeconds;
-    report.outline = flattenBackendOutline(generated.outline, report.id);
-    report.sections = mockDb.outlineToSections(report.outline);
-    report.status = "OUTLINE_READY";
-    report.totalSections = report.sections.length;
-    report.completedSections = 0;
-    touch(report);
-    mockDb.save(db);
-    return report;
-  }
-
   await wait(550);
   const baseId = mockDb.nextId(db) + 100;
   report.outline = mockDb.seedOutline(report.id, baseId, report.type);
@@ -265,31 +121,6 @@ export async function saveOutline(id: EntityId, outline: OutlineNode[]) {
   const report = db.reports.find((item) => sameId(item.id, id));
   if (!report) throw new Error("报告不存在");
 
-  if (!enableMock) {
-    if (!report.tempId) throw new Error("缺少大纲临时 ID，请重新生成大纲");
-    const confirmed = await apiRequest<BackendOutlineConfirmData>("/api/reports/outline/confirm", {
-      method: "POST",
-      body: JSON.stringify({
-        tempId: report.tempId,
-        ...toGeneratePayload(report),
-        outline: nestOutline(renumberOutline(outline))
-      })
-    });
-    const confirmedOutline = flattenBackendOutline(confirmed.outline, confirmed.reportId);
-    const nextReport: ReportDetail = {
-      ...report,
-      id: confirmed.reportId,
-      status: normalizeBackendStatus(confirmed.status),
-      totalSections: confirmed.outlineCount || confirmedOutline.length,
-      completedSections: 0,
-      updatedAt: new Date().toISOString(),
-      outline: confirmedOutline,
-      sections: mockDb.outlineToSections(confirmedOutline)
-    };
-    upsertReport(nextReport, id);
-    return nextReport;
-  }
-
   await wait();
   report.outline = renumberOutline(outline);
   report.sections = mockDb.outlineToSections(report.outline);
@@ -306,7 +137,7 @@ export async function startGenerate(id: EntityId) {
   const db = mockDb.data;
   const report = db.reports.find((item) => sameId(item.id, id));
   if (!report) throw new Error("报告不存在");
-  report.status = "GENERATING";
+  report.status = "CONTENT_GENERATING";
   touch(report);
   mockDb.save(db);
 }
@@ -441,37 +272,11 @@ export async function regenerateSection(reportId: EntityId, sectionId: EntityId)
   return section;
 }
 
-export async function exportDocx(reportId: EntityId, options: ExportDocxOptions = {}) {
+export async function exportDocx(reportId: EntityId) {
   const db = mockDb.data;
   const report = db.reports.find((item) => sameId(item.id, reportId));
   if (!report) throw new Error("报告不存在");
-  const fileName = normalizeDocxFileName(options.fileName, report.name);
-
-  if (!enableMock) {
-    const exported = await apiRequest<BackendExportData>(`/api/reports/${encodeURIComponent(String(reportId))}/export/docx`, {
-      method: "POST",
-      body: JSON.stringify({
-        fileName,
-        figureNumberingMode: "GLOBAL",
-        tableNumberingMode: "SECTION",
-        includeEmptySections: true
-      })
-    });
-    const file: ReportFile = {
-      id: exported.fileId,
-      reportId: exported.reportId,
-      fileName: normalizeDocxFileName(exported.fileName || fileName, report.name),
-      fileSize: exported.fileSize,
-      sha256: exported.sha256,
-      downloadUrl: exported.downloadUrl,
-      createdAt: new Date().toISOString()
-    };
-    report.status = "EXPORTED";
-    report.files.unshift(file);
-    touch(report);
-    mockDb.save(db);
-    return file;
-  }
+  const fileName = normalizeDocxFileName(report.name);
 
   await wait(800);
   report.status = "EXPORTED";
@@ -487,10 +292,6 @@ export async function downloadFile(reportId: EntityId, fileId: EntityId) {
   const report = mockDb.data.reports.find((item) => sameId(item.id, reportId));
   const file = report?.files.find((item) => sameId(item.id, fileId));
   if (!report || !file) throw new Error("文件不存在或已失效");
-
-  if (!enableMock) {
-    return apiDownload(file.downloadUrl || `/api/reports/files/${encodeURIComponent(String(fileId))}/download`);
-  }
 
   await wait(180);
   return createReportDocxBlob(report);
