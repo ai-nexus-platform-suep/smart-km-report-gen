@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>com.myenglish</groupId>
-        <artifactId>tech-supervision-platform</artifactId>
+        <artifactId>smart-km-report-gen</artifactId>
         <version>0.0.1-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
@@ -12,8 +12,8 @@
     <groupId>com.myenglish</groupId>
     <artifactId>common</artifactId>
     <version>0.0.1-SNAPSHOT</version>
-    <name>qa-common</name>
-    <description>qa-common</description>
+    <name>common</name>
+    <description>common</description>
     <properties>
         <java.version>17</java.version>
     </properties>
