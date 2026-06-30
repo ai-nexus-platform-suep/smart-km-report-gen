@@ -27,11 +27,6 @@ public class HistoryController {
         return ApiResponse.success(historyService.listReports(query));
     }
 
-    @GetMapping("/search")
-    public ApiResponse<ReportHistoryPageResponse> searchReports(@ModelAttribute ReportHistoryQueryRequest query) {
-        return ApiResponse.success(historyService.listReports(query));
-    }
-
     @GetMapping("/status-options")
     public ApiResponse<List<OptionResponse>> listStatusOptions() {
         return ApiResponse.success(historyService.listStatusOptions());
