@@ -1,4 +1,4 @@
-import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
+﻿import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { baseRoutes, createAuthGuard } from '@platform/ui'
 import AuthGuard from '@platform/ui/src/components/AuthGuard.vue'
 import { h } from 'vue'
@@ -13,6 +13,12 @@ const moduleRoutes: RouteRecordRaw[] = [
     name: 'Knowledge',
     component: () => import('../pages/KnowledgeList.vue'),
     meta: { title: '知识库管理' },
+  },
+  {
+    path: '/knowledge/create',
+    name: 'KnowledgeCreate',
+    component: () => import('../pages/KnowledgeCreate.vue'),
+    meta: { title: '新建知识库' },
   },
   {
     path: '/knowledge/:kbId/documents',
@@ -64,7 +70,7 @@ function guarded(name: string) {
 
 function Placeholder(name: string) {
   return h('div', { style: 'padding:40px;text-align:center;color:#999' }, [
-    h('h2', '🔧 ' + name),
+    h('h2', '\u{1F4E1} ' + name),
     h('p', '此页面待开发'),
   ])
 }

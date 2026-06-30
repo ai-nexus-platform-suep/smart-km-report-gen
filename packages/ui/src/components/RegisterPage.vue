@@ -127,13 +127,15 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
+import type { FormInstance } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
-import { setToken, setStoredUser, apiPost } from '@platform/core'
+import { apiPost } from '@platform/core'
 import { API_QA } from '@platform/core'
-import type { RegisterRequest, LoginResponse, ApiResponse } from '@platform/core/types'
+import type { RegisterRequest, ApiResponse } from '@platform/core/types'
 
 const router = useRouter()
+const formRef = ref<FormInstance>()
 const loading = ref(false)
 
 const form = reactive<RegisterRequest & { confirmPassword: string }>({
@@ -165,17 +167,18 @@ const rules = {
 }
 
 async function handleRegister() {
+  const valid = await formRef.value?.validate().catch(() => false)
+  if (!valid) return
+
   loading.value = true
   try {
-    const res = await apiPost<ApiResponse<LoginResponse>>(API_QA.AUTH.REGISTER, {
+    const res = await apiPost<ApiResponse<null>>(API_QA.AUTH.REGISTER, {
       username: form.username,
       password: form.password,
     })
     if (res.data.code === 200) {
-      setToken(res.data.data.token)
-      setStoredUser(res.data.data.user)
-      ElMessage.success('注册成功')
-      router.push('/')
+      ElMessage.success('注册成功，请登录')
+      router.push('/login')
     } else {
       ElMessage.error(res.data.message || '注册失败')
     }

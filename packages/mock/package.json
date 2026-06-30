@@ -4,6 +4,7 @@
   "private": true,
   "main": "./src/index.ts",
   "dependencies": {
+    "@platform/core": "workspace:*",
     "msw": "^2.7.0"
   }
 }

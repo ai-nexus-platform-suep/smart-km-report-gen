@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { useRouter } from 'vue-router'
 import {
   ChatLineSquare,
   Clock,
@@ -11,76 +13,31 @@ import {
   Search,
   View,
 } from '@element-plus/icons-vue'
+import {
+  createConversation,
+  deleteConversation,
+  getQaStats,
+  listConversations,
+  type ConversationView,
+  type QaStats,
+} from '../api'
 
-type ConversationRow = {
-  id: number
-  title: string
-  description: string
-  knowledgeBases: string[]
-  messageCount: number
-  citationCount: number
-  owner: string
-  updatedAt: string
-  status: 'active' | 'archived'
-}
-
-// 当前页面先使用静态演示数据，后续替换为 API_QA.CHAT.LIST 的列表结果。
 const keyword = ref('')
 const status = ref('all')
-const activeRowId = ref(1)
-
-// 会话管理列表，字段设计贴近真实业务：会话、知识库、引用数、负责人、状态。
-const rows: ConversationRow[] = [
-  {
-    id: 1,
-    title: '汽轮机检修周期判断',
-    description: '围绕运行小时数、启停次数、设备缺陷和规程条款进行问答。',
-    knowledgeBases: ['设备检修', '技术监督'],
-    messageCount: 18,
-    citationCount: 7,
-    owner: '王工',
-    updatedAt: '2026-06-29 09:42',
-    status: 'active',
-  },
-  {
-    id: 2,
-    title: '锅炉安全规范相关问题',
-    description: '检索锅炉检修前工作票、隔离措施、危险点预控要求。',
-    knowledgeBases: ['安全规程'],
-    messageCount: 12,
-    citationCount: 5,
-    owner: '李工',
-    updatedAt: '2026-06-28 17:10',
-    status: 'active',
-  },
-  {
-    id: 3,
-    title: '电气设备试验报告解释',
-    description: '结合预防性试验规程解释绝缘电阻、介损和结论口径。',
-    knowledgeBases: ['电气设备', '报告规范'],
-    messageCount: 9,
-    citationCount: 4,
-    owner: '赵工',
-    updatedAt: '2026-06-27 14:36',
-    status: 'active',
-  },
-  {
-    id: 4,
-    title: '煤库存审计口径确认',
-    description: '用于说明库存盘点、异常波动、佐证材料与监督建议。',
-    knowledgeBases: ['经营监督'],
-    messageCount: 6,
-    citationCount: 3,
-    owner: '陈工',
-    updatedAt: '2026-06-24 11:08',
-    status: 'archived',
-  },
-]
+const activeRowId = ref<number | null>(null)
+const loading = ref(false)
+const rows = ref<ConversationView[]>([])
+const qaStats = ref<QaStats>({
+  totalConversations: 0,
+  totalMessages: 0,
+  totalCitations: 0,
+})
+const router = useRouter()
 
 // 顶部搜索和状态筛选，后续可以迁移为后端分页查询参数。
 const filteredRows = computed(() => {
   const text = keyword.value.trim()
-  return rows.filter((row) => {
+  return rows.value.filter((row) => {
     const matchesKeyword = !text || `${row.title}${row.description}${row.knowledgeBases.join('')}`.includes(text)
     const matchesStatus = status.value === 'all' || row.status === status.value
     return matchesKeyword && matchesStatus
@@ -88,18 +45,75 @@ const filteredRows = computed(() => {
 })
 
 // 右侧详情面板跟随列表选中项变化。
-const activeRow = computed(() => rows.find((row) => row.id === activeRowId.value) ?? rows[0])
+const activeRow = computed(() => rows.value.find((row) => row.id === activeRowId.value) ?? rows.value[0])
 
 // 顶部统计卡片，后续可以替换为 API_QA.ADMIN.STATS 返回值。
 const stats = computed(() => [
-  { label: '会话总数', value: rows.length, icon: ChatLineSquare, tone: 'blue' },
-  { label: '消息总数', value: rows.reduce((sum, row) => sum + row.messageCount, 0), icon: Files, tone: 'green' },
-  { label: '引用片段', value: rows.reduce((sum, row) => sum + row.citationCount, 0), icon: Document, tone: 'amber' },
+  { label: '会话总数', value: qaStats.value.totalConversations || rows.value.length, icon: ChatLineSquare, tone: 'blue' },
+  { label: '消息总数', value: qaStats.value.totalMessages, icon: Files, tone: 'green' },
+  { label: '引用片段', value: qaStats.value.totalCitations, icon: Document, tone: 'amber' },
 ])
 
 function selectRow(id: number) {
   activeRowId.value = id
 }
+
+async function loadPageData() {
+  loading.value = true
+  try {
+    const [conversationResult, statsResult] = await Promise.all([
+      listConversations({ page: 1, size: 50, user_id: 1 }),
+      getQaStats(),
+    ])
+    rows.value = conversationResult.items
+    qaStats.value = statsResult
+    activeRowId.value = rows.value[0]?.id ?? null
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('会话管理数据加载失败。')
+  } finally {
+    loading.value = false
+  }
+}
+
+async function handleCreateConversation() {
+  try {
+    const conversation = await createConversation('新对话')
+    rows.value = [conversation, ...rows.value]
+    activeRowId.value = conversation.id
+    await router.push({ path: '/chat', query: { conversationId: conversation.id } })
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('新建对话失败。')
+  }
+}
+
+function openConversation(id: number) {
+  router.push({ path: '/chat', query: { conversationId: id } })
+}
+
+async function handleDeleteConversation(row: ConversationView) {
+  try {
+    await ElMessageBox.confirm(`确定删除「${row.title}」吗？`, '删除会话', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+    })
+    await deleteConversation(row.id)
+    rows.value = rows.value.filter((item) => item.id !== row.id)
+    activeRowId.value = rows.value[0]?.id ?? null
+    ElMessage.success('会话已删除')
+  } catch (error) {
+    if (error !== 'cancel') {
+      console.error(error)
+      ElMessage.error('删除失败。')
+    }
+  }
+}
+
+onMounted(() => {
+  loadPageData()
+})
 </script>
 
 <template>
@@ -111,7 +125,7 @@ function selectRow(id: number) {
         <h1>智能问答工作台</h1>
         <span>管理技术监督问答记录、引用来源和知识库上下文。</span>
       </div>
-      <el-button type="primary" :icon="Plus">新建对话</el-button>
+      <el-button type="primary" :icon="Plus" :loading="loading" @click="handleCreateConversation">新建对话</el-button>
     </header>
 
     <!-- 总览统计：让管理页一眼看到问答使用情况。 -->
@@ -129,7 +143,7 @@ function selectRow(id: number) {
 
     <!-- 主体：左侧列表管理，右侧展示当前会话详情。 -->
     <section class="conversation-layout">
-      <main class="conversation-table-panel">
+      <main v-loading="loading" class="conversation-table-panel">
         <!-- 工具栏：搜索、筛选，后续可扩展时间排序和知识库筛选。 -->
         <div class="toolbar">
           <el-input
@@ -158,6 +172,7 @@ function selectRow(id: number) {
         </div>
 
         <div class="conversation-rows">
+          <el-empty v-if="!filteredRows.length" description="暂无匹配会话" />
           <article
             v-for="row in filteredRows"
             :key="row.id"
@@ -199,13 +214,13 @@ function selectRow(id: number) {
 
             <div class="row-actions">
               <el-tooltip content="查看" placement="top">
-                <el-button text circle :icon="View" />
+                <el-button text circle :icon="View" @click.stop="openConversation(row.id)" />
               </el-tooltip>
               <el-tooltip content="重命名" placement="top">
                 <el-button text circle :icon="EditPen" />
               </el-tooltip>
               <el-tooltip content="删除" placement="top">
-                <el-button text circle :icon="Delete" />
+                <el-button text circle :icon="Delete" @click.stop="handleDeleteConversation(row)" />
               </el-tooltip>
             </div>
           </article>
@@ -213,7 +228,7 @@ function selectRow(id: number) {
       </main>
 
       <!-- 详情侧栏：用于快速查看当前会话上下文，不打断列表操作。 -->
-      <aside class="detail-panel">
+      <aside v-if="activeRow" class="detail-panel">
         <div class="detail-header">
           <span class="detail-icon"><Document /></span>
           <div>
@@ -247,7 +262,7 @@ function selectRow(id: number) {
         </div>
 
         <div class="detail-actions">
-          <el-button type="primary" plain :icon="View">打开会话</el-button>
+          <el-button type="primary" plain :icon="View" @click="openConversation(activeRow.id)">打开会话</el-button>
           <el-button :icon="EditPen">编辑信息</el-button>
         </div>
       </aside>

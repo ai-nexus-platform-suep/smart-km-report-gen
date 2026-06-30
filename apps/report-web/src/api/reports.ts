@@ -431,7 +431,7 @@ export async function regenerateSection(reportId: EntityId, sectionId: EntityId)
   const report = db.reports.find((item) => sameId(item.id, reportId));
   const section = report?.sections.find((item) => sameId(item.id, sectionId));
   if (!report || !section) throw new Error("章节不存在");
-  section.contentMarkdown = `## ${section.number} ${section.title}\n\n本章节已根据当前大纲重新生成。内容保留专业报告口径，并补充风险、数据依据和整改闭环要求。\n\n- 数据来源：模板配置与专业素材。\n- 风险判断：按电力行业检查口径归类。\n- 整改建议：明确责任、时限和复核方式。`;
+  section.contentMarkdown = `## ${section.number} ${section.title}\n\n本章节已根据当前大纲重新生成。内容保留专业报告口径，并补充风险、数据依据和整改闭环要求。\n\n- 数据来源：模板配置与业务数据。\n- 风险判断：按电力行业检查口径归类。\n- 整改建议：明确责任、时限和复核方式。`;
   section.status = "GENERATED";
   section.source = "REGENERATED";
   section.version += 1;

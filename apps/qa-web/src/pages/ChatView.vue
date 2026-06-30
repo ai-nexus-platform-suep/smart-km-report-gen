@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import { useRoute } from 'vue-router'
 import {
   ArrowDown,
   ChatDotRound,
@@ -15,76 +17,29 @@ import {
   Setting,
   VideoPause,
 } from '@element-plus/icons-vue'
+import {
+  createConversation,
+  listConversations,
+  listMessages,
+  sendChatMessage,
+  type ChatMessageView,
+  type ConversationView,
+} from '../api'
+import type { Citation, ThinkingStep } from '@platform/core'
 
-type Conversation = {
-  id: number
-  title: string
-  summary: string
-  updatedAt: string
-  tag: string
-}
-
-type Citation = {
-  id: number
-  documentName: string
-  content: string
-  score: number
-  source: string
-}
-
-type ThinkingStep = {
-  label: string
-  content: string
-  status: 'done' | 'running' | 'pending'
-}
-
-type Message = {
-  id: number
-  role: 'user' | 'assistant'
-  content: string
-  time: string
-  citations?: Citation[]
-  thinkingSteps?: ThinkingStep[]
-  thinkingCollapsed?: boolean
-  streaming?: boolean
-  interrupted?: boolean
-}
-
-// 当前页面先用静态演示数据撑起交互形态，后续替换为 API_QA.CHAT / API_QA.SEARCH 接口返回值。
 const query = ref('')
 const prompt = ref('汽轮机大修周期是否必须固定为 4 年？请结合规程说明判断依据。')
 const followUp = ref('')
 const selectedMode = ref('knowledge')
-const activeConversationId = ref(1)
+const activeConversationId = ref<number | null>(null)
 const isGenerating = ref(false)
 const activeAssistantId = ref<number | null>(null)
 const streamTimer = ref<number | null>(null)
-
-// 左侧会话列表，对应后续的 API_QA.CHAT.LIST。
-const conversations: Conversation[] = [
-  { id: 1, title: '汽轮机检修周期判断', summary: '大修周期、运行小时数、启停次数综合判断', updatedAt: '09:42', tag: '设备检修' },
-  { id: 2, title: '锅炉安全规范问答', summary: '工作票、隔离措施、危险点预控', updatedAt: '昨天', tag: '安全规程' },
-  { id: 3, title: '电气试验报告解释', summary: '绝缘电阻、介损、试验结论生成', updatedAt: '周二', tag: '试验监督' },
-  { id: 4, title: '煤库存审计口径', summary: '盘点口径、异常波动、佐证材料', updatedAt: '6月28日', tag: '经营监督' },
-]
-
-// 右侧引用来源，对应后续问答接口中的 citations 字段。
-const citations: Citation[] = [
-  {
-    id: 1,
-    documentName: '汽轮机检修规程_v3.0.pdf',
-    content: '汽轮机大修周期一般为 4-6 年，需结合运行小时数、启停次数和设备健康状态综合确定。',
-    score: 0.92,
-    source: '知识库 / 设备检修',
-  },
-  {
-    id: 2,
-    documentName: '发电设备技术监督导则.docx',
-    content: '当振动、油质、效率等关键指标出现持续异常时，应提前组织状态评估和检修论证。',
-    score: 0.86,
-    source: '知识库 / 技术监督',
-  },
-]
+const loadingConversations = ref(false)
+const loadingMessages = ref(false)
+const conversations = ref<ConversationView[]>([])
+const messages = ref<ChatMessageView[]>([])
+const route = useRoute()
 
 // 右侧思考过程，对应后续问答接口中的 thinkingSteps 字段。
 const defaultThinkingSteps: ThinkingStep[] = [
@@ -93,59 +48,83 @@ const defaultThinkingSteps: ThinkingStep[] = [
   { label: '生成回答', content: '正在按规程依据、适用条件、建议动作组织回答。', status: 'running' },
 ]
 
-// 中间消息流，对应后续的 API_QA.CHAT.HISTORY 和 SSE 流式消息。
-const messages = ref<Message[]>([
-  { id: 1, role: 'user', content: '汽轮机的大修周期一般是多久？如果运行状态良好，可以延期吗？', time: '09:40' },
+const fallbackCitations: Citation[] = [
   {
-    id: 2,
-    role: 'assistant',
-    content:
-      '汽轮机大修周期通常不是一个机械固定值。按照现有检修规程，一般可按 4-6 年作为参考范围，但最终应结合运行小时数、启停次数、振动趋势、油质指标、效率变化和缺陷记录综合判断。若运行状态稳定，且监督数据、试验结果、缺陷闭环均满足要求，可以组织状态评估后提出延期建议；如果关键指标持续异常，则应提前安排检修论证。',
-    time: '09:41',
-    citations,
-    thinkingSteps: defaultThinkingSteps.map((step) => ({ ...step, status: 'done' })),
-    thinkingCollapsed: true,
+    documentId: 1,
+    documentName: '汽轮机检修规程_v3.0.pdf',
+    content: '汽轮机大修周期一般为 4-6 年，需结合运行小时数、启停次数和设备健康状态综合确定。',
+    score: 0.92,
+    source: '知识库 / 设备检修',
   },
-])
+  {
+    documentId: 2,
+    documentName: '发电设备技术监督导则.docx',
+    content: '当振动、油质、效率等关键指标出现持续异常时，应提前组织状态评估和检修论证。',
+    score: 0.86,
+    source: '知识库 / 技术监督',
+  },
+]
 
 const filteredConversations = computed(() => {
   const keyword = query.value.trim()
-  if (!keyword) return conversations
-  return conversations.filter((item) => `${item.title}${item.summary}${item.tag}`.includes(keyword))
+  if (!keyword) return conversations.value
+  return conversations.value.filter((item) => `${item.title}${item.summary}${item.tag ?? ''}`.includes(keyword))
 })
 
-const activeConversation = computed(
-  () => conversations.find((item) => item.id === activeConversationId.value) ?? conversations[0],
-)
+const activeConversation = computed(() => {
+  return (
+    conversations.value.find((item) => item.id === activeConversationId.value) ?? {
+      id: 0,
+      title: '新对话',
+      summary: '开始一次技术监督问答',
+      description: '开始一次技术监督问答',
+      messageCount: 0,
+      citationCount: 0,
+      lastMessageAt: '',
+      updatedAt: '--',
+      createdAt: '',
+      knowledgeBases: ['设备检修', '技术监督'],
+      owner: '当前用户',
+      status: 'active' as const,
+      tag: '技术监督',
+    }
+  )
+})
 
 const activeAssistant = computed(() => messages.value.find((item) => item.id === activeAssistantId.value))
-const insightThinkingSteps = computed(() => activeAssistant.value?.thinkingSteps ?? defaultThinkingSteps)
+const latestAssistant = computed(() => [...messages.value].reverse().find((item) => item.role === 'assistant'))
+const insightThinkingSteps = computed(() => activeAssistant.value?.thinkingSteps ?? latestAssistant.value?.thinkingSteps ?? defaultThinkingSteps)
+const citations = computed(() => activeAssistant.value?.citations ?? latestAssistant.value?.citations ?? fallbackCitations)
 const composerHint = computed(() =>
   isGenerating.value ? '正在生成中，可停止，也可以补充一句让回答更聚焦。' : '当前将基于「设备检修」「技术监督」知识库回答',
 )
+const conversationCount = computed(() => conversations.value.length)
+const knowledgeBaseCount = computed(() => new Set(conversations.value.flatMap((item) => item.knowledgeBases)).size || 2)
 
-function selectConversation(id: number) {
+async function selectConversation(id: number) {
+  if (activeConversationId.value === id && messages.value.length) return
   activeConversationId.value = id
+  await loadMessages(id)
 }
 
 function formatTime() {
   return new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
 
-function toggleThinking(message: Message) {
+function formatCreatedAt() {
+  return new Date().toISOString()
+}
+
+function toggleThinking(message: ChatMessageView) {
   message.thinkingCollapsed = !message.thinkingCollapsed
 }
 
-function buildAnswer(question: string) {
-  return `针对“${question}”，建议不要把大修周期理解成单一固定年限。规程通常给出 4-6 年的参考区间，但真正落地时要结合运行小时数、启停次数、振动趋势、油质指标、效率变化和缺陷闭环情况综合判断。若状态数据稳定，试验结论正常，且缺陷整改闭环充分，可以发起状态评估并形成延期论证；若关键指标持续异常，应优先安排专项诊断或提前检修。`
-}
-
-function runMockStream(message: Message, answer: string) {
+function runMockStream(message: ChatMessageView, answer: string, finalCitations: Citation[], finalThinkingSteps: ThinkingStep[]) {
   let index = 0
   const chars = Array.from(answer)
   streamTimer.value = window.setInterval(() => {
     if (index >= chars.length) {
-      finishGeneration(message)
+      finishGeneration(message, finalCitations, finalThinkingSteps)
       return
     }
 
@@ -161,31 +140,90 @@ function runMockStream(message: Message, answer: string) {
   }, 28)
 }
 
-function finishGeneration(message: Message) {
+function finishGeneration(message: ChatMessageView, finalCitations = citations.value, finalThinkingSteps = defaultThinkingSteps) {
   if (streamTimer.value) {
     window.clearInterval(streamTimer.value)
     streamTimer.value = null
   }
   message.streaming = false
-  message.citations = citations
-  message.thinkingSteps = message.thinkingSteps?.map((step) => ({ ...step, status: 'done' }))
+  message.citations = finalCitations
+  message.thinkingSteps = finalThinkingSteps.map((step) => ({ ...step, status: 'done' }))
   isGenerating.value = false
 }
 
-function sendMessage(extraText = '') {
+async function loadConversations() {
+  loadingConversations.value = true
+  try {
+    const result = await listConversations({ page: 1, size: 20, user_id: 1 })
+    conversations.value = result.items
+
+    if (result.items.length) {
+      const routeConversationId = Number(route.query.conversationId)
+      const hasRouteConversation = result.items.some((item) => item.id === routeConversationId)
+      const targetId = activeConversationId.value ?? (hasRouteConversation ? routeConversationId : result.items[0].id)
+      await selectConversation(targetId)
+    }
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('会话列表加载失败，请检查 mock 或后端服务。')
+  } finally {
+    loadingConversations.value = false
+  }
+}
+
+async function loadMessages(conversationId: number) {
+  loadingMessages.value = true
+  try {
+    const result = await listMessages(conversationId)
+    messages.value = result.messages
+    activeAssistantId.value = [...result.messages].reverse().find((item) => item.role === 'assistant')?.id ?? null
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('历史消息加载失败。')
+    messages.value = []
+  } finally {
+    loadingMessages.value = false
+  }
+}
+
+async function createNewConversation() {
+  if (isGenerating.value) return
+  try {
+    const conversation = await createConversation('新对话')
+    conversations.value = [conversation, ...conversations.value.filter((item) => item.id !== conversation.id)]
+    activeConversationId.value = conversation.id
+    messages.value = []
+    activeAssistantId.value = null
+    prompt.value = '请说明技术监督问答可以如何帮助我定位规程依据。'
+  } catch (error) {
+    console.error(error)
+    ElMessage.error('新建会话失败。')
+  }
+}
+
+async function sendMessage(extraText = '') {
   const text = (extraText || prompt.value).trim()
   if (!text || isGenerating.value) return
+  if (!activeConversationId.value) {
+    await createNewConversation()
+  }
+  if (!activeConversationId.value) return
 
-  const userMessage: Message = {
+  const createdAt = formatCreatedAt()
+  const userMessage: ChatMessageView = {
     id: Date.now(),
+    conversationId: activeConversationId.value,
     role: 'user',
     content: text,
+    createdAt,
     time: formatTime(),
   }
-  const assistantMessage: Message = {
+  const assistantMessage: ChatMessageView = {
     id: Date.now() + 1,
+    conversationId: activeConversationId.value,
     role: 'assistant',
     content: '',
+    createdAt,
     time: formatTime(),
     thinkingSteps: [
       { label: '意图识别', content: '正在判断问题类型、设备对象和监督场景。', status: 'done' },
@@ -200,7 +238,28 @@ function sendMessage(extraText = '') {
   activeAssistantId.value = assistantMessage.id
   isGenerating.value = true
   prompt.value = ''
-  runMockStream(assistantMessage, buildAnswer(text))
+
+  try {
+    const result = await sendChatMessage({
+      conversation_id: activeConversationId.value,
+      question: text,
+      user_id: 1,
+      selected_kb_ids: [1, 2],
+    })
+    runMockStream(
+      assistantMessage,
+      result.final_response,
+      result.citations?.length ? result.citations : fallbackCitations,
+      result.thinking_steps?.length ? result.thinking_steps : defaultThinkingSteps,
+    )
+  } catch (error) {
+    console.error(error)
+    assistantMessage.streaming = false
+    assistantMessage.content = '问答服务暂时不可用，请稍后重试。'
+    assistantMessage.thinkingSteps = [{ label: '请求失败', content: '未能从 mock 或后端服务取得回答。', status: 'done' }]
+    isGenerating.value = false
+    ElMessage.error('发送失败，请检查 mock 或后端服务。')
+  }
 }
 
 function stopGeneration() {
@@ -229,6 +288,16 @@ function appendFollowUp() {
   }
   sendMessage(text)
 }
+
+onMounted(() => {
+  loadConversations()
+})
+
+onBeforeUnmount(() => {
+  if (streamTimer.value) {
+    window.clearInterval(streamTimer.value)
+  }
+})
 </script>
 
 <template>
@@ -240,7 +309,9 @@ function appendFollowUp() {
           <p class="eyebrow">智能问答</p>
           <h2>技术监督助手</h2>
         </div>
-        <el-button class="new-chat-btn" type="primary" :icon="Plus">新建</el-button>
+        <el-button class="new-chat-btn" type="primary" :icon="Plus" :loading="loadingConversations" @click="createNewConversation">
+          新建
+        </el-button>
       </div>
 
       <!-- 侧栏概览用于制造“产品工作台”感，也方便后续接入真实统计数据。 -->
@@ -249,8 +320,8 @@ function appendFollowUp() {
         <strong>企业知识问答空间</strong>
         <p>基于规程、报告和检修记录生成可追溯回答。</p>
         <div class="hero-stats">
-          <span><b>2</b> 知识库</span>
-          <span><b>4</b> 最近会话</span>
+          <span><b>{{ knowledgeBaseCount }}</b> 知识库</span>
+          <span><b>{{ conversationCount }}</b> 最近会话</span>
         </div>
       </div>
 
@@ -262,7 +333,7 @@ function appendFollowUp() {
         <button>最近</button>
       </div>
 
-      <div class="conversation-list">
+      <div v-loading="loadingConversations" class="conversation-list">
         <button
           v-for="item in filteredConversations"
           :key="item.id"
@@ -326,7 +397,7 @@ function appendFollowUp() {
       </section>
 
       <!-- 消息流区域：用户消息靠右，助手消息靠左。 -->
-      <section class="message-stream">
+      <section v-loading="loadingMessages" class="message-stream">
         <article v-for="message in messages" :key="message.id" class="message-row" :class="message.role">
           <div class="avatar">{{ message.role === 'user' ? '用' : '问' }}</div>
           <div class="message-body">
@@ -429,7 +500,7 @@ function appendFollowUp() {
           <span class="section-count">{{ citations.length }}</span>
         </div>
         <div class="citation-list">
-          <article v-for="item in citations" :key="item.id" class="citation-card">
+          <article v-for="item in citations" :key="`${item.documentName}-${item.score}`" class="citation-card">
             <div class="citation-head">
               <strong>{{ item.documentName }}</strong>
               <span>{{ Math.round(item.score * 100) }}%</span>
