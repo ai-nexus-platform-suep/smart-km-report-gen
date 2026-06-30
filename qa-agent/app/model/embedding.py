@@ -2,7 +2,7 @@
 
 import httpx
 
-from qa_agent.core.config import settings
+from app.core.config import settings
 
 
 async def embed_texts(texts: list[str]) -> list[list[float]]:

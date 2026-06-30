@@ -12,9 +12,9 @@ from ..api.schemas import (
     PageResult,
     UpdateConversationReq,
 )
-from qa_agent.db.constants import DEFAULT_USER_ID
-from qa_agent.db.models import QaMessage, QaSession
-from qa_agent.db.repository import (
+from app.db.constants import DEFAULT_USER_ID
+from app.db.models import QaMessage, QaSession
+from app.db.repository import (
     create_conversation,
     delete_conversation,
     get_conversation,
@@ -22,7 +22,7 @@ from qa_agent.db.repository import (
     list_conversations,
     update_conversation_title,
 )
-from qa_agent.db.session import get_db
+from app.db.session import get_db
 
 router = APIRouter(tags=["conversations"])
 

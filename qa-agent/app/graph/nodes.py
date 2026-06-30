@@ -6,14 +6,14 @@ from collections.abc import AsyncIterator
 import httpx
 from langgraph.config import get_stream_writer
 
-from qa_agent.client.knowledge_client import search_knowledge
-from qa_agent.core.config import settings
-from qa_agent.graph.context import build_context
-from qa_agent.graph.state import AgentState
-from qa_agent.model.embedding import embed_query
-from qa_agent.model.reranker import rerank
-from qa_agent.service.citation_service import build_citations, merge_consecutive_citations
-from qa_agent.service.thinking_service import add_thinking_step, to_sse_event
+from app.client.knowledge_client import search_knowledge
+from app.core.config import settings
+from app.graph.context import build_context
+from app.graph.state import AgentState
+from app.model.embedding import embed_query
+from app.model.reranker import rerank
+from app.service.citation_service import build_citations, merge_consecutive_citations
+from app.service.thinking_service import add_thinking_step, to_sse_event
 
 
 def _get_llm_config(state: dict) -> dict:

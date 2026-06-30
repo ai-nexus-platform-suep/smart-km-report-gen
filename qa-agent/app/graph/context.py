@@ -13,7 +13,7 @@
 
 import re
 import math
-from qa_agent.core.constants import (
+from app.core.constants import (
     TOKENS_PER_CHINESE_CHAR,
     TOKENS_PER_ENGLISH_WORD,
     DEFAULT_MAX_CONTEXT_TOKENS,

@@ -9,28 +9,28 @@ import sys
 from types import ModuleType, SimpleNamespace
 
 import pytest
-from qa_agent.graph.context import (
+from app.graph.context import (
     build_context,
     truncate_by_tokens,
     estimate_tokens,
     count_context_tokens,
     _format_message,
 )
-from qa_agent.service.thinking_service import (
+from app.service.thinking_service import (
     add_thinking_step,
     build_thinking_summary,
     to_sse_event,
     steps_total_time,
 )
-from qa_agent.service.citation_service import (
+from app.service.citation_service import (
     build_citations,
     extract_citations,
     insert_citation_marks,
     merge_consecutive_citations,
     citation_to_sse,
 )
-from qa_agent.core.constants import SSEEventType, ThinkingStepType
-from qa_agent.graph.nodes import _build_messages
+from app.core.constants import SSEEventType, ThinkingStepType
+from app.graph.nodes import _build_messages
 
 
 # ============================================================
@@ -473,7 +473,7 @@ class TestABCIntegrationContracts:
 
     def test_stream_chat_emits_canonical_thinking_and_citation_events(self, monkeypatch):
         updated_messages = []
-        fake_session_module = ModuleType("qa_agent.db.session")
+        fake_session_module = ModuleType("app.db.session")
         fake_session_module.get_engine = lambda: object()
         fake_session_module.get_session_factory = lambda: object()
 
@@ -481,8 +481,8 @@ class TestABCIntegrationContracts:
             yield SimpleNamespace()
 
         fake_session_module.get_db = fake_get_db
-        monkeypatch.setitem(sys.modules, "qa_agent.db.session", fake_session_module)
-        chat_module = importlib.import_module("qa_agent.api.chat")
+        monkeypatch.setitem(sys.modules, "app.db.session", fake_session_module)
+        chat_module = importlib.import_module("app.api.chat")
 
         async def fake_get_conversation(db, conversation_id):
             return SimpleNamespace(id=conversation_id)
@@ -569,7 +569,7 @@ class TestABCIntegrationContracts:
         assert json.loads(updated_messages[0]["citations"])[0]["indices"] == [1, 2]
 
     def test_chat_test_invokes_graph_without_database(self, monkeypatch):
-        chat_module = importlib.import_module("qa_agent.api.chat")
+        chat_module = importlib.import_module("app.api.chat")
         captured_inputs = []
 
         class FakeAgentGraph:
@@ -626,7 +626,7 @@ class TestABCIntegrationContracts:
         assert response.final_response == "测试回答"
 
     def test_chat_test_keeps_existing_current_question(self):
-        chat_module = importlib.import_module("qa_agent.api.chat")
+        chat_module = importlib.import_module("app.api.chat")
         req = chat_module.ChatTestReq(
             question="继续说明",
             messages=[{"role": "user", "content": "继续说明"}],
@@ -635,7 +635,7 @@ class TestABCIntegrationContracts:
         assert chat_module._test_history_messages(req) == [{"role": "user", "content": "继续说明"}]
 
     def test_chat_sse_returns_error_when_database_session_init_fails(self, monkeypatch):
-        chat_module = importlib.import_module("qa_agent.api.chat")
+        chat_module = importlib.import_module("app.api.chat")
 
         def raise_missing_driver():
             raise ModuleNotFoundError("No module named 'aiomysql'")

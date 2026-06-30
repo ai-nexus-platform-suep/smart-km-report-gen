@@ -4,8 +4,8 @@ from typing import Literal
 
 from langgraph.graph import END, START, StateGraph
 
-from qa_agent.graph.state import AgentState
-from qa_agent.graph.nodes import intent_node, retrieve_node, rerank_node, generate_node, clarify_node
+from app.graph.state import AgentState
+from app.graph.nodes import intent_node, retrieve_node, rerank_node, generate_node, clarify_node
 
 
 def build_workflow() -> StateGraph:

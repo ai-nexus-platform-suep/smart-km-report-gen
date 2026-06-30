@@ -1,8 +1,8 @@
 import asyncio
 import unittest
 
-from qa_agent.graph import nodes
-from qa_agent.graph.nodes import (
+from app.graph import nodes
+from app.graph.nodes import (
     CHAT_INTENT,
     DOCUMENT_SEARCH_INTENT,
     KB_MANAGEMENT_INTENT,
@@ -11,7 +11,7 @@ from qa_agent.graph.nodes import (
     TASK_ACTION_INTENT,
     intent_node,
 )
-from qa_agent.graph.workflow import route_by_intent
+from app.graph.workflow import route_by_intent
 
 
 class IntentRoutingGoldenCases(unittest.TestCase):

@@ -8,8 +8,8 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from qa_agent.core.config import settings
-from qa_agent.db.models import Base
+from app.core.config import settings
+from app.db.models import Base
 
 config = context.config
 

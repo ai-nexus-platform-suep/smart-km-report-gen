@@ -13,13 +13,13 @@ import time
 
 import pytest
 
-from qa_agent.graph.context import (
+from app.graph.context import (
     build_context,
     truncate_by_tokens,
     estimate_tokens,
     count_context_tokens,
 )
-from qa_agent.client.knowledge_client import normalize_document, _extract_documents
+from app.client.knowledge_client import normalize_document, _extract_documents
 
 _PASS = "PASS"
 _FAIL = "FAIL"
@@ -480,7 +480,7 @@ class TestPromptComposition:
 
     def test_token_composition(self):
         """Metric: System / Documents / Question token ratio in final prompt."""
-        from qa_agent.graph.nodes import _build_messages
+        from app.graph.nodes import _build_messages
 
         docs = [
             {"doc_id": "d1", "doc_name": "Regulation_A.pdf",
@@ -513,7 +513,7 @@ class TestPromptComposition:
 
     def test_three_modes_length_relationship(self):
         """Metric: RAG / no-knowledge / direct prompt length ordering."""
-        from qa_agent.graph.nodes import _build_messages
+        from app.graph.nodes import _build_messages
 
         question = "How to handle transformer oil temperature anomaly?"
         docs = [{"doc_id": "d1", "doc_name": "t.pdf", "snippet": "Check cooling system.", "score": 0.9}]

@@ -16,8 +16,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from qa_agent.core.config import settings
-from qa_agent.db.constants import (
+from app.core.config import settings
+from app.db.constants import (
     DEFAULT_TITLE,
     GENERATE_STATUS_COMPLETED,
     GENERATE_STATUS_GENERATING,
@@ -27,8 +27,8 @@ from qa_agent.db.constants import (
     STATUS_DELETED,
     TITLE_MAX_LENGTH,
 )
-from qa_agent.db.models import QaSession
-from qa_agent.db.repository import (
+from app.db.models import QaSession
+from app.db.repository import (
     _build_title_from_content,
     create_conversation,
     delete_conversation,
@@ -281,7 +281,7 @@ class TestDeleteConversation:
 
                 # 直接查表验证消息也被软删（get_messages 会先调 get_conversation
                 # 而 get_conversation 过滤了 STATUS_DELETED，这里直接查）
-                from qa_agent.db.models import QaMessage
+                from app.db.models import QaMessage
                 stmt = select(QaMessage).where(QaMessage.session_id == conv.id)
                 all_msgs = (await db.execute(stmt)).scalars().all()
                 for m in all_msgs:

@@ -2,7 +2,7 @@
 
 import httpx
 
-from qa_agent.core.config import settings
+from app.core.config import settings
 
 
 def _local_llm_config() -> dict:

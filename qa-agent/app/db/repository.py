@@ -5,7 +5,7 @@ from datetime import datetime
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from qa_agent.db.constants import (
+from app.db.constants import (
     DEFAULT_TITLE,
     DEFAULT_USER_ID,
     GENERATE_STATUS_COMPLETED,
@@ -14,8 +14,8 @@ from qa_agent.db.constants import (
     STATUS_DELETED,
     TITLE_MAX_LENGTH,
 )
-from qa_agent.db.id_gen import id_generator
-from qa_agent.db.models import QaMessage, QaSession
+from app.db.id_gen import id_generator
+from app.db.models import QaMessage, QaSession
 
 
 def _build_title_from_content(content: str) -> str:

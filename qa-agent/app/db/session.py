@@ -4,7 +4,7 @@ from collections.abc import AsyncGenerator
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from qa_agent.core.config import settings
+from app.core.config import settings
 
 engine = None
 async_session_factory = None

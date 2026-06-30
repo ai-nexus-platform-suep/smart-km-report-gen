@@ -17,7 +17,7 @@
 
 import time
 from typing import Optional
-from qa_agent.core.constants import ThinkingStepType
+from app.core.constants import ThinkingStepType
 
 
 def add_thinking_step(
