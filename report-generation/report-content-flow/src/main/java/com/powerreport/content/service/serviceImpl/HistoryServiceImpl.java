@@ -2,24 +2,30 @@ package com.powerreport.content.service.serviceImpl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.powerreport.content.dto.OptionResponse;
 import com.powerreport.content.dto.OutlineNodeResponse;
 import com.powerreport.content.dto.ReportHistoryDetailResponse;
 import com.powerreport.content.dto.ReportHistoryItemResponse;
 import com.powerreport.content.dto.ReportHistoryPageResponse;
+import com.powerreport.content.dto.ReportHistoryQueryRequest;
 import com.powerreport.content.dto.SectionResponse;
 import com.powerreport.content.service.HistoryService;
 import com.powerreport.entity.ReportEntity;
 import com.powerreport.entity.ReportOutlineNodeEntity;
 import com.powerreport.entity.ReportSectionEntity;
+import com.powerreport.enums.ReportStatus;
+import com.powerreport.enums.ReportType;
 import com.powerreport.mapper.ReportMapper;
 import com.powerreport.mapper.ReportOutlineNodeMapper;
 import com.powerreport.mapper.ReportSectionMapper;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.util.StringUtils;
 
 @Service
 @RequiredArgsConstructor
@@ -30,15 +36,21 @@ public class HistoryServiceImpl implements HistoryService {
     private final ReportSectionMapper sectionMapper;
 
     @Override
-    public ReportHistoryPageResponse listReports(Integer page, Integer size) {
-        int current = page == null || page < 1 ? 1 : page;
-        int pageSize = size == null || size < 1 ? 10 : Math.min(size, 100);
+    public ReportHistoryPageResponse listReports(ReportHistoryQueryRequest query) {
+        ReportHistoryQueryRequest actualQuery = query == null ? new ReportHistoryQueryRequest() : query;
+        int current = actualQuery.getPage() == null || actualQuery.getPage() < 1 ? 1 : actualQuery.getPage();
+        int pageSize = actualQuery.getSize() == null || actualQuery.getSize() < 1
+                ? 10
+                : Math.min(actualQuery.getSize(), 100);
+
+        LambdaQueryWrapper<ReportEntity> wrapper = new LambdaQueryWrapper<ReportEntity>()
+                .eq(ReportEntity::getDeleted, false)
+                .orderByDesc(ReportEntity::getCreatedAt);
+        applyFilters(wrapper, actualQuery);
 
         Page<ReportEntity> result = reportMapper.selectPage(
                 Page.of(current, pageSize),
-                new LambdaQueryWrapper<ReportEntity>()
-                        .eq(ReportEntity::getDeleted, false)
-                        .orderByDesc(ReportEntity::getCreatedAt)
+                wrapper
         );
 
         List<ReportHistoryItemResponse> records = result.getRecords()
@@ -46,6 +58,20 @@ public class HistoryServiceImpl implements HistoryService {
                 .map(this::toHistoryItem)
                 .toList();
         return new ReportHistoryPageResponse(records, result.getTotal(), current, pageSize);
+    }
+
+    @Override
+    public List<OptionResponse> listStatusOptions() {
+        return Arrays.stream(ReportStatus.values())
+                .map(status -> new OptionResponse(status.name(), status.getLabel()))
+                .toList();
+    }
+
+    @Override
+    public List<OptionResponse> listReportTypeOptions() {
+        return Arrays.stream(ReportType.values())
+                .map(type -> new OptionResponse(type.name(), type.getLabel()))
+                .toList();
     }
 
     @Override
@@ -82,6 +108,32 @@ public class HistoryServiceImpl implements HistoryService {
             throw new IllegalArgumentException("报告不存在或已删除");
         }
         return report;
+    }
+
+    private void applyFilters(LambdaQueryWrapper<ReportEntity> wrapper, ReportHistoryQueryRequest query) {
+        if (StringUtils.hasText(query.getStatus())) {
+            wrapper.eq(ReportEntity::getStatus, ReportStatus.fromCode(query.getStatus().strip()).name());
+        }
+
+        String reportType = StringUtils.hasText(query.getReportType())
+                ? query.getReportType()
+                : query.getType();
+        if (StringUtils.hasText(reportType)) {
+            wrapper.eq(ReportEntity::getReportType, ReportType.valueOf(reportType.strip().toUpperCase()).name());
+        }
+
+        if (StringUtils.hasText(query.getPowerPlant())) {
+            wrapper.like(ReportEntity::getPowerPlant, query.getPowerPlant().strip());
+        }
+        if (StringUtils.hasText(query.getSpecialty())) {
+            wrapper.like(ReportEntity::getSpecialty, query.getSpecialty().strip());
+        }
+        if (query.getReportYear() != null) {
+            wrapper.eq(ReportEntity::getReportYear, query.getReportYear());
+        }
+        if (StringUtils.hasText(query.getSubject())) {
+            wrapper.like(ReportEntity::getSubject, query.getSubject().strip());
+        }
     }
 
     private ReportHistoryItemResponse toHistoryItem(ReportEntity report) {
