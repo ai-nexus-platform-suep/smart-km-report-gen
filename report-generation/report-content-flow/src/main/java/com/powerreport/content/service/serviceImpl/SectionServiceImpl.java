@@ -196,21 +196,17 @@ public class SectionServiceImpl implements SectionService {
                 if (targetIds.contains(section.getId())) {
                     generateOneSection(report, section, outlineById.get(section.getOutlineNodeId()), outlineContext, emitter);
                 } else if (StringUtils.hasText(section.getContentMarkdown())) {
-                    emitter.send(SseEmitter.event().name("content").data(section.getContentMarkdown()));
+                    sendEvent(emitter, "content", section.getContentMarkdown());
                 }
 
-                emitter.send(SseEmitter.event().name("section_done").data("[SECTION_DONE]"));
+                sendEvent(emitter, "section_done", "[SECTION_DONE]");
             }
 
             refreshReportProgress(reportId);
-            emitter.send(SseEmitter.event().name("done").data("[DONE]"));
+            sendEvent(emitter, "done", "[DONE]");
             emitter.complete();
-        } catch (IOException | RuntimeException ex) {
-            try {
-                emitter.send(SseEmitter.event().name("error").data(ex.getMessage()));
-            } catch (IOException ignored) {
-                // Ignore secondary send failures while closing SSE connection.
-            }
+        } catch (RuntimeException ex) {
+            sendEvent(emitter, "error", ex.getMessage());
             emitter.completeWithError(ex);
         }
     }
@@ -221,7 +217,7 @@ public class SectionServiceImpl implements SectionService {
             ReportOutlineNodeEntity outlineNode,
             String outlineContext,
             SseEmitter emitter
-    ) throws IOException {
+    ) {
         boolean regenerate = SOURCE_REGENERATED.equals(section.getSource());
         String userHint = regenerate ? readRegenerateHint(report.getId(), section.getId()) : null;
         StringBuilder content = new StringBuilder();
@@ -241,12 +237,13 @@ public class SectionServiceImpl implements SectionService {
             section.setStatus(SectionStatus.FAILED.name());
             section.setErrorMessage(limit(ex.getMessage(), 2000));
             sectionMapper.updateById(section);
+            clearRegenerateHint(report.getId(), section.getId());
             refreshReportProgress(report.getId());
-            emitter.send(SseEmitter.event().name("error").data(Map.of(
+            sendEvent(emitter, "error", Map.of(
                     "sectionId", section.getId(),
                     "sectionTitle", section.getTitle(),
                     "message", ex.getMessage() == null ? "AI section generation failed" : ex.getMessage()
-            )));
+            ));
         }
     }
 
@@ -359,7 +356,7 @@ public class SectionServiceImpl implements SectionService {
         if ("content".equals(eventName) || "message".equals(eventName)) {
             if (!data.isEmpty()) {
                 content.append(data);
-                emitter.send(SseEmitter.event().name("content").data(data));
+                sendEvent(emitter, "content", data);
             }
             return false;
         }
@@ -370,6 +367,14 @@ public class SectionServiceImpl implements SectionService {
             throw new IllegalStateException(StringUtils.hasText(data) ? data : "AI section stream returned error");
         }
         return false;
+    }
+
+    private void sendEvent(SseEmitter emitter, String eventName, Object data) {
+        try {
+            emitter.send(SseEmitter.event().name(eventName).data(data));
+        } catch (IOException ex) {
+            log.warn("SSE client send failed, generation will continue. event={}, reason={}", eventName, ex.getMessage());
+        }
     }
 
     private void appendSseData(StringBuilder data, String value) {
@@ -384,16 +389,14 @@ public class SectionServiceImpl implements SectionService {
             ReportSectionEntity section,
             int current,
             int total
-    ) throws IOException {
-        emitter.send(SseEmitter.event()
-                .name("progress")
-                .data(Map.of(
-                        "current", current,
-                        "total", total,
-                        "sectionId", section.getId(),
-                        "sectionNumber", section.getNumber(),
-                        "sectionTitle", section.getTitle()
-                )));
+    ) {
+        sendEvent(emitter, "progress", Map.of(
+                "current", current,
+                "total", total,
+                "sectionId", section.getId(),
+                "sectionNumber", section.getNumber(),
+                "sectionTitle", section.getTitle()
+        ));
     }
 
     private Set<String> selectGenerationTargets(List<ReportSectionEntity> sections) {
