@@ -19,17 +19,6 @@
           <StatusBadge :status="report.status" />
         </div>
 
-        <div class="export-name">
-          <span class="eyebrow">FILE NAME</span>
-          <el-input
-            v-model="exportFileName"
-            maxlength="80"
-            show-word-limit
-            clearable
-            placeholder="请输入导出文件名"
-          />
-        </div>
-
         <div class="check-grid">
           <div class="check-item">
             <span class="status-dot" :class="checks.empty ? 'warning' : 'success'" />
@@ -80,7 +69,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
@@ -88,39 +77,24 @@ import StatusBadge from '@/components/StatusBadge.vue'
 import { exportPrecheck } from '@/api/reports'
 import { useReportStore } from '@/stores/reports'
 import type { EntityId } from '@/types/domain'
-import { normalizeDocxFileName } from '@/utils/docx'
 import { formatBytes } from '@/utils/labels'
 
 const route = useRoute()
 const store = useReportStore()
 const reportId = String(route.params.id)
 const exporting = ref(false)
-const exportFileName = ref('')
 const report = computed(() => store.current)
 const checks = computed(() => (report.value ? exportPrecheck(report.value) : { empty: 0, failed: 0, unsaved: 0 }))
 
 onMounted(async () => {
-  const detail = await store.fetchDetail(reportId)
-  exportFileName.value = normalizeDocxFileName(detail.name)
+  await store.fetchDetail(reportId)
 })
-
-watch(
-  report,
-  (value) => {
-    if (value && String(value.id) === reportId && !exportFileName.value) {
-      exportFileName.value = normalizeDocxFileName(value.name)
-    }
-  },
-  { immediate: true }
-)
 
 async function exportFile() {
   if (!report.value) return
   exporting.value = true
   try {
-    const fileName = normalizeDocxFileName(exportFileName.value, report.value.name)
-    exportFileName.value = fileName
-    const file = await store.exportDocx(reportId, fileName)
+    const file = await store.exportDocx(reportId)
     ElMessage.success(`DOCX 已生成：${file.fileName}`)
   } catch (error) {
     ElMessage.error(error instanceof Error ? error.message : 'DOCX 导出失败')
@@ -140,12 +114,6 @@ async function download(fileId: EntityId, fileName: string) {
 </script>
 
 <style scoped>
-.export-name {
-  display: grid;
-  gap: 8px;
-  padding: 18px 20px 0;
-}
-
 .check-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
