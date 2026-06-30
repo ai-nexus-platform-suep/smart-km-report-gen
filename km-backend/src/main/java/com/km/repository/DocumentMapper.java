@@ -16,6 +16,12 @@ public interface DocumentMapper {
 
     int deleteById(@Param("id") String id);
 
+    /**
+     * 仅更新文档标签（独立 Mapper，不与 updateStatus 混用）。
+     */
+    int updateTags(@Param("id") String id,
+                   @Param("tagsJson") String tagsJson);
+
     int deleteByIds(@Param("ids") List<String> ids);
 
     int deleteByKbId(@Param("kbId") String kbId);

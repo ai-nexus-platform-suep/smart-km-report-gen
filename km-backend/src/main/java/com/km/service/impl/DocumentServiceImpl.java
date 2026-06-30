@@ -44,6 +44,16 @@ public class DocumentServiceImpl implements DocumentService {
     private static final List<String> ALLOWED_EXTENSIONS = Arrays.asList(
             "pdf", "docx", "pptx", "xlsx", "md", "txt", "jpg", "png");
 
+    private static final List<String> ALLOWED_MIME_TYPES = Arrays.asList(
+            "application/pdf",
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            "text/markdown",
+            "text/plain",
+            "image/jpeg",
+            "image/png");
+
     private final DocumentMapper documentMapper;
     private final ChunkMapper chunkMapper;
     private final KnowledgeBaseMapper knowledgeBaseMapper;
@@ -235,7 +245,7 @@ public class DocumentServiceImpl implements DocumentService {
         }
 
         doc.setTagsJson(tagsJson);
-        documentMapper.updateById(doc);
+        documentMapper.updateTags(docId, tagsJson);
 
         return DocumentConverter.toVO(doc);
     }
@@ -243,12 +253,17 @@ public class DocumentServiceImpl implements DocumentService {
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void updateStatus(String docId, String status, String errorMsg) {
-        documentMapper.updateStatus(docId, status, errorMsg);
+        // 03.6: FAILED 时规范化错误信息
+        String formattedMsg = errorMsg;
+        if (DocumentStatus.FAILED.equals(status) && errorMsg != null && !errorMsg.startsWith("Process failed: ")) {
+            formattedMsg = "Process failed: " + errorMsg;
+        }
+        documentMapper.updateStatus(docId, status, formattedMsg);
     }
 
     private void validateFile(MultipartFile file) {
         if (file == null || file.isEmpty()) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "File is empty");
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Upload file cannot be empty");
         }
         if (file.getSize() > MAX_FILE_SIZE) {
             throw new BusinessException(ErrorCode.KM_DOC_004);
@@ -261,7 +276,15 @@ public class DocumentServiceImpl implements DocumentService {
 
         String extension = originalFilename.substring(originalFilename.lastIndexOf(".") + 1).toLowerCase();
         if (!ALLOWED_EXTENSIONS.contains(extension)) {
-            throw new BusinessException(ErrorCode.KM_DOC_003);
+            throw new BusinessException(ErrorCode.KM_DOC_003, "File extension not supported: " + extension);
+        }
+
+        // 03.7: MIME 类型校验（作为补充，不替代扩展名检查）
+        // 当前仅 warn 日志，不拦截上传。原因：浏览器/curl 上传时 MIME 常为 */* 或缺失，
+        // 实际校验仍以扩展名白名单为准。如需严格拦截，需补全 MIME 映射并改为 throw。
+        String mimeType = file.getContentType();
+        if (mimeType != null && !mimeType.isEmpty() && !ALLOWED_MIME_TYPES.contains(mimeType)) {
+            log.warn("Unexpected MIME type '{}' for extension '{}', file={}", mimeType, extension, originalFilename);
         }
     }
 }

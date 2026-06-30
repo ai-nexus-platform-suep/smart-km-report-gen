@@ -21,16 +21,16 @@ Content-Disposition: form-data; name="tags"
 GET http://localhost:8091/api/knowledge-bases/kb-test-001/documents?page=1&pageSize=20
 
 ### 4. 文档详情（替换为你的文档ID）
-GET http://localhost:8091/api/documents/2b5f269c6e9f44f48dda1dca5bf5c42f
+GET http://localhost:8091/api/documents/892f1bf5cdb145feb56035f079cd0ebe
 
 ### 5. 查看切片
-GET http://localhost:8091/api/documents/2b5f269c6e9f44f48dda1dca5bf5c42f/chunks?page=1&pageSize=50
+GET http://localhost:8091/api/documents/892f1bf5cdb145feb56035f079cd0ebe/chunks?page=1&pageSize=50
 
 ### 6. 下载文档
-GET http://localhost:8091/api/documents/2b5f269c6e9f44f48dda1dca5bf5c42f/download
+GET http://localhost:8091/api/documents/892f1bf5cdb145feb56035f079cd0ebe/download
 
 ### 7. 更新标签
-PUT http://localhost:8091/api/documents/2b5f269c6e9f44f48dda1dca5bf5c42f/tags
+PUT http://localhost:8091/api/documents/892f1bf5cdb145feb56035f079cd0ebe/tags
 Content-Type: application/json
 
 {
@@ -41,7 +41,7 @@ Content-Type: application/json
 }
 
 ### 8. 删除文档
-DELETE http://localhost:8091/api/knowledge-bases/kb-test-001/documents/2b5f269c6e9f44f48dda1dca5bf5c42f
+DELETE http://localhost:8091/api/knowledge-bases/kb-test-001/documents/892f1bf5cdb145feb56035f079cd0ebe
 
 ### 9. 批量删除
 POST http://localhost:8091/api/knowledge-bases/kb-test-001/documents/batch-delete
@@ -52,7 +52,7 @@ Content-Type: application/json
 }
 
 ### 10. 重试处理
-POST http://localhost:8091/api/documents/2b5f269c6e9f44f48dda1dca5bf5c42f/retry
+POST http://localhost:8091/api/documents/5030ff76cbbc42afbbc45eff6ac8ed57/retry
 ### 11. 检索测试（vector_rerank 模式）
 POST http://localhost:8091/api/search
 Content-Type: application/json
@@ -93,3 +93,26 @@ GET http://localhost:8091/api/knowledge-bases?keyword=规程&page=1&pageSize=20
 ### 16. 知识库详情（对外 API）
 GET http://localhost:8091/api/knowledge-bases/kb-test-001
 
+
+### 17. 测试 400 错误（上传不支持的格式）
+POST http://localhost:8091/api/knowledge-bases/kb-test-001/documents
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="file"; filename="test.exe"
+
+fake exe content
+--boundary123--
+
+### 18. 测试 404 错误（查询不存在的文档）
+GET http://localhost:8091/api/documents/nonexistent-id-12345
+
+### 19. 测试标签独立持久化
+PUT http://localhost:8091/api/documents/0960b3990db0457a84d0d39aa63603de/tags
+Content-Type: application/json
+
+{
+  "tags": {
+    "颜色": "红色"
+  }
+}
