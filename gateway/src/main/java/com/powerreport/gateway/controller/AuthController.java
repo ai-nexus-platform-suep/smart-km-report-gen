@@ -3,6 +3,7 @@ package com.powerreport.gateway.controller;
 import com.powerreport.gateway.config.JwtProperties;
 import com.powerreport.gateway.dto.AuthResponse;
 import com.powerreport.gateway.dto.LoginRequest;
+import com.powerreport.gateway.dto.LoginResult;
 import com.powerreport.gateway.dto.RefreshTokenRequest;
 import com.powerreport.gateway.dto.RegisterRequest;
 import com.powerreport.gateway.entity.SysUserEntity;
@@ -26,7 +27,6 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 
 
 /**
@@ -101,14 +101,25 @@ public class AuthController {
                     String password = loginReq.getPassword().trim();
 
                     // 调用 UserService 登录校验（BCrypt 密码匹配）
-                    Optional<SysUserEntity> userOpt = userService.login(username, password);
-                    if (!userOpt.isPresent()) {
-                        // 不区分"用户不存在"和"密码错误"，防止用户名枚举攻击
-                        return status(HttpStatus.UNAUTHORIZED,
-                                buildResponse(1003, "密码错误", null));
+                    LoginResult loginResult = userService.login(username, password);
+
+                    // 根据失败原因返回不同的错误码和提示
+                    if (!loginResult.isSuccess()) {
+                        switch (loginResult.getCode()) {
+                            case LoginResult.USER_NOT_FOUND:
+                                return status(HttpStatus.UNAUTHORIZED,
+                                        buildResponse(1006, "用户不存在", null));
+                            case LoginResult.USER_DISABLED:
+                                return status(HttpStatus.FORBIDDEN,
+                                        buildResponse(1007, "账号已被禁用", null));
+                            case LoginResult.PASSWORD_ERROR:
+                            default:
+                                return status(HttpStatus.UNAUTHORIZED,
+                                        buildResponse(1003, "密码错误", null));
+                        }
                     }
 
-                    SysUserEntity user = userOpt.get();
+                    SysUserEntity user = loginResult.getUser().get();
                     List<String> roles = parseRoles(user.getRoles());
 
                     String accessToken = jwtTokenProvider.generateAccessToken(username, roles);

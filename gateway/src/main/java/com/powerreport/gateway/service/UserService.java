@@ -1,6 +1,7 @@
 package com.powerreport.gateway.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.powerreport.gateway.dto.LoginResult;
 import com.powerreport.gateway.entity.SysUserEntity;
 import com.powerreport.gateway.mapper.SysUserMapper;
 import lombok.RequiredArgsConstructor;
@@ -64,13 +65,13 @@ public class UserService {
      *
      * @param username 用户名
      * @param rawPassword 明文密码
-     * @return 校验通过返回用户实体；失败返回 empty
+     * @return LoginResult，包含失败原因（用户不存在 / 账号已禁用 / 密码错误）
      */
-    public Optional<SysUserEntity> login(String username, String rawPassword) {
+    public LoginResult login(String username, String rawPassword) {
         Optional<SysUserEntity> userOpt = findByUsername(username);
         if (!userOpt.isPresent()) {
             log.warn("登录失败，用户不存在: {}", username);
-            return Optional.empty();
+            return LoginResult.userNotFound();
         }
 
         SysUserEntity user = userOpt.get();
@@ -78,17 +79,17 @@ public class UserService {
         // 检查账号是否启用
         if (Boolean.FALSE.equals(user.getEnabled())) {
             log.warn("登录失败，账号已被禁用: {}", username);
-            return Optional.empty();
+            return LoginResult.userDisabled();
         }
 
         // BCrypt 密码校验
         if (!passwordEncoder.matches(rawPassword, user.getPassword())) {
             log.warn("登录失败，密码错误: {}", username);
-            return Optional.empty();
+            return LoginResult.passwordError();
         }
 
         log.info("用户登录成功: username={}, roles={}", username, user.getRoles());
-        return Optional.of(user);
+        return LoginResult.success(user);
     }
 
     /**
