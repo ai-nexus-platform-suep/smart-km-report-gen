@@ -297,17 +297,14 @@ async function sendMessage(extraText = '') {
     content: '',
     createdAt,
     time: formatTime(),
-    thinkingSteps: [
-      { label: '意图识别', content: '正在判断问题类型、设备对象和监督场景。', status: 'done' },
-      { label: '知识检索', content: '正在由 qa-agent 根据 selected_kb_ids 和工作流召回相关片段。', status: 'running' },
-      { label: '回答组织', content: '等待检索完成后按依据、判断、建议输出。', status: 'pending' },
-    ],
+    thinkingSteps: [],
     thinkingCollapsed: false,
     streaming: true,
   }
 
   messages.value.push(userMessage, assistantMessage)
-  activeAssistantId.value = assistantMessage.id
+  const streamingAssistant = messages.value[messages.value.length - 1]
+  activeAssistantId.value = streamingAssistant.id
   isGenerating.value = true
   prompt.value = ''
   stickToBottom.value = true
@@ -326,57 +323,57 @@ async function sendMessage(extraText = '') {
       {
         signal: abortController.signal,
         onThinking(step) {
-          const existingIndex = assistantMessage.thinkingSteps?.findIndex((item) => item.step_type === step.step_type)
-          if (existingIndex != null && existingIndex >= 0 && assistantMessage.thinkingSteps) {
-            assistantMessage.thinkingSteps[existingIndex] = step
+          const existingIndex = streamingAssistant.thinkingSteps?.findIndex((item) => item.step_type === step.step_type)
+          if (existingIndex != null && existingIndex >= 0 && streamingAssistant.thinkingSteps) {
+            streamingAssistant.thinkingSteps[existingIndex] = step
           } else {
-            assistantMessage.thinkingSteps = [...(assistantMessage.thinkingSteps ?? []), step]
+            streamingAssistant.thinkingSteps = [...(streamingAssistant.thinkingSteps ?? []), step]
           }
         },
         onMessage(data) {
           if (data.message_id) {
-            assistantMessage.id = data.message_id
+            streamingAssistant.id = data.message_id
             activeAssistantId.value = data.message_id
           }
           if (typeof data.content === 'string') {
-            assistantMessage.content = data.content
+            streamingAssistant.content = data.content
           } else if (data.delta) {
-            assistantMessage.content += data.delta
+            streamingAssistant.content += data.delta
           }
           scrollMessagesToBottom()
           if (data.intent) {
-            assistantMessage.intentType = data.intent as ChatMessageView['intentType']
+            streamingAssistant.intentType = data.intent as ChatMessageView['intentType']
           }
           if (data.finished) {
             finishGeneration(
-              assistantMessage,
-              assistantMessage.citations?.length ? assistantMessage.citations : [],
-              assistantMessage.thinkingSteps?.length ? assistantMessage.thinkingSteps : [],
+              streamingAssistant,
+              streamingAssistant.citations?.length ? streamingAssistant.citations : [],
+              streamingAssistant.thinkingSteps?.length ? streamingAssistant.thinkingSteps : [],
             )
           }
         },
         onCitation(nextCitations) {
-          assistantMessage.citations = nextCitations
+          streamingAssistant.citations = nextCitations
           scrollMessagesToBottom()
         },
         onError(message) {
-          assistantMessage.content = message
-          assistantMessage.generateStatus = 2
-          assistantMessage.thinkingSteps = [{ label: '请求失败', content: message, status: 'done' }]
-          finishGeneration(assistantMessage, [], assistantMessage.thinkingSteps)
+          streamingAssistant.content = message
+          streamingAssistant.generateStatus = 2
+          streamingAssistant.thinkingSteps = [{ label: '请求失败', content: message, status: 'done' }]
+          finishGeneration(streamingAssistant, [], streamingAssistant.thinkingSteps)
           ElMessage.error(message)
         },
         onDone() {
           finishGeneration(
-            assistantMessage,
-            assistantMessage.citations?.length ? assistantMessage.citations : [],
-            assistantMessage.thinkingSteps?.length ? assistantMessage.thinkingSteps : [],
+            streamingAssistant,
+            streamingAssistant.citations?.length ? streamingAssistant.citations : [],
+            streamingAssistant.thinkingSteps?.length ? streamingAssistant.thinkingSteps : [],
           )
         },
       },
     )
-    if (!assistantMessage.content) {
-      assistantMessage.content = '本次请求没有返回回答内容。'
+    if (!streamingAssistant.content) {
+      streamingAssistant.content = '本次请求没有返回回答内容。'
     }
     if (!abortController.signal.aborted) {
       const nextConversationId = doneData?.conversation_id ?? conversationId
@@ -386,9 +383,9 @@ async function sendMessage(extraText = '') {
   } catch (error) {
     if (abortController.signal.aborted) return
     console.error(error)
-    assistantMessage.streaming = false
-    assistantMessage.content = '问答服务暂时不可用，请稍后重试。'
-    assistantMessage.thinkingSteps = [{ label: '请求失败', content: '未能从 mock 或后端服务取得回答。', status: 'done' }]
+    streamingAssistant.streaming = false
+    streamingAssistant.content = '问答服务暂时不可用，请稍后重试。'
+    streamingAssistant.thinkingSteps = [{ label: '请求失败', content: '未能从 mock 或后端服务取得回答。', status: 'done' }]
     isGenerating.value = false
     streamController.value = null
     ElMessage.error('发送失败，请检查 mock 或后端服务。')
