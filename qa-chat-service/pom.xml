@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
     <parent>
         <groupId>com.myenglish</groupId>
-        <artifactId>tech-supervision-platform</artifactId>
+        <artifactId>smart-km-report-gen</artifactId>
         <version>0.0.1-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
@@ -16,7 +16,7 @@
     <dependencies>
         <dependency>
             <groupId>com.myenglish</groupId>
-            <artifactId>qa-common</artifactId>
+            <artifactId>common</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
