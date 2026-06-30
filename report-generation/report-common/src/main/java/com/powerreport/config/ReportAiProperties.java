@@ -18,6 +18,21 @@ public class ReportAiProperties {
     private String sectionStreamUrl = "";
 
     /**
+     * LLM API base URL configured from admin page.
+     */
+    private String apiUrl = "";
+
+    /**
+     * LLM API key configured from admin page.
+     */
+    private String apiKey = "";
+
+    /**
+     * LLM model name configured from admin page.
+     */
+    private String modelName = "";
+
+    /**
      * AI HTTP timeout, in seconds.
      */
     private int timeoutSeconds = 60;
