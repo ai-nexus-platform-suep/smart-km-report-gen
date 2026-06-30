@@ -83,6 +83,16 @@
   }
 }
 
+@keyframes shimmer {
+  from {
+    transform: translateX(0) skewX(-18deg);
+  }
+
+  to {
+    transform: translateX(560%) skewX(-18deg);
+  }
+}
+
 @keyframes deltaIn {
   from {
     opacity: 0;

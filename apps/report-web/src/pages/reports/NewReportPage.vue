@@ -116,7 +116,7 @@ async function submit() {
   submitting.value = true
   try {
     const report = await store.create(form)
-    ElMessage.success('报告记录已创建')
+    ElMessage.success('大纲已生成，请确认章节结构')
     router.push(`/reports/${report.id}/outline`)
   } finally {
     submitting.value = false
@@ -127,32 +127,65 @@ async function submit() {
 <style scoped>
 .type-grid {
   display: grid;
-  gap: 14px;
-  padding: 20px;
+  gap: 16px;
+  padding: 22px;
 }
 
 .type-card {
+  position: relative;
+  overflow: hidden;
   display: grid;
-  gap: 8px;
-  min-height: 144px;
-  padding: 18px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
+  gap: 10px;
+  min-height: 158px;
+  padding: 22px;
+  border: 1px solid rgba(132, 151, 176, 0.3);
+  border-radius: 18px;
   text-align: left;
-  background: var(--bg-surface);
+  background:
+    radial-gradient(circle at 100% 0, rgba(0, 184, 217, 0.13), transparent 34%),
+    linear-gradient(135deg, #ffffff, #f4f8ff);
+  box-shadow: 0 12px 30px rgba(29, 35, 43, 0.07);
   cursor: pointer;
 }
 
+.type-card::before {
+  position: absolute;
+  top: 0;
+  left: 20px;
+  width: 68px;
+  height: 3px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent-blue), var(--accent-cyan));
+  content: "";
+}
+
+.type-card::after {
+  position: absolute;
+  right: -34px;
+  bottom: -34px;
+  width: 120px;
+  height: 120px;
+  border: 22px solid rgba(30, 107, 255, 0.055);
+  border-radius: 50%;
+  content: "";
+  pointer-events: none;
+}
+
 .type-card.active {
-  border-color: var(--accent-blue);
-  background: var(--accent-blue-soft);
+  border-color: rgba(30, 107, 255, 0.48);
+  background:
+    radial-gradient(circle at 100% 0, rgba(0, 184, 217, 0.18), transparent 36%),
+    linear-gradient(135deg, #eef6ff, #ffffff);
+  box-shadow: 0 18px 42px rgba(30, 107, 255, 0.14);
 }
 
 .type-card strong {
-  font-size: 18px;
+  position: relative;
+  font-size: 19px;
 }
 
 .type-card p {
+  position: relative;
   margin: 0;
   color: var(--text-secondary);
   line-height: 1.7;
@@ -161,6 +194,6 @@ async function submit() {
 .report-form {
   display: grid;
   gap: 4px;
-  padding: 20px;
+  padding: 22px;
 }
 </style>

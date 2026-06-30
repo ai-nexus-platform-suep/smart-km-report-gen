@@ -3,7 +3,7 @@
     <PageHeader
       eyebrow="AI GENERATION TERMINAL"
       title="报告生成工作台"
-      description="按章节流式生成正文，实时查看进度，生成后可在线编辑正文与表格数据。"
+      description="按章节流式生成正文，实时查看进度，生成后可在线编辑 Markdown 正文。"
     >
       <el-button @click="$router.push(`/reports/${reportId}/outline`)">返回大纲</el-button>
       <el-button type="primary" :loading="store.streaming" @click="startGenerate">启动正文生成</el-button>
@@ -15,9 +15,11 @@
         <span class="terminal-label">STREAM STATUS</span>
         <strong>{{ store.streamMessage }}</strong>
       </div>
-      <div>
+      <div class="workspace-status">
         <span class="terminal-label">REPORT STATUS</span>
-        <StatusBadge :status="report.status" />
+        <div class="workspace-status-badge">
+          <StatusBadge :status="report.status" />
+        </div>
       </div>
       <div>
         <span class="terminal-label">PROGRESS</span>
@@ -61,7 +63,7 @@
             v-model="draft"
             type="textarea"
             :disabled="selectedSection.status === 'GENERATING'"
-            :autosize="{ minRows: 18 }"
+            :autosize="{ minRows: 12, maxRows: 12 }"
             placeholder="章节正文将随生成流写入，也可以在生成完成后编辑。"
             @input="dirty = true"
           />
@@ -69,24 +71,6 @@
             <span class="terminal-label">PREVIEW</span>
             <pre>{{ preview }}</pre>
           </div>
-        </div>
-
-        <div v-if="selectedSection?.tableJson" class="table-editor">
-          <span class="eyebrow">TABLE DATA</span>
-          <table>
-            <thead>
-              <tr>
-                <th v-for="column in selectedSection.tableJson.columns" :key="column">{{ column }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(row, rowIndex) in selectedSection.tableJson.rows" :key="rowIndex">
-                <td v-for="(_cell, cellIndex) in row" :key="cellIndex">
-                  <el-input v-model="selectedSection.tableJson.rows[rowIndex][cellIndex]" size="small" />
-                </td>
-              </tr>
-            </tbody>
-          </table>
         </div>
       </section>
 
@@ -170,8 +154,23 @@ watch(
   },
 )
 
+watch(
+  () => store.lastEvent,
+  (event) => {
+    if (!event || (event.type !== 'section_started' && event.type !== 'content_delta')) return
+    selectSectionBySectionId(event.sectionId)
+  },
+)
+
 function selectOutline(id: EntityId) {
   selectedOutlineId.value = id
+}
+
+function selectSectionBySectionId(sectionId: EntityId) {
+  const section = report.value?.sections.find((item) => sameId(item.id, sectionId))
+  if (section && !sameId(section.outlineNodeId, selectedOutlineId.value)) {
+    selectedOutlineId.value = section.outlineNodeId
+  }
 }
 
 async function startGenerate() {
@@ -205,9 +204,9 @@ async function confirmRegenerate() {
 .workspace-band {
   display: grid;
   grid-template-columns: minmax(240px, 1fr) 220px 320px;
-  gap: 24px;
-  padding: 18px 20px;
-  margin-bottom: 16px;
+  gap: 18px;
+  padding: 14px 18px;
+  margin-bottom: 12px;
 }
 
 .workspace-band strong,
@@ -216,19 +215,30 @@ async function confirmRegenerate() {
   margin-top: 6px;
 }
 
+.workspace-status-badge {
+  display: flex;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.workspace-status-badge :deep(.status-badge) {
+  gap: 10px;
+  color: rgba(248, 251, 255, 0.72);
+}
+
 .editor-surface {
-  min-height: 640px;
+  min-height: 0;
 }
 
 .editor-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(300px, 0.8fr);
-  gap: 14px;
-  padding: 16px;
+  gap: 12px;
+  padding: 14px;
 }
 
 .preview {
-  min-height: 380px;
+  min-height: 300px;
   padding: 14px;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
@@ -241,26 +251,6 @@ async function confirmRegenerate() {
   font-family: var(--font-body);
   line-height: 1.7;
   white-space: pre-wrap;
-}
-
-.table-editor {
-  padding: 0 16px 16px;
-}
-
-.table-editor table {
-  width: 100%;
-  margin-top: 8px;
-  border-collapse: collapse;
-}
-
-.table-editor th,
-.table-editor td {
-  padding: 8px;
-  border: 1px solid var(--border-default);
-}
-
-.table-editor th {
-  background: var(--bg-subtle);
 }
 
 .control-panel {

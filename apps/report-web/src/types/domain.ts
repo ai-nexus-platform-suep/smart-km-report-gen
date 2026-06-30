@@ -102,10 +102,13 @@ export interface ReportQuery {
   page: number;
   pageSize: number;
   keyword?: string;
+  subject?: string | null;
+  powerPlant?: string | null;
   specialty?: string | null;
   type?: ReportType | null;
   status?: ReportStatus | null;
   year?: number | null;
+  reportYear?: number | null;
 }
 
 export interface TemplateRecord {
