@@ -168,8 +168,9 @@ async function removeNode() {
 }
 
 async function save() {
-  await store.saveOutline(reportId, outline.value)
-  ElMessage.success('大纲已保存')
+  const saved = await store.saveOutline(reportId, outline.value)
+  ElMessage.success('大纲已确认保存')
+  router.push(`/reports/${saved?.id ?? reportId}/workspace`)
 }
 
 async function startContent() {

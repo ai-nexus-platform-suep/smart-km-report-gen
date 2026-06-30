@@ -123,7 +123,11 @@ export const useReportStore = defineStore("reports", () => {
 
   async function exportDocx(reportId: EntityId) {
     const file = await reportApi.exportDocx(reportId);
-    await fetchDetail(reportId);
+    if (current.value && sameId(current.value.id, reportId)) {
+      current.value.status = "EXPORTED";
+      current.value.files = [file, ...current.value.files.filter((item) => !sameId(item.id, file.id))];
+      current.value.updatedAt = new Date().toISOString();
+    }
     return file;
   }
 

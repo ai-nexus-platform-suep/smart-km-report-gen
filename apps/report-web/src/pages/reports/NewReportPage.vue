@@ -116,7 +116,7 @@ async function submit() {
   submitting.value = true
   try {
     const report = await store.create(form)
-    ElMessage.success('报告记录已创建')
+    ElMessage.success('大纲已生成，请确认章节结构')
     router.push(`/reports/${report.id}/outline`)
   } finally {
     submitting.value = false

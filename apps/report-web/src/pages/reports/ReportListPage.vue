@@ -9,7 +9,8 @@
     </PageHeader>
 
     <section class="surface filter-bar">
-      <el-input v-model="filters.keyword" placeholder="搜索报告名称、主题或电厂" clearable />
+      <el-input v-model="filters.subject" placeholder="报告主题" clearable />
+      <el-input v-model="filters.powerPlant" placeholder="电厂" clearable />
       <el-input v-model="filters.specialty" placeholder="专业" clearable />
       <el-select v-model="filters.type" placeholder="报告类型" clearable>
         <el-option v-for="item in typeOptions" :key="item.value" :label="item.label" :value="item.value" />
@@ -48,20 +49,9 @@
         <el-table-column label="更新时间" min-width="180">
           <template #default="{ row }">{{ new Date(row.updatedAt).toLocaleString() }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="240" fixed="right">
+        <el-table-column label="操作" width="150" fixed="right">
           <template #default="{ row }">
             <div class="action-row record-action-row">
-              <el-button
-                v-if="latestExportFile(row)"
-                class="doc-action"
-                size="small"
-                type="primary"
-                plain
-                :loading="downloadingReportId === String(row.id)"
-                @click="downloadLatestDocx(row)"
-              >
-                下载 DOCX
-              </el-button>
               <el-button size="small" @click="goNext(row)">查看</el-button>
               <el-button size="small" text type="danger" @click="confirmDelete(row)">删除</el-button>
             </div>
@@ -82,27 +72,28 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { onMounted, reactive } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { useReportStore } from '@/stores/reports'
-import type { Report, ReportFile, ReportStatus, ReportType } from '@/types/domain'
+import type { Report, ReportStatus, ReportType } from '@/types/domain'
 import { reportStatusLabels, reportTypeLabels } from '@/utils/labels'
 
 const router = useRouter()
 const store = useReportStore()
-const downloadingReportId = ref<string>()
 
 const filters = reactive<{
-  keyword: string
+  subject: string
+  powerPlant: string
   specialty: string
   type: ReportType | null
   status: ReportStatus | null
   year: number | null
 }>({
-  keyword: '',
+  subject: '',
+  powerPlant: '',
   specialty: '',
   type: null,
   status: null,
@@ -131,29 +122,6 @@ function goNext(report: Report) {
   else router.push(`/reports/${report.id}/workspace`)
 }
 
-function latestExportFile(report: Report): ReportFile | undefined {
-  if (report.status !== 'EXPORTED' || report.files.length === 0) return undefined
-  return [...report.files].sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]
-}
-
-async function downloadLatestDocx(report: Report) {
-  const file = latestExportFile(report)
-  if (!file) {
-    ElMessage.warning('暂无可下载 DOCX 文件')
-    return
-  }
-
-  downloadingReportId.value = String(report.id)
-  try {
-    await store.downloadFile(report.id, file.id, file.fileName)
-    ElMessage.success('DOCX 下载已开始')
-  } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : 'DOCX 下载失败')
-  } finally {
-    downloadingReportId.value = undefined
-  }
-}
-
 async function confirmDelete(report: Report) {
   await ElMessageBox.confirm(`删除后「${report.name}」将不再出现在记录列表中。`, '确认删除报告', {
     confirmButtonText: '删除',
@@ -168,7 +136,7 @@ async function confirmDelete(report: Report) {
 <style scoped>
 .filter-bar {
   display: grid;
-  grid-template-columns: minmax(220px, 1fr) minmax(120px, 0.55fr) minmax(170px, 0.7fr) minmax(150px, 0.65fr) 140px 96px;
+  grid-template-columns: minmax(180px, 1fr) minmax(150px, 0.8fr) minmax(120px, 0.6fr) minmax(170px, 0.75fr) minmax(150px, 0.7fr) 120px 96px;
   gap: 12px;
   align-items: center;
   padding: 14px 16px;
@@ -233,8 +201,7 @@ async function confirmDelete(report: Report) {
   gap: 12px;
 }
 
-.record-action-row :deep(.el-button + .el-button),
-.doc-action {
+.record-action-row :deep(.el-button + .el-button) {
   margin-left: 0;
 }
 
@@ -245,22 +212,4 @@ async function confirmDelete(report: Report) {
   font-size: 14px;
 }
 
-.doc-action,
-.doc-action.is-plain {
-  --el-button-text-color: #ffffff;
-  --el-button-hover-text-color: #ffffff;
-  --el-button-active-text-color: #ffffff;
-  --el-button-bg-color: transparent;
-  --el-button-hover-bg-color: transparent;
-  --el-button-active-bg-color: transparent;
-  color: #ffffff !important;
-  border-color: transparent !important;
-  background: linear-gradient(135deg, #1f7cf2, #0fb2cf) !important;
-  box-shadow: 0 8px 16px rgba(30, 107, 255, 0.16);
-}
-
-.doc-action:hover {
-  color: #ffffff !important;
-  box-shadow: 0 10px 20px rgba(30, 107, 255, 0.2);
-}
 </style>

@@ -3,7 +3,7 @@
     <PageHeader
       eyebrow="AI GENERATION TERMINAL"
       title="报告生成工作台"
-      description="按章节流式生成正文，实时查看进度，生成后可在线编辑正文与表格数据。"
+      description="按章节流式生成正文，实时查看进度，生成后可在线编辑 Markdown 正文。"
     >
       <el-button @click="$router.push(`/reports/${reportId}/outline`)">返回大纲</el-button>
       <el-button type="primary" :loading="store.streaming" @click="startGenerate">启动正文生成</el-button>
@@ -71,24 +71,6 @@
             <span class="terminal-label">PREVIEW</span>
             <pre>{{ preview }}</pre>
           </div>
-        </div>
-
-        <div v-if="selectedSection?.tableJson" class="table-editor">
-          <span class="eyebrow">TABLE DATA</span>
-          <table>
-            <thead>
-              <tr>
-                <th v-for="column in selectedSection.tableJson.columns" :key="column">{{ column }}</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="(row, rowIndex) in selectedSection.tableJson.rows" :key="rowIndex">
-                <td v-for="(_cell, cellIndex) in row" :key="cellIndex">
-                  <el-input v-model="selectedSection.tableJson.rows[rowIndex][cellIndex]" size="small" />
-                </td>
-              </tr>
-            </tbody>
-          </table>
         </div>
       </section>
 
@@ -269,26 +251,6 @@ async function confirmRegenerate() {
   font-family: var(--font-body);
   line-height: 1.7;
   white-space: pre-wrap;
-}
-
-.table-editor {
-  padding: 0 16px 16px;
-}
-
-.table-editor table {
-  width: 100%;
-  margin-top: 8px;
-  border-collapse: collapse;
-}
-
-.table-editor th,
-.table-editor td {
-  padding: 8px;
-  border: 1px solid var(--border-default);
-}
-
-.table-editor th {
-  background: var(--bg-subtle);
 }
 
 .control-panel {
