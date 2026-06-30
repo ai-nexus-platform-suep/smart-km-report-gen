@@ -73,10 +73,13 @@
     <div class="pagination" v-if="total > 0">
       <el-pagination
         v-model:current-page="page"
-        :page-size="pageSize"
+        v-model:page-size="pageSize"
         :total="total"
-        layout="prev, pager, next, total"
+        :page-sizes="[10, 20, 50]"
+        layout="total, sizes, prev, pager, next"
+        background
         @current-change="fetchList"
+        @size-change="fetchList"
       />
     </div>
   </div>
@@ -110,7 +113,7 @@ function onSelectionChange(rows: any[]) {
 }
 
 async function handleBatchDelete() {
-  await ElMessageBox.confirm(`确定删除选中的 ${selectedIds.value.length} 个知识库吗？`, '批量删除', {
+  await ElMessageBox.confirm(`确定删除选中的${selectedIds.value.length}个知识库吗？`, '批量删除', {
     type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消',
   })
   await batchDeleteKnowledgeBase(selectedIds.value)
