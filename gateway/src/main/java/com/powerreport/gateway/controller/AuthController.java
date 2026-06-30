@@ -7,6 +7,7 @@ import com.powerreport.gateway.dto.LoginResult;
 import com.powerreport.gateway.dto.RefreshTokenRequest;
 import com.powerreport.gateway.dto.RegisterRequest;
 import com.powerreport.gateway.entity.SysUserEntity;
+import com.powerreport.gateway.service.RefreshTokenService;
 import com.powerreport.gateway.service.UserService;
 import com.powerreport.gateway.util.JwtTokenProvider;
 import io.jsonwebtoken.Claims;
@@ -23,6 +24,9 @@ import org.springframework.web.reactive.function.server.ServerRequest;
 import org.springframework.web.reactive.function.server.ServerResponse;
 import reactor.core.publisher.Mono;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -43,6 +47,7 @@ public class AuthController {
     private final JwtTokenProvider jwtTokenProvider;
     private final JwtProperties jwtProperties;
     private final UserService userService;
+    private final RefreshTokenService refreshTokenService;
 
     @Bean
     public RouterFunction<ServerResponse> authRoutes() {
@@ -125,6 +130,14 @@ public class AuthController {
                     String accessToken = jwtTokenProvider.generateAccessToken(username, roles);
                     String refreshToken = jwtTokenProvider.generateRefreshToken(username);
 
+                    // 将 Refresh Token 持久化到数据库（SHA256 哈希存储）
+                    long refreshExpiration = jwtProperties.getRefreshTokenExpiration();
+                    LocalDateTime refreshExpiresAt = LocalDateTime.ofInstant(
+                            Instant.ofEpochSecond(Instant.now().getEpochSecond() + refreshExpiration),
+                            ZoneId.systemDefault()
+                    );
+                    refreshTokenService.saveToken(username, refreshToken, refreshExpiresAt);
+
                     log.info("User login: {}, roles: {}", username, roles);
 
                     AuthResponse response = new AuthResponse(
@@ -146,6 +159,7 @@ public class AuthController {
                     String refreshToken = refreshReq.getRefreshToken();
 
                     try {
+                        // 1. JWT 签名校验
                         if (!jwtTokenProvider.validateToken(refreshToken)) {
                             return status(HttpStatus.UNAUTHORIZED,
                                     buildResponse(1005, "Refresh Token 无效或已过期", null));
@@ -161,13 +175,31 @@ public class AuthController {
 
                         String username = claims.getSubject();
 
-                        // 从数据库获取用户角色
+                        // 2. 数据库校验：检查该 Refresh Token 是否已被撤销/不存在
+                        if (!refreshTokenService.isValid(refreshToken)) {
+                            log.warn("Refresh token revoked or not found in DB for user: {}", username);
+                            return status(HttpStatus.UNAUTHORIZED,
+                                    buildResponse(1005, "Refresh Token 已失效，请重新登录", null));
+                        }
+
+                        // 3. Token 轮换：删除旧 Refresh Token，生成新的
+                        refreshTokenService.deleteToken(refreshToken);
+
+                        // 4. 从数据库获取用户角色
                         List<String> roles = userService.findByUsername(username)
                                 .map(user -> parseRoles(user.getRoles()))
                                 .orElse(Arrays.asList("ROLE_USER"));
 
                         String newAccessToken = jwtTokenProvider.generateAccessToken(username, roles);
                         String newRefreshToken = jwtTokenProvider.generateRefreshToken(username);
+
+                        // 5. 将新的 Refresh Token 持久化到数据库
+                        long refreshExpiration = jwtProperties.getRefreshTokenExpiration();
+                        LocalDateTime refreshExpiresAt = LocalDateTime.ofInstant(
+                                Instant.ofEpochSecond(Instant.now().getEpochSecond() + refreshExpiration),
+                                ZoneId.systemDefault()
+                        );
+                        refreshTokenService.saveToken(username, newRefreshToken, refreshExpiresAt);
 
                         log.info("Token refreshed for user: {}", username);
 
