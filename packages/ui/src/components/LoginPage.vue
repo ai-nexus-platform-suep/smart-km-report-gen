@@ -119,13 +119,15 @@
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
 import { useRouter } from 'vue-router'
+import type { FormInstance } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
-import { setToken, setStoredUser, apiPost } from '@platform/core'
+import { apiPost, buildUserFromAuthResponse, setAuthTokens, setStoredUser } from '@platform/core'
 import { API_QA } from '@platform/core'
 import type { LoginRequest, LoginResponse, ApiResponse } from '@platform/core/types'
 
 const router = useRouter()
+const formRef = ref<FormInstance>()
 const loading = ref(false)
 const rememberMe = ref(false)
 const form = reactive<LoginRequest>({ username: '', password: '' })
@@ -136,12 +138,15 @@ const rules = {
 }
 
 async function handleLogin() {
+  const valid = await formRef.value?.validate().catch(() => false)
+  if (!valid) return
+
   loading.value = true
   try {
     const res = await apiPost<ApiResponse<LoginResponse>>(API_QA.AUTH.LOGIN, form)
-    if (res.data.code === 200) {
-      setToken(res.data.data.token)
-      setStoredUser(res.data.data.user)
+    if (res.data.code === 200 && res.data.data) {
+      setAuthTokens(res.data.data)
+      setStoredUser(buildUserFromAuthResponse(res.data.data))
       ElMessage.success('登录成功')
       router.push('/')
     } else {

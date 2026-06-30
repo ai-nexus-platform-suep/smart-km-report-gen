@@ -1,10 +1,14 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { baseRoutes, createAuthGuard } from '@platform/ui'
 import AuthGuard from '@platform/ui/src/components/AuthGuard.vue'
-import { h } from 'vue'
+import { defineAsyncComponent, defineComponent, h, type Component } from 'vue'
 
 // QaHome 页面 — 各组自行替换为真正页面
 const QaHome = () => import('../pages/ChatView.vue')
+const QaDashboard = defineAsyncComponent(() => import('../pages/admin/QaDashboard.vue'))
+const QaConfig = defineAsyncComponent(() => import('../pages/admin/QaConfig.vue'))
+const RetrievalTest = defineAsyncComponent(() => import('../pages/admin/RetrievalTest.vue'))
+const LlmConfig = defineAsyncComponent(() => import('../pages/admin/LlmConfig.vue'))
 
 const moduleRoutes: RouteRecordRaw[] = [
   {
@@ -29,42 +33,34 @@ const moduleRoutes: RouteRecordRaw[] = [
     children: [
       {
         path: 'qa/dashboard',
-        component: () => renderGuarded('AdminDashboard'),
+        component: withAdminGuard(QaDashboard),
         meta: { title: '问答统计', admin: true },
       },
       {
         path: 'qa/config',
-        component: () => renderGuarded('AdminConfig'),
+        component: withAdminGuard(QaConfig),
         meta: { title: '问答配置', admin: true },
       },
       {
         path: 'qa/retrieval-test',
-        component: () => renderGuarded('RetrievalTest'),
+        component: withAdminGuard(RetrievalTest),
         meta: { title: '检索测试', admin: true },
       },
       {
         path: 'qa/llm',
-        component: () => renderGuarded('LlmConfig'),
+        component: withAdminGuard(LlmConfig),
         meta: { title: 'LLM配置', admin: true },
       },
     ],
   },
 ]
 
-function renderGuarded(name: string) {
-  return () =>
-    Promise.resolve({
-      setup() {
-        return () => h(AuthGuard, { requireAdmin: true }, () => h(Placeholder(name)))
-      },
-    })
-}
-
-function Placeholder(name: string) {
-  return h('div', { style: 'padding:40px;text-align:center;color:#999' }, [
-    h('h2', '🚧 ' + name),
-    h('p', '此页面待开发'),
-  ])
+function withAdminGuard(component: Component) {
+  return defineComponent({
+    setup() {
+      return () => h(AuthGuard, { requireAdmin: true }, { default: () => h(component) })
+    },
+  })
 }
 
 const router = createRouter({
