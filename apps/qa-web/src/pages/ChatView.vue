@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
 import {
   ArrowDown,
@@ -8,6 +8,7 @@ import {
   Collection,
   Connection,
   CopyDocument,
+  Delete,
   DocumentChecked,
   Finished,
   MagicStick,
@@ -19,6 +20,7 @@ import {
 } from '@element-plus/icons-vue'
 import {
   createConversation,
+  deleteConversation,
   listConversations,
   listMessages,
   streamChatMessage,
@@ -39,6 +41,9 @@ const loadingConversations = ref(false)
 const loadingMessages = ref(false)
 const conversations = ref<ConversationView[]>([])
 const messages = ref<ChatMessageView[]>([])
+const deletingConversationId = ref<string | null>(null)
+const messageStreamRef = ref<HTMLElement | null>(null)
+const stickToBottom = ref(true)
 const route = useRoute()
 const router = useRouter()
 
@@ -86,6 +91,38 @@ async function selectConversation(id: string) {
   activeConversationId.value = id
   await router.replace({ path: '/chat', query: { conversationId: id } })
   await loadMessages(id)
+}
+
+function waitForNextPaint() {
+  return new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => resolve())
+    })
+  })
+}
+
+function updateStickToBottomState() {
+  const el = messageStreamRef.value
+  if (!el) return
+  stickToBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight <= 140
+}
+
+async function scrollMessagesToBottom(force = false, behavior: ScrollBehavior = force ? 'auto' : 'smooth') {
+  if (!force && !stickToBottom.value) return
+  await nextTick()
+  await waitForNextPaint()
+  const el = messageStreamRef.value
+  if (!el) return
+  el.scrollTo({ top: Math.max(0, el.scrollHeight - el.clientHeight), behavior })
+  stickToBottom.value = true
+}
+
+function handleComposerKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Enter' || event.isComposing) return
+  if (event.ctrlKey || event.metaKey) return
+
+  event.preventDefault()
+  sendMessage()
 }
 
 function formatTime() {
@@ -151,6 +188,7 @@ async function loadMessages(conversationId: string) {
     const result = await listMessages(conversationId)
     messages.value = result.messages
     activeAssistantId.value = [...result.messages].reverse().find((item) => item.role === 'assistant')?.id ?? null
+    await scrollMessagesToBottom(true)
   } catch (error) {
     console.error(error)
     ElMessage.error('历史消息加载失败。')
@@ -170,9 +208,57 @@ async function createNewConversation() {
     activeAssistantId.value = null
     await router.replace({ path: '/chat', query: { conversationId: conversation.id } })
     prompt.value = '请说明技术监督问答可以如何帮助我定位规程依据。'
+    await scrollMessagesToBottom(true)
   } catch (error) {
     console.error(error)
     ElMessage.error('新建会话失败。')
+  }
+}
+
+async function handleDeleteConversation(item: ConversationView) {
+  if (deletingConversationId.value) return
+
+  try {
+    await ElMessageBox.confirm(`确定删除「${item.title}」吗？删除后该会话的历史消息也会被移除。`, '删除会话', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+      confirmButtonClass: 'el-button--danger',
+    })
+
+    deletingConversationId.value = item.id
+    if (item.id === activeConversationId.value && isGenerating.value) {
+      stopGeneration(false)
+    }
+
+    await deleteConversation(item.id)
+
+    const wasActive = item.id === activeConversationId.value
+    const nextConversations = conversations.value.filter((conversation) => conversation.id !== item.id)
+    conversations.value = nextConversations
+
+    if (wasActive) {
+      const nextConversation = nextConversations[0]
+      if (nextConversation) {
+        activeConversationId.value = nextConversation.id
+        await router.replace({ path: '/chat', query: { conversationId: nextConversation.id } })
+        await loadMessages(nextConversation.id)
+      } else {
+        activeConversationId.value = null
+        activeAssistantId.value = null
+        messages.value = []
+        await router.replace({ path: '/chat' })
+      }
+    }
+
+    ElMessage.success('会话已删除')
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      console.error(error)
+      ElMessage.error('删除会话失败。')
+    }
+  } finally {
+    deletingConversationId.value = null
   }
 }
 
@@ -214,6 +300,8 @@ async function sendMessage(extraText = '') {
   activeAssistantId.value = assistantMessage.id
   isGenerating.value = true
   prompt.value = ''
+  stickToBottom.value = true
+  scrollMessagesToBottom(true)
   const abortController = new AbortController()
   streamController.value = abortController
 
@@ -245,6 +333,7 @@ async function sendMessage(extraText = '') {
           } else if (data.delta) {
             assistantMessage.content += data.delta
           }
+          scrollMessagesToBottom()
           if (data.intent) {
             assistantMessage.intentType = data.intent as ChatMessageView['intentType']
           }
@@ -258,6 +347,7 @@ async function sendMessage(extraText = '') {
         },
         onCitation(nextCitations) {
           assistantMessage.citations = nextCitations
+          scrollMessagesToBottom()
         },
         onError(message) {
           assistantMessage.content = message
@@ -391,7 +481,7 @@ onBeforeUnmount(() => {
       </div>
 
       <div v-loading="loadingConversations" class="conversation-list">
-        <button
+        <div
           v-for="item in filteredConversations"
           :key="item.id"
           class="conversation-item"
@@ -410,7 +500,17 @@ onBeforeUnmount(() => {
               <span>{{ item.updatedAt }}</span>
             </span>
           </span>
-        </button>
+          <el-tooltip content="删除会话" placement="top">
+            <el-button
+              class="conversation-delete"
+              text
+              circle
+              :icon="Delete"
+              :loading="deletingConversationId === item.id"
+              @click.stop="handleDeleteConversation(item)"
+            />
+          </el-tooltip>
+        </div>
       </div>
     </aside>
 
@@ -447,7 +547,12 @@ onBeforeUnmount(() => {
       </section>
 
       <!-- 消息流区域：用户消息靠右，助手消息靠左。 -->
-      <section v-loading="loadingMessages" class="message-stream">
+      <section
+        ref="messageStreamRef"
+        v-loading="loadingMessages"
+        class="message-stream"
+        @scroll.passive="updateStickToBottomState"
+      >
         <article v-for="message in messages" :key="message.id" class="message-row" :class="message.role">
           <div class="avatar">{{ message.role === 'user' ? '我' : 'AI' }}</div>
           <div class="message-body">
@@ -489,8 +594,11 @@ onBeforeUnmount(() => {
         </article>
       </section>
 
-      <!-- 输入区：后续发送时调用聊天接口，SSE 接入后这里也负责停止生成状态。 -->
+      <!-- 输入区固定在中间工作区底部，不随消息列表滚动。 -->
       <footer class="composer">
+        <button v-if="!stickToBottom" class="jump-bottom-btn" @click="scrollMessagesToBottom(true, 'smooth')">
+          回到底部继续提问
+        </button>
         <div class="composer-top">
           <span>{{ composerHint }}</span>
           <el-button text :icon="Finished">检索预览</el-button>
@@ -501,6 +609,7 @@ onBeforeUnmount(() => {
           resize="none"
           :autosize="{ minRows: 3, maxRows: 5 }"
           placeholder="输入技术监督问题，支持规程依据、检索引用、报告口径判断"
+          @keydown="handleComposerKeydown"
         />
         <div v-if="isGenerating" class="follow-up-bar">
           <el-input
@@ -577,7 +686,9 @@ onBeforeUnmount(() => {
   display: grid;
   grid-template-columns: 304px minmax(0, 1fr) 340px;
   gap: 18px;
-  min-height: calc(100vh - var(--header-height) - 48px);
+  height: calc(100vh - var(--header-height) - 48px);
+  min-height: 640px;
+  overflow: hidden;
   color: var(--text-primary);
 }
 
@@ -585,6 +696,7 @@ onBeforeUnmount(() => {
 .chat-workspace,
 .insight-panel {
   min-height: 0;
+  height: 100%;
   border: 1px solid var(--border-color);
   border-radius: 22px;
   background: var(--bg-container);
@@ -781,18 +893,22 @@ onBeforeUnmount(() => {
   gap: 10px;
   min-height: 0;
   overflow-y: auto;
-  padding-right: 2px;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
 }
 
 .conversation-item {
+  position: relative;
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr);
+  grid-template-columns: 40px minmax(0, 1fr) 30px;
   gap: 11px;
+  align-items: start;
   width: 100%;
   padding: 12px;
   border: 1px solid transparent;
   border-radius: 18px;
   color: var(--text-secondary);
+  cursor: pointer;
   text-align: left;
   transition: all var(--transition-fast);
 }
@@ -887,6 +1003,27 @@ onBeforeUnmount(() => {
   font-size: 12px;
 }
 
+.conversation-delete {
+  align-self: start;
+  opacity: 0;
+  color: var(--text-tertiary);
+  transition:
+    opacity var(--transition-fast),
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.conversation-item:hover .conversation-delete,
+.conversation-item.active .conversation-delete,
+.conversation-delete.is-loading {
+  opacity: 1;
+}
+
+.conversation-delete:hover {
+  background: rgba(217, 45, 32, 0.1);
+  color: #d92d20;
+}
+
 .chat-workspace {
   display: flex;
   flex-direction: column;
@@ -974,8 +1111,10 @@ onBeforeUnmount(() => {
 .message-stream {
   flex: 1;
   min-height: 0;
+  max-height: 100%;
   overflow-y: auto;
   padding: 28px 26px;
+  scrollbar-gutter: stable;
   background:
     radial-gradient(circle at top left, rgba(15, 118, 110, 0.08), transparent 30%),
     linear-gradient(180deg, rgba(248, 250, 252, 0.86), rgba(255, 255, 255, 0.94));
@@ -1140,7 +1279,28 @@ onBeforeUnmount(() => {
   background: rgba(248, 250, 252, 0.74);
 }
 
+.jump-bottom-btn {
+  position: absolute;
+  z-index: 5;
+  top: -42px;
+  left: 50%;
+  display: block;
+  width: fit-content;
+  padding: 8px 14px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.92);
+  color: var(--qa-brand, #0f766e);
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.12);
+  transform: translateX(-50%);
+  backdrop-filter: blur(12px);
+}
+
 .composer {
+  position: relative;
+  flex: 0 0 auto;
   padding: 16px 26px 22px;
   border-top: 1px solid var(--border-color);
   background: rgba(255, 255, 255, 0.92);
@@ -1215,9 +1375,45 @@ onBeforeUnmount(() => {
   gap: 14px;
   padding: 18px;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   background:
     linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96)),
     radial-gradient(circle at 30% 0%, rgba(15, 118, 110, 0.10), transparent 28%);
+}
+
+.conversation-list,
+.message-stream,
+.insight-panel {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(15, 118, 110, 0.32) transparent;
+}
+
+.conversation-list::-webkit-scrollbar,
+.message-stream::-webkit-scrollbar,
+.insight-panel::-webkit-scrollbar {
+  width: 8px;
+}
+
+.conversation-list::-webkit-scrollbar-track,
+.message-stream::-webkit-scrollbar-track,
+.insight-panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.conversation-list::-webkit-scrollbar-thumb,
+.message-stream::-webkit-scrollbar-thumb,
+.insight-panel::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: rgba(15, 118, 110, 0.26);
+  background-clip: padding-box;
+}
+
+.conversation-list::-webkit-scrollbar-thumb:hover,
+.message-stream::-webkit-scrollbar-thumb:hover,
+.insight-panel::-webkit-scrollbar-thumb:hover {
+  background: rgba(37, 99, 235, 0.34);
+  background-clip: padding-box;
 }
 
 .insight-section {
@@ -1392,6 +1588,12 @@ onBeforeUnmount(() => {
 
 :global([data-theme='dark']) .composer {
   background: rgba(16, 24, 39, 0.96);
+}
+
+:global([data-theme='dark']) .jump-bottom-btn {
+  border-color: rgba(45, 212, 191, 0.24);
+  background: rgba(15, 23, 42, 0.88);
+  color: #7dd3fc;
 }
 
 :global([data-theme='dark']) .composer :deep(.el-textarea__inner),
