@@ -12,6 +12,7 @@ import com.powerreport.content.service.SectionService;
 import com.powerreport.entity.ReportEntity;
 import com.powerreport.entity.ReportOutlineNodeEntity;
 import com.powerreport.entity.ReportSectionEntity;
+import com.powerreport.enums.ReportStatus;
 import com.powerreport.enums.SectionStatus;
 import com.powerreport.mapper.ReportMapper;
 import com.powerreport.mapper.ReportOutlineNodeMapper;
@@ -52,9 +53,6 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @Slf4j
 public class SectionServiceImpl implements SectionService {
 
-    private static final String REPORT_STATUS_GENERATING = "GENERATING";
-    private static final String REPORT_STATUS_GENERATED = "GENERATED";
-    private static final String REPORT_STATUS_FAILED = "FAILED";
     private static final String SOURCE_AI = "AI";
     private static final String SOURCE_REGENERATED = "REGENERATED";
     private static final String SOURCE_USER_EDITED = "USER_EDITED";
@@ -91,7 +89,7 @@ public class SectionServiceImpl implements SectionService {
             }
         }
 
-        report.setStatus(REPORT_STATUS_GENERATING);
+        report.setStatus(ReportStatus.CONTENT_GENERATING.name());
         report.setTotalSections(sections.size());
         report.setCompletedSections(countCompleted(reportId));
         reportMapper.updateById(report);
@@ -100,7 +98,7 @@ public class SectionServiceImpl implements SectionService {
                 UUID.randomUUID().toString(),
                 reportId,
                 null,
-                REPORT_STATUS_GENERATING,
+                ReportStatus.CONTENT_GENERATING.name(),
                 sections.size(),
                 report.getCompletedSections(),
                 targetCount == 0
@@ -159,7 +157,7 @@ public class SectionServiceImpl implements SectionService {
         storeRegenerateHint(reportId, sectionId, request == null ? null : request.getHint());
 
         ReportEntity report = findReport(reportId);
-        report.setStatus(REPORT_STATUS_GENERATING);
+        report.setStatus(ReportStatus.CONTENT_GENERATING.name());
         report.setCompletedSections(countCompleted(reportId));
         reportMapper.updateById(report);
 
@@ -512,6 +510,8 @@ public class SectionServiceImpl implements SectionService {
                         .in(ReportSectionEntity::getStatus,
                                 SectionStatus.GENERATED.name(),
                                 SectionStatus.USER_EDITED.name())
+                        .isNotNull(ReportSectionEntity::getContentMarkdown)
+                        .ne(ReportSectionEntity::getContentMarkdown, "")
         ));
     }
 
@@ -531,16 +531,23 @@ public class SectionServiceImpl implements SectionService {
                         .eq(ReportSectionEntity::getReportId, reportId)
                         .eq(ReportSectionEntity::getStatus, SectionStatus.FAILED.name())
         );
+        long generating = sectionMapper.selectCount(
+                new LambdaQueryWrapper<ReportSectionEntity>()
+                        .eq(ReportSectionEntity::getReportId, reportId)
+                        .eq(ReportSectionEntity::getStatus, SectionStatus.GENERATING.name())
+        );
 
         report.setTotalSections(Math.toIntExact(total));
         report.setCompletedSections(completed);
-        if (total > 0 && completed == total) {
-            report.setStatus(REPORT_STATUS_GENERATED);
+        if (generating > 0) {
+            report.setStatus(ReportStatus.CONTENT_GENERATING.name());
+        } else if (total > 0 && completed == total) {
+            report.setStatus(ReportStatus.CONTENT_READY.name());
             report.setGeneratedAt(LocalDateTime.now());
-        } else if (failed > 0) {
-            report.setStatus(REPORT_STATUS_FAILED);
+        } else if (failed > 0 || total > 0) {
+            report.setStatus(ReportStatus.CONTENT_INCOMPLETE.name());
         } else {
-            report.setStatus(REPORT_STATUS_GENERATING);
+            report.setStatus(ReportStatus.OUTLINE_READY.name());
         }
         reportMapper.updateById(report);
     }

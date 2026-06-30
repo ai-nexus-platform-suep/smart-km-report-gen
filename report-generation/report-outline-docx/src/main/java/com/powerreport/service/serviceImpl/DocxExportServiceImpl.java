@@ -10,6 +10,7 @@ import com.powerreport.entity.ReportFileEntity;
 import com.powerreport.entity.ReportOutlineNodeEntity;
 import com.powerreport.entity.ReportSectionEntity;
 import com.powerreport.enums.CaptionNumberingMode;
+import com.powerreport.enums.ReportStatus;
 import com.powerreport.enums.ReportType;
 import com.powerreport.mapper.ReportFileMapper;
 import com.powerreport.mapper.ReportMapper;
@@ -123,6 +124,9 @@ public class DocxExportServiceImpl implements DocxExportService {
         file.setSha256(sha256(outputPath));
         file.setCreatedBy(DEFAULT_OWNER);
         fileMapper.insert(file);
+
+        report.setStatus(ReportStatus.EXPORTED.name());
+        reportMapper.updateById(report);
 
         return new ReportFileResponse(
                 file.getId(),
