@@ -3,8 +3,10 @@ export const API_QA = {
   AUTH: {
     LOGIN: '/api/auth/login',
     REGISTER: '/api/auth/register',
+    REFRESH: '/api/auth/refresh',
+    ME: '/api/auth/me',
     LOGOUT: '/api/auth/logout',
-    PROFILE: '/api/auth/profile',
+    PROFILE: '/api/auth/me',
   },
   CHAT: {
     LIST: '/api/conversations',

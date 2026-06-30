@@ -1,6 +1,7 @@
 import type { UserInfo, LoginResponse } from '@platform/core/types'
 
 export const mockToken = 'mock-jwt-token-2024'
+export const mockRefreshToken = 'mock-refresh-token-2024'
 
 export const mockUsers: (UserInfo & { password: string })[] = [
   {
@@ -28,7 +29,14 @@ export const mockUsers: (UserInfo & { password: string })[] = [
 ]
 
 export function buildLoginResponse(user: UserInfo): LoginResponse {
-  return { token: mockToken, user }
+  return {
+    accessToken: mockToken,
+    refreshToken: mockRefreshToken,
+    tokenType: 'Bearer',
+    expiresIn: 900,
+    username: user.username,
+    roles: user.role === 'ADMIN' ? ['ROLE_ADMIN', 'ROLE_USER'] : ['ROLE_USER'],
+  }
 }
 
 export function findUser(username: string, password: string) {

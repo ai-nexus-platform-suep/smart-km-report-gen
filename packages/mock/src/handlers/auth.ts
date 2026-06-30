@@ -1,6 +1,13 @@
 import { http, HttpResponse, delay } from 'msw'
 import { API_QA } from '@platform/core'
-import { findUser, findUserByUsername, buildLoginResponse, mockToken, mockUsers } from '../data'
+import {
+  findUser,
+  findUserByUsername,
+  buildLoginResponse,
+  mockRefreshToken,
+  mockToken,
+  mockUsers,
+} from '../data'
 
 export const authHandlers = [
   // 登录
@@ -63,11 +70,34 @@ export const authHandlers = [
       avatar: null,
       role: 'USER' as const,
       status: 1 as const,
+      password: body.password,
     }
+    mockUsers.push(newUser)
 
     return HttpResponse.json(
-      { code: 200, message: '注册成功', data: buildLoginResponse(newUser) },
+      { code: 200, message: '注册成功', data: null },
+      { status: 201 },
     )
+  }),
+
+  // 刷新 Token
+  http.post(API_QA.AUTH.REFRESH, async ({ request }) => {
+    await delay(300)
+    const body = (await request.json()) as { refreshToken: string }
+    if (body.refreshToken !== mockRefreshToken) {
+      return HttpResponse.json(
+        { code: 401, message: 'Refresh Token 无效', data: null },
+        { status: 401 },
+      )
+    }
+
+    const admin = mockUsers[0]
+    const { password: _, ...userInfo } = admin
+    return HttpResponse.json({
+      code: 200,
+      message: 'Token 刷新成功',
+      data: buildLoginResponse(userInfo),
+    })
   }),
 
   // 获取当前用户信息
@@ -81,7 +111,13 @@ export const authHandlers = [
       )
     }
     const admin = mockUsers[0]
-    const { password: _, ...userInfo } = admin
-    return HttpResponse.json({ code: 200, message: 'ok', data: userInfo })
+    return HttpResponse.json({
+      code: 200,
+      message: '操作成功',
+      data: {
+        username: admin.username,
+        roles: ['ROLE_ADMIN', 'ROLE_USER'],
+      },
+    })
   }),
 ]
