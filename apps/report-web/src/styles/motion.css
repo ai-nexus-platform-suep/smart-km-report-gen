@@ -1,0 +1,124 @@
+@keyframes statusPulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(0, 184, 217, 0.35);
+  }
+
+  70% {
+    box-shadow: 0 0 0 8px rgba(0, 184, 217, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(0, 184, 217, 0);
+  }
+}
+
+@keyframes scanLine {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+
+  22% {
+    opacity: 0.24;
+  }
+
+  to {
+    transform: translateY(260%);
+    opacity: 0;
+  }
+}
+
+@keyframes circuitDrift {
+  from {
+    background-position:
+      0 0,
+      0 0,
+      0 0;
+  }
+
+  to {
+    background-position:
+      72px 48px,
+      -96px 64px,
+      0 0;
+  }
+}
+
+@keyframes panelIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes borderTrace {
+  0% {
+    width: 36px;
+    opacity: 0.55;
+  }
+
+  50% {
+    width: 96px;
+    opacity: 1;
+  }
+
+  100% {
+    width: 36px;
+    opacity: 0.55;
+  }
+}
+
+@keyframes terminalDrift {
+  from {
+    transform: translate3d(-18px, -10px, 0);
+  }
+
+  to {
+    transform: translate3d(18px, 10px, 0);
+  }
+}
+
+@keyframes deltaIn {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.interactive-lift {
+  transition:
+    border-color 160ms var(--ease-standard),
+    transform 160ms var(--ease-standard),
+    box-shadow 160ms var(--ease-standard);
+}
+
+.interactive-lift:hover {
+  border-color: var(--accent-blue);
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(29, 35, 43, 0.08);
+}
+
+.delta-in {
+  animation: deltaIn 180ms var(--ease-standard);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
+}

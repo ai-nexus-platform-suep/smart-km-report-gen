@@ -1,0 +1,29 @@
+:root {
+  --bg-page: #f4f6f8;
+  --bg-surface: #ffffff;
+  --bg-subtle: #eef2f6;
+  --bg-terminal: #151a20;
+  --bg-terminal-soft: #1c232c;
+  --text-primary: #1d232b;
+  --text-secondary: #5c6673;
+  --text-muted: #9aa3ad;
+  --text-inverse: #f8fbff;
+  --border-default: #d8dee6;
+  --border-strong: #b8c2cf;
+  --grid-line: #e8edf3;
+  --accent-blue: #1e6bff;
+  --accent-blue-soft: #e8f0ff;
+  --accent-cyan: #00b8d9;
+  --accent-cyan-soft: #e6faff;
+  --state-success: #16a34a;
+  --state-warning: #f59e0b;
+  --state-danger: #dc2626;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --space-page: 24px;
+  --space-section: 16px;
+  --font-body: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
+  --font-display: "Bahnschrift Condensed", "Agency FB", "DIN Condensed", "Arial Narrow", "Microsoft YaHei UI", sans-serif;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-emphasized: cubic-bezier(0.16, 1, 0.3, 1);
+}
