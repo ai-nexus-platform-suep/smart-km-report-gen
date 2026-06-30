@@ -455,6 +455,25 @@ paths:
               schema:
                 $ref: "#/components/schemas/ApiResponseStatsSummary"
 
+  /api/stats/knowledge-bases/{kbId}:
+    get:
+      tags: [stats]
+      summary: 知识库维度统计
+      operationId: getKbStats
+      parameters:
+        - name: kbId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseKbStats"
+
 components:
   parameters:
     KnowledgeBaseId:
@@ -905,6 +924,26 @@ components:
                 total:
                   type: integer
 
+    KbStats:
+      type: object
+      properties:
+        kbId:
+          type: string
+        kbName:
+          type: string
+        documentCount:
+          type: integer
+        chunkCount:
+          type: integer
+
+    ApiResponseKbStats:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponseBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/KbStats"
+
     StatsSummary:
       type: object
       properties:
@@ -916,6 +955,23 @@ components:
           type: integer
         readyDocumentCount:
           type: integer
+        processingDocumentCount:
+          type: integer
+          description: 处理中的文档数（PARSING/CHUNKING/EMBEDDING）
+        failedDocumentCount:
+          type: integer
+          description: 处理失败的文档数
+        dailyUploadTrend:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              count:
+                type: integer
+          description: 近30天每天上传文档数
 
     ApiResponseStatsSummary:
       allOf:

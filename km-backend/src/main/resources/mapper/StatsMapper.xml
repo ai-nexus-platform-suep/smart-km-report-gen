@@ -18,12 +18,35 @@
         SELECT COUNT(*) FROM document WHERE status = 'READY'
     </select>
 
+
+    <select id="countProcessingDocuments" resultType="long">
+        SELECT COUNT(*) FROM document WHERE status IN ('UPLOADED', 'PARSING', 'CHUNKING', 'EMBEDDING')
+    </select>
+
+    <select id="countFailedDocuments" resultType="long">
+        SELECT COUNT(*) FROM document WHERE status = 'FAILED'
+    </select>
+
     <select id="dailyUploadTrend" resultType="java.util.Map">
         SELECT DATE(created_at) AS date, COUNT(*) AS count
         FROM document
         WHERE created_at >= DATE_SUB(CURDATE(), INTERVAL #{days} DAY)
         GROUP BY DATE(created_at)
         ORDER BY date ASC
+    </select>
+
+
+    <select id="countKbDocuments" resultType="long">
+        SELECT COUNT(*) FROM document WHERE kb_id = #{kbId}
+    </select>
+
+    <select id="countKbChunks" resultType="long">
+        SELECT COUNT(*) FROM chunk WHERE doc_id IN (SELECT id FROM document WHERE kb_id = #{kbId})
+    </select>
+
+
+    <select id="getKbNameById" resultType="string">
+        SELECT name FROM knowledge_base WHERE id = #{kbId}
     </select>
 
 </mapper>
