@@ -1,4 +1,4 @@
-package com.powerreport.content.dto;
+package com.powerreport.admin.dto;
 
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
@@ -8,15 +8,15 @@ import lombok.Data;
 @Data
 public class LlmConfigRequest {
 
-    @NotBlank(message = "API 地址不能为空")
+    @NotBlank(message = "apiUrl is required")
     private String apiUrl;
 
     private String apiKey;
 
-    @NotBlank(message = "模型名称不能为空")
+    @NotBlank(message = "modelName is required")
     private String modelName;
 
-    @Min(value = 1, message = "超时时间必须大于 0")
-    @Max(value = 600, message = "超时时间不能超过 600 秒")
+    @Min(value = 1, message = "timeoutSeconds must be greater than 0")
+    @Max(value = 600, message = "timeoutSeconds must be less than or equal to 600")
     private Integer timeoutSeconds;
 }

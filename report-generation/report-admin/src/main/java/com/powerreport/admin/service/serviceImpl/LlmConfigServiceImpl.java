@@ -1,9 +1,9 @@
-package com.powerreport.content.service.serviceImpl;
+package com.powerreport.admin.service.serviceImpl;
 
+import com.powerreport.admin.dto.LlmConfigRequest;
+import com.powerreport.admin.dto.LlmConfigResponse;
+import com.powerreport.admin.service.LlmConfigService;
 import com.powerreport.config.ReportAiProperties;
-import com.powerreport.content.dto.LlmConfigRequest;
-import com.powerreport.content.dto.LlmConfigResponse;
-import com.powerreport.content.service.LlmConfigService;
 import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;

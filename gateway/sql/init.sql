@@ -2,9 +2,6 @@
 -- 技术监督辅助平台 - Gateway 模块数据库初始化脚本
 -- ============================================================
 
--- 创建数据库（如尚未创建）
--- CREATE DATABASE IF NOT EXISTS tech_supervision DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
 -- 用户表
 CREATE TABLE IF NOT EXISTS sys_user (
     id BIGINT AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',

@@ -1,4 +1,4 @@
-package com.powerreport.content.dto;
+package com.powerreport.admin.dto;
 
 import lombok.Data;
 

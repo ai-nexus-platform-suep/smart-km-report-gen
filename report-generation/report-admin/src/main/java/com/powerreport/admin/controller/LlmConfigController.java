@@ -1,9 +1,9 @@
-package com.powerreport.content.controller;
+package com.powerreport.admin.controller;
 
 import com.myenglish.qacommon.dto.ApiResponse;
-import com.powerreport.content.dto.LlmConfigRequest;
-import com.powerreport.content.dto.LlmConfigResponse;
-import com.powerreport.content.service.LlmConfigService;
+import com.powerreport.admin.dto.LlmConfigRequest;
+import com.powerreport.admin.dto.LlmConfigResponse;
+import com.powerreport.admin.service.LlmConfigService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -26,6 +26,6 @@ public class LlmConfigController {
 
     @PutMapping
     public ApiResponse<LlmConfigResponse> updateConfig(@Valid @RequestBody LlmConfigRequest request) {
-        return ApiResponse.success("配置已更新", llmConfigService.updateConfig(request));
+        return ApiResponse.success("LLM config updated", llmConfigService.updateConfig(request));
     }
 }
