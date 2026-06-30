@@ -4,7 +4,8 @@ import type { KnowledgeBase, Document, SearchResultItem } from '@platform/core/t
 
 const now = new Date().toISOString()
 
-const mockKnowledgeBases: KnowledgeBase[] = [
+let nextKbId = 100
+let mockKnowledgeBases: KnowledgeBase[] = [
   {
     id: 1, name: '汽轮机检修规程', description: '火力发电厂汽轮机设备检修标准规范',
     type: 'REGULATION', searchMode: 'VECTOR_RERANK', documentCount: 12, creator: '管理员', createdAt: now,
@@ -37,6 +38,14 @@ const mockSearchResults: SearchResultItem[] = [
   { documentId: 1, documentName: '汽轮机检修规程_v3.0.pdf', content: '汽轮机润滑油系统应定期取样化验，油质不合格时应及时更换。轴承温度报警值为85℃，跳机值为95℃。', score: 0.78 },
 ]
 
+const typeMap: Record<string, string> = {
+  '规程规范': 'REGULATION', '技术报告论文': 'REPORT', '术语条目': 'TERM', '通用文档': 'GENERAL',
+}
+
+const searchModeMap: Record<string, string> = {
+  vector_rerank: 'VECTOR_RERANK', vector: 'VECTOR', keyword: 'KEYWORD', hybrid: 'HYBRID',
+}
+
 export const kmHandlers = [
   // === 知识库 CRUD ===
   http.get(API_KM.KB.LIST, async () => {
@@ -47,9 +56,21 @@ export const kmHandlers = [
     })
   }),
 
-  http.post(API_KM.KB.CREATE, async () => {
+  http.post(API_KM.KB.CREATE, async ({ request }) => {
     await delay(500)
-    return HttpResponse.json({ code: 200, message: '创建成功', data: { id: Date.now() } })
+    const body = await request.json() as any
+    const newKb: KnowledgeBase = {
+      id: nextKbId++,
+      name: body.name || '未命名',
+      description: body.description || '',
+      type: typeMap[body.docType] || 'GENERAL',
+      searchMode: searchModeMap[body.searchStrategy] || 'VECTOR_RERANK',
+      documentCount: 0,
+      creator: '当前用户',
+      createdAt: new Date().toISOString(),
+    }
+    mockKnowledgeBases.unshift(newKb)
+    return HttpResponse.json({ code: 200, message: '创建成功', data: newKb })
   }),
 
   http.put(API_KM.KB.UPDATE, async () => {
@@ -57,8 +78,11 @@ export const kmHandlers = [
     return HttpResponse.json({ code: 200, message: '更新成功', data: null })
   }),
 
-  http.delete(API_KM.KB.DELETE, async () => {
+  http.delete(API_KM.KB.DELETE, async ({ request }) => {
     await delay(400)
+    const url = new URL(request.url)
+    const id = Number(url.searchParams.get('id'))
+    mockKnowledgeBases = mockKnowledgeBases.filter(kb => kb.id !== id)
     return HttpResponse.json({ code: 200, message: '删除成功', data: null })
   }),
 
