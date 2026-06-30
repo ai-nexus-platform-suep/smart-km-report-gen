@@ -1,16 +1,15 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
+import DOMPurify from 'dompurify'
+import MarkdownIt from 'markdown-it'
 import {
   ArrowDown,
   ChatDotRound,
-  Collection,
-  Connection,
   CopyDocument,
-  DocumentChecked,
+  Delete,
   Finished,
-  MagicStick,
   Plus,
   Promotion,
   Search,
@@ -19,6 +18,7 @@ import {
 } from '@element-plus/icons-vue'
 import {
   createConversation,
+  deleteConversation,
   listConversations,
   listMessages,
   streamChatMessage,
@@ -39,8 +39,17 @@ const loadingConversations = ref(false)
 const loadingMessages = ref(false)
 const conversations = ref<ConversationView[]>([])
 const messages = ref<ChatMessageView[]>([])
+const deletingConversationId = ref<string | null>(null)
+const messageStreamRef = ref<HTMLElement | null>(null)
+const stickToBottom = ref(true)
 const route = useRoute()
 const router = useRouter()
+const markdown = new MarkdownIt({
+  breaks: true,
+  html: false,
+  linkify: true,
+  typographer: true,
+})
 
 const filteredConversations = computed(() => {
   const keyword = query.value.trim()
@@ -88,6 +97,38 @@ async function selectConversation(id: string) {
   await loadMessages(id)
 }
 
+function waitForNextPaint() {
+  return new Promise<void>((resolve) => {
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => resolve())
+    })
+  })
+}
+
+function updateStickToBottomState() {
+  const el = messageStreamRef.value
+  if (!el) return
+  stickToBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight <= 140
+}
+
+async function scrollMessagesToBottom(force = false, behavior: ScrollBehavior = force ? 'auto' : 'smooth') {
+  if (!force && !stickToBottom.value) return
+  await nextTick()
+  await waitForNextPaint()
+  const el = messageStreamRef.value
+  if (!el) return
+  el.scrollTo({ top: Math.max(0, el.scrollHeight - el.clientHeight), behavior })
+  stickToBottom.value = true
+}
+
+function handleComposerKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Enter' || event.isComposing) return
+  if (event.ctrlKey || event.metaKey) return
+
+  event.preventDefault()
+  sendMessage()
+}
+
 function formatTime() {
   return new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
@@ -102,6 +143,12 @@ function toggleThinking(message: ChatMessageView) {
 
 function normalizeFinalThinkingSteps(steps: ThinkingStep[] = []) {
   return steps.map((step) => ({ ...step, status: 'done' as const }))
+}
+
+function renderMarkdown(content = '') {
+  return DOMPurify.sanitize(markdown.render(content), {
+    ADD_ATTR: ['target', 'rel'],
+  })
 }
 
 function finishGeneration(message: ChatMessageView, finalCitations = message.citations ?? [], finalThinkingSteps = message.thinkingSteps ?? []) {
@@ -151,6 +198,7 @@ async function loadMessages(conversationId: string) {
     const result = await listMessages(conversationId)
     messages.value = result.messages
     activeAssistantId.value = [...result.messages].reverse().find((item) => item.role === 'assistant')?.id ?? null
+    await scrollMessagesToBottom(true)
   } catch (error) {
     console.error(error)
     ElMessage.error('历史消息加载失败。')
@@ -170,9 +218,57 @@ async function createNewConversation() {
     activeAssistantId.value = null
     await router.replace({ path: '/chat', query: { conversationId: conversation.id } })
     prompt.value = '请说明技术监督问答可以如何帮助我定位规程依据。'
+    await scrollMessagesToBottom(true)
   } catch (error) {
     console.error(error)
     ElMessage.error('新建会话失败。')
+  }
+}
+
+async function handleDeleteConversation(item: ConversationView) {
+  if (deletingConversationId.value) return
+
+  try {
+    await ElMessageBox.confirm(`确定删除「${item.title}」吗？删除后该会话的历史消息也会被移除。`, '删除会话', {
+      confirmButtonText: '删除',
+      cancelButtonText: '取消',
+      type: 'warning',
+      confirmButtonClass: 'el-button--danger',
+    })
+
+    deletingConversationId.value = item.id
+    if (item.id === activeConversationId.value && isGenerating.value) {
+      stopGeneration(false)
+    }
+
+    await deleteConversation(item.id)
+
+    const wasActive = item.id === activeConversationId.value
+    const nextConversations = conversations.value.filter((conversation) => conversation.id !== item.id)
+    conversations.value = nextConversations
+
+    if (wasActive) {
+      const nextConversation = nextConversations[0]
+      if (nextConversation) {
+        activeConversationId.value = nextConversation.id
+        await router.replace({ path: '/chat', query: { conversationId: nextConversation.id } })
+        await loadMessages(nextConversation.id)
+      } else {
+        activeConversationId.value = null
+        activeAssistantId.value = null
+        messages.value = []
+        await router.replace({ path: '/chat' })
+      }
+    }
+
+    ElMessage.success('会话已删除')
+  } catch (error) {
+    if (error !== 'cancel' && error !== 'close') {
+      console.error(error)
+      ElMessage.error('删除会话失败。')
+    }
+  } finally {
+    deletingConversationId.value = null
   }
 }
 
@@ -214,6 +310,8 @@ async function sendMessage(extraText = '') {
   activeAssistantId.value = assistantMessage.id
   isGenerating.value = true
   prompt.value = ''
+  stickToBottom.value = true
+  scrollMessagesToBottom(true)
   const abortController = new AbortController()
   streamController.value = abortController
 
@@ -245,6 +343,7 @@ async function sendMessage(extraText = '') {
           } else if (data.delta) {
             assistantMessage.content += data.delta
           }
+          scrollMessagesToBottom()
           if (data.intent) {
             assistantMessage.intentType = data.intent as ChatMessageView['intentType']
           }
@@ -258,6 +357,7 @@ async function sendMessage(extraText = '') {
         },
         onCitation(nextCitations) {
           assistantMessage.citations = nextCitations
+          scrollMessagesToBottom()
         },
         onError(message) {
           assistantMessage.content = message
@@ -359,10 +459,10 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="qa-chat-shell">
-    <!-- 左栏：会话搜索与切换，风格参考 FastGPT 的工作台侧栏。 -->
+    <!-- 左侧会话栏只保留会话入口，让问答区成为页面主角。 -->
     <aside class="conversation-panel">
       <div class="panel-top">
-        <div>
+        <div class="side-brand">
           <p class="eyebrow">智能问答</p>
           <h2>技术监督助手</h2>
         </div>
@@ -371,27 +471,29 @@ onBeforeUnmount(() => {
         </el-button>
       </div>
 
-      <!-- 侧栏概览用于制造“产品工作台”感，也方便后续接入真实统计数据。 -->
-      <div class="panel-hero">
-        <span class="hero-glow" />
-        <strong>企业知识问答空间</strong>
-        <p>基于规程、报告和检修记录生成可追溯回答。</p>
-        <div class="hero-stats">
-          <span><b>{{ knowledgeBaseCount }}</b> 已选知识库</span>
-          <span><b>{{ conversationCount }}</b> 最近会话</span>
+      <div class="side-status">
+        <div class="status-row">
+          <span>SSE 服务</span>
+          <el-tag size="small" effect="plain" type="success">已连接</el-tag>
+        </div>
+        <button class="model-config-btn" @click="openModelConfig">
+          <span class="config-icon"><Setting /></span>
+          <span>
+            <strong>模型配置</strong>
+            <small>DeepSeek Chat / 流式生成</small>
+          </span>
+        </button>
+        <div class="side-metrics">
+          <span><b>{{ knowledgeBaseCount }}</b> 知识库</span>
+          <span><b>{{ insightThinkingSteps.length }}</b> 思考步骤</span>
+          <span><b>{{ citations.length }}</b> 引用</span>
         </div>
       </div>
 
       <el-input v-model="query" class="conversation-search" :prefix-icon="Search" placeholder="搜索会话、设备、规程" />
 
-      <div class="panel-tabs">
-        <button class="active">全部</button>
-        <button>收藏</button>
-        <button>最近</button>
-      </div>
-
       <div v-loading="loadingConversations" class="conversation-list">
-        <button
+        <div
           v-for="item in filteredConversations"
           :key="item.id"
           class="conversation-item"
@@ -410,44 +512,29 @@ onBeforeUnmount(() => {
               <span>{{ item.updatedAt }}</span>
             </span>
           </span>
-        </button>
+          <el-tooltip content="删除会话" placement="top">
+            <el-button
+              class="conversation-delete"
+              text
+              circle
+              :icon="Delete"
+              :loading="deletingConversationId === item.id"
+              @click.stop="handleDeleteConversation(item)"
+            />
+          </el-tooltip>
+        </div>
       </div>
     </aside>
 
-    <!-- 中栏：智能对话主工作区，后续在这里接入真实消息、发送、停止生成和 SSE。 -->
+    <!-- 主工作区只保留问答流和输入区，顶部配置全部收纳到左侧。 -->
     <main class="chat-workspace">
-      <header class="chat-header">
-        <div>
-          <div class="header-kicker">
-            <el-icon><Connection /></el-icon>
-            已连接问答服务
-          </div>
-          <h1>{{ activeConversation.title }}</h1>
-        </div>
-        <div class="header-actions">
-          <el-tag effect="plain" type="success">自动意图识别</el-tag>
-          <el-button :icon="Setting" @click="openModelConfig">模型配置</el-button>
-        </div>
-      </header>
-
-      <!-- 当前问答上下文摘要，用来让用户知道本轮回答会基于哪些知识库和参数。 -->
-      <section class="context-strip">
-        <div class="context-card">
-          <span class="context-icon blue"><Collection /></span>
-          <span><strong>知识库</strong><small>由 selected_kb_ids 交给后端处理</small></span>
-        </div>
-        <div class="context-card">
-          <span class="context-icon green"><DocumentChecked /></span>
-          <span><strong>检索流程</strong><small>qa-agent 根据工作流执行召回与生成</small></span>
-        </div>
-        <div class="context-card">
-          <span class="context-icon amber"><MagicStick /></span>
-          <span><strong>DeepSeek Chat</strong><small>SSE 流式生成</small></span>
-        </div>
-      </section>
-
       <!-- 消息流区域：用户消息靠右，助手消息靠左。 -->
-      <section v-loading="loadingMessages" class="message-stream">
+      <section
+        ref="messageStreamRef"
+        v-loading="loadingMessages"
+        class="message-stream"
+        @scroll.passive="updateStickToBottomState"
+      >
         <article v-for="message in messages" :key="message.id" class="message-row" :class="message.role">
           <div class="avatar">{{ message.role === 'user' ? '我' : 'AI' }}</div>
           <div class="message-body">
@@ -478,7 +565,12 @@ onBeforeUnmount(() => {
                   </div>
                 </div>
               </div>
-              <p v-if="message.content">{{ message.content }}</p>
+              <div
+                v-if="message.content && message.role === 'assistant'"
+                class="message-content markdown"
+                v-html="renderMarkdown(message.content)"
+              />
+              <p v-else-if="message.content" class="message-content plain">{{ message.content }}</p>
               <p v-else class="streaming-placeholder">正在组织回答...</p>
               <div v-if="message.citations?.length || message.streaming" class="message-tools">
                 <el-button text :icon="CopyDocument">复制</el-button>
@@ -489,106 +581,79 @@ onBeforeUnmount(() => {
         </article>
       </section>
 
-      <!-- 输入区：后续发送时调用聊天接口，SSE 接入后这里也负责停止生成状态。 -->
+      <!-- 输入区固定在中间工作区底部，不随消息列表滚动。 -->
       <footer class="composer">
-        <div class="composer-top">
-          <span>{{ composerHint }}</span>
-          <el-button text :icon="Finished">检索预览</el-button>
-        </div>
-        <el-input
-          v-model="prompt"
-          type="textarea"
-          resize="none"
-          :autosize="{ minRows: 3, maxRows: 5 }"
-          placeholder="输入技术监督问题，支持规程依据、检索引用、报告口径判断"
-        />
-        <div v-if="isGenerating" class="follow-up-bar">
-          <el-input
-            v-model="followUp"
-            placeholder="本轮完成后发送补充问题，例如：请重点说明延期条件"
-            @keyup.enter="appendFollowUp"
-          />
-          <el-button @click="appendFollowUp">补充</el-button>
-        </div>
-        <div class="composer-actions">
-          <div class="quick-prompts">
-            <button @click="prompt = '请解释汽轮机大修周期的判断依据。'">检修周期</button>
-            <button @click="prompt = '锅炉检修前需要满足哪些安全规程？'">安全规程</button>
-            <button @click="prompt = '设备振动指标异常时应该如何监督处置？'">异常指标</button>
+        <button v-if="!stickToBottom" class="jump-bottom-btn" @click="scrollMessagesToBottom(true, 'smooth')">
+          回到底部继续提问
+        </button>
+        <div class="composer-inner">
+          <div class="composer-top">
+            <span>{{ composerHint }}</span>
+            <el-button text :icon="Finished">检索预览</el-button>
           </div>
-          <div class="send-actions">
-            <el-button v-if="isGenerating" type="danger" plain :icon="VideoPause" @click="stopGeneration">
-              停止生成
-            </el-button>
-            <el-button v-else type="primary" :icon="Promotion" @click="sendMessage()">发送</el-button>
+          <el-input
+            v-model="prompt"
+            type="textarea"
+            resize="none"
+            :autosize="{ minRows: 3, maxRows: 5 }"
+            placeholder="输入技术监督问题，支持规程依据、检索引用、报告口径判断"
+            @keydown="handleComposerKeydown"
+          />
+          <div v-if="isGenerating" class="follow-up-bar">
+            <el-input
+              v-model="followUp"
+              placeholder="本轮完成后发送补充问题，例如：请重点说明延期条件"
+              @keyup.enter="appendFollowUp"
+            />
+            <el-button @click="appendFollowUp">补充</el-button>
+          </div>
+          <div class="composer-actions">
+            <div class="quick-prompts">
+              <button @click="prompt = '请解释汽轮机大修周期的判断依据。'">检修周期</button>
+              <button @click="prompt = '锅炉检修前需要满足哪些安全规程？'">安全规程</button>
+              <button @click="prompt = '设备振动指标异常时应该如何监督处置？'">异常指标</button>
+            </div>
+            <div class="send-actions">
+              <el-button v-if="isGenerating" type="danger" plain :icon="VideoPause" @click="stopGeneration">
+                停止生成
+              </el-button>
+              <el-button v-else type="primary" :icon="Promotion" @click="sendMessage()">发送</el-button>
+            </div>
           </div>
         </div>
       </footer>
     </main>
 
-    <!-- 右栏：解释性信息，承担 Dify 风格的思考过程和引用溯源展示。 -->
-    <aside class="insight-panel">
-      <section class="insight-section">
-        <div class="section-title">
-          <span>思考过程</span>
-          <el-tag size="small" type="success">运行中</el-tag>
-        </div>
-        <div class="timeline">
-          <el-empty v-if="!insightThinkingSteps.length" description="暂无思考过程" />
-          <div
-            v-for="step in insightThinkingSteps"
-            :key="`${step.step_type ?? step.label}-${step.phase ?? ''}`"
-            class="timeline-item"
-            :class="step.status"
-          >
-            <span class="timeline-dot" />
-            <div>
-              <strong>{{ step.label }}</strong>
-              <p>{{ step.content || step.message }}</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section class="insight-section">
-        <div class="section-title">
-          <span>引用来源</span>
-          <span class="section-count">{{ citations.length }}</span>
-        </div>
-        <div class="citation-list">
-          <el-empty v-if="!citations.length" description="暂无引用来源" />
-          <article v-for="item in citations" :key="`${item.documentName}-${item.index ?? item.score}`" class="citation-card">
-            <div class="citation-head">
-              <strong>{{ item.documentName }}</strong>
-              <span>{{ Math.round(item.score * 100) }}%</span>
-            </div>
-            <p>{{ item.content }}</p>
-            <small>{{ item.chapterPath || item.source }}</small>
-          </article>
-        </div>
-      </section>
-    </aside>
   </div>
 </template>
 
 <style scoped>
-/* 页面整体采用三栏工作台布局：会话、对话、溯源信息。 */
+/* 页面整体采用两栏工作台布局：会话列表收窄，主问答区突出。 */
 .qa-chat-shell {
   display: grid;
-  grid-template-columns: 304px minmax(0, 1fr) 340px;
-  gap: 18px;
-  min-height: calc(100vh - var(--header-height) - 48px);
+  grid-template-columns: 260px minmax(0, 1fr);
+  gap: 0;
+  height: calc(100vh - var(--header-height) - 48px);
+  min-height: 640px;
+  overflow: hidden;
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 24px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.98)),
+    radial-gradient(circle at 8% 4%, rgba(15, 118, 110, 0.08), transparent 26%),
+    radial-gradient(circle at 96% 0%, rgba(37, 99, 235, 0.08), transparent 28%);
+  box-shadow: 0 22px 60px rgba(15, 23, 42, 0.08);
   color: var(--text-primary);
 }
 
 .conversation-panel,
-.chat-workspace,
-.insight-panel {
+.chat-workspace {
   min-height: 0;
-  border: 1px solid var(--border-color);
-  border-radius: 22px;
-  background: var(--bg-container);
-  box-shadow: var(--shadow-sm);
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
 }
 
 .conversation-panel {
@@ -596,44 +661,30 @@ onBeforeUnmount(() => {
   flex-direction: column;
   position: relative;
   overflow: hidden;
-  padding: 18px;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(248, 250, 252, 0.98)),
-    radial-gradient(circle at 12% 4%, rgba(15, 118, 110, 0.14), transparent 30%);
+  padding: 14px 12px;
+  border-right: 1px solid rgba(15, 23, 42, 0.07);
+  background: rgba(248, 250, 252, 0.62);
 }
 
 .conversation-panel::before {
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background:
-    linear-gradient(90deg, rgba(15, 118, 110, 0.08) 1px, transparent 1px),
-    linear-gradient(180deg, rgba(15, 118, 110, 0.06) 1px, transparent 1px);
-  background-size: 26px 26px;
-  content: '';
-  mask-image: linear-gradient(180deg, #000, transparent 50%);
-  pointer-events: none;
+  display: none;
 }
 
 .panel-top,
-.chat-header,
-.header-actions,
-.context-card,
 .composer-top,
 .composer-actions,
 .quick-prompts,
-.section-title,
-.citation-head {
+.model-config-btn,
+.status-row,
+.side-metrics {
   display: flex;
   align-items: center;
 }
 
 .panel-top,
-.chat-header,
 .composer-top,
 .composer-actions,
-.section-title,
-.citation-head {
+.status-row {
   justify-content: space-between;
 }
 
@@ -641,18 +692,21 @@ onBeforeUnmount(() => {
   position: relative;
   z-index: 1;
   gap: 12px;
-  margin-bottom: 14px;
+  margin-bottom: 12px;
+}
+
+.side-brand {
+  min-width: 0;
 }
 
 .eyebrow,
-.header-kicker {
+.status-row {
   color: var(--qa-brand, #0f766e);
   font-size: 12px;
   font-weight: 700;
 }
 
-.panel-top h2,
-.chat-header h1 {
+.panel-top h2 {
   margin: 0;
   color: var(--text-primary);
   font-weight: 700;
@@ -660,116 +714,119 @@ onBeforeUnmount(() => {
 }
 
 .panel-top h2 {
-  font-size: 21px;
-  letter-spacing: -0.3px;
+  overflow: hidden;
+  font-size: 18px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .new-chat-btn {
   border: 0;
   border-radius: 999px;
+  padding: 8px 12px;
   background: linear-gradient(135deg, #0f766e, #2563eb);
   box-shadow: 0 12px 22px rgba(15, 118, 110, 0.22);
 }
 
-.panel-hero {
-  position: relative;
-  z-index: 1;
-  overflow: hidden;
-  margin-bottom: 14px;
-  padding: 16px;
-  border: 1px solid rgba(15, 118, 110, 0.16);
-  border-radius: 18px;
-  background:
-    radial-gradient(circle at 86% 12%, rgba(37, 99, 235, 0.16), transparent 28%),
-    linear-gradient(135deg, rgba(236, 253, 245, 0.96), rgba(239, 246, 255, 0.88));
-}
-
-.hero-glow {
-  position: absolute;
-  right: -28px;
-  bottom: -34px;
-  width: 96px;
-  height: 96px;
-  border-radius: 50%;
-  background: rgba(20, 184, 166, 0.22);
-  filter: blur(4px);
-}
-
-.panel-hero strong {
-  position: relative;
-  z-index: 1;
-  display: block;
-  color: #0f172a;
-  font-size: 15px;
-}
-
-.panel-hero p {
-  position: relative;
-  z-index: 1;
-  margin: 8px 0 14px;
-  color: #475467;
-  font-size: 12px;
-  line-height: 1.6;
-}
-
-.hero-stats {
-  position: relative;
-  z-index: 1;
-  display: flex;
+.side-status {
+  display: grid;
   gap: 8px;
+  margin-bottom: 10px;
+  padding: 10px;
+  border: 1px solid rgba(15, 118, 110, 0.12);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.status-row {
+  gap: 8px;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.model-config-btn {
+  width: 100%;
+  gap: 10px;
+  padding: 9px;
+  border: 1px solid rgba(15, 118, 110, 0.14);
+  border-radius: 12px;
+  background: rgba(236, 253, 245, 0.74);
+  color: var(--text-primary);
+  text-align: left;
+  transition:
+    border-color var(--transition-fast),
+    background var(--transition-fast),
+    transform var(--transition-fast);
+}
+
+.model-config-btn:hover {
+  border-color: rgba(15, 118, 110, 0.32);
+  background: rgba(236, 253, 245, 0.94);
+  transform: translateY(-1px);
+}
+
+.config-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  border-radius: 10px;
+  background: #fff;
+  color: var(--qa-brand, #0f766e);
+}
+
+.config-icon :deep(svg) {
+  width: 17px;
+  height: 17px;
+}
+
+.model-config-btn strong,
+.model-config-btn small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.model-config-btn strong {
+  font-size: 13px;
+}
+
+.model-config-btn small {
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+
+.side-metrics {
+  gap: 6px;
   flex-wrap: wrap;
 }
 
-.hero-stats span {
-  padding: 6px 9px;
-  border: 1px solid rgba(15, 118, 110, 0.12);
+.side-metrics span {
+  padding: 4px 7px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.62);
+  background: rgba(255, 255, 255, 0.72);
   color: #475467;
   font-size: 12px;
 }
 
-.hero-stats b {
+.side-metrics b {
   color: #0f766e;
 }
 
 .conversation-search {
   position: relative;
   z-index: 1;
-  margin-bottom: 14px;
+  margin-bottom: 10px;
 }
 
 .conversation-search :deep(.el-input__wrapper) {
-  border-radius: 14px;
+  border-radius: 12px;
   background: rgba(255, 255, 255, 0.82);
   box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.06);
-}
-
-.panel-tabs {
-  position: relative;
-  z-index: 1;
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 6px;
-  margin-bottom: 12px;
-  padding: 4px;
-  border: 1px solid rgba(15, 23, 42, 0.06);
-  border-radius: 14px;
-  background: rgba(241, 245, 249, 0.82);
-}
-
-.panel-tabs button {
-  height: 30px;
-  border-radius: 10px;
-  color: var(--text-tertiary);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.panel-tabs button.active {
-  background: #fff;
-  color: var(--qa-brand, #0f766e);
-  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08);
 }
 
 .conversation-list {
@@ -778,63 +835,63 @@ onBeforeUnmount(() => {
   display: flex;
   flex: 1;
   flex-direction: column;
-  gap: 10px;
+  gap: 6px;
   min-height: 0;
   overflow-y: auto;
-  padding-right: 2px;
+  padding-right: 4px;
+  scrollbar-gutter: stable;
 }
 
 .conversation-item {
+  position: relative;
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr);
-  gap: 11px;
+  grid-template-columns: 30px minmax(0, 1fr) 26px;
+  gap: 8px;
+  align-items: start;
   width: 100%;
-  padding: 12px;
+  padding: 9px;
   border: 1px solid transparent;
-  border-radius: 18px;
+  border-radius: 12px;
   color: var(--text-secondary);
+  cursor: pointer;
   text-align: left;
   transition: all var(--transition-fast);
 }
 
 .conversation-item:hover {
   border-color: rgba(15, 23, 42, 0.06);
-  background: rgba(255, 255, 255, 0.72);
-  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.68);
 }
 
 .conversation-item.active {
   border-color: rgba(15, 118, 110, 0.28);
-  background:
-    linear-gradient(135deg, rgba(236, 253, 245, 0.92), rgba(239, 246, 255, 0.92));
+  background: rgba(236, 253, 245, 0.86);
   color: var(--text-primary);
-  box-shadow: 0 14px 26px rgba(15, 23, 42, 0.08);
+  box-shadow: inset 3px 0 0 rgba(15, 118, 110, 0.72);
 }
 
-.conversation-icon,
-.context-icon {
+.conversation-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
 }
 
 .conversation-icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 14px;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
   background: rgba(15, 118, 110, 0.10);
   color: var(--qa-brand, #0f766e);
 }
 
 .conversation-item.active .conversation-icon {
-  background: linear-gradient(135deg, #0f766e, #2563eb);
+  background: #0f766e;
   color: #fff;
 }
 
-.conversation-icon :deep(svg),
-.context-icon :deep(svg) {
-  width: 18px;
-  height: 18px;
+.conversation-icon :deep(svg) {
+  width: 17px;
+  height: 17px;
 }
 
 .conversation-content {
@@ -844,9 +901,7 @@ onBeforeUnmount(() => {
   gap: 4px;
 }
 
-.conversation-title,
-.context-card strong,
-.context-card small {
+.conversation-title {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -858,6 +913,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   gap: 8px;
   color: inherit;
+  font-size: 13px;
   font-weight: 650;
 }
 
@@ -876,7 +932,7 @@ onBeforeUnmount(() => {
   color: var(--text-tertiary);
   font-size: 12px;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 1;
 }
 
 .conversation-meta {
@@ -887,110 +943,57 @@ onBeforeUnmount(() => {
   font-size: 12px;
 }
 
+.conversation-delete {
+  align-self: start;
+  opacity: 0;
+  color: var(--text-tertiary);
+  transition:
+    opacity var(--transition-fast),
+    background var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.conversation-item:hover .conversation-delete,
+.conversation-item.active .conversation-delete,
+.conversation-delete.is-loading {
+  opacity: 1;
+}
+
+.conversation-delete:hover {
+  background: rgba(217, 45, 32, 0.1);
+  color: #d92d20;
+}
+
 .chat-workspace {
   display: flex;
   flex-direction: column;
+  position: relative;
   overflow: hidden;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96)),
-    radial-gradient(circle at 96% 2%, rgba(37, 99, 235, 0.08), transparent 28%);
-}
-
-.chat-header {
-  gap: 16px;
-  padding: 22px 26px 16px;
-  border-bottom: 1px solid var(--border-color-light);
-}
-
-.header-kicker {
-  display: flex;
-  gap: 6px;
-  margin-bottom: 4px;
-  align-items: center;
-}
-
-.chat-header h1 {
-  font-size: 23px;
-  letter-spacing: -0.4px;
-}
-
-.header-actions {
-  gap: 10px;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-}
-
-.context-strip {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  padding: 14px 26px;
-  border-bottom: 1px solid var(--border-color-light);
-  background: rgba(248, 250, 252, 0.72);
-}
-
-.context-card {
-  gap: 10px;
-  min-width: 0;
-  padding: 12px;
-  border: 1px solid rgba(15, 23, 42, 0.06);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.78);
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
-}
-
-.context-card strong,
-.context-card small {
-  display: block;
-}
-
-.context-card small {
-  color: var(--text-tertiary);
-  font-size: 12px;
-}
-
-.context-icon {
-  width: 36px;
-  height: 36px;
-  flex: 0 0 auto;
-  border-radius: 12px;
-}
-
-.context-icon.blue {
-  background: #eef3ff;
-  color: #155eef;
-}
-
-.context-icon.green {
-  background: #eafaf3;
-  color: #17b26a;
-}
-
-.context-icon.amber {
-  background: #fff5e6;
-  color: #b54708;
+  background: rgba(255, 255, 255, 0.64);
 }
 
 .message-stream {
   flex: 1;
   min-height: 0;
+  max-height: 100%;
   overflow-y: auto;
-  padding: 28px 26px;
+  padding: 24px clamp(32px, 6vw, 96px);
+  scrollbar-gutter: stable;
   background:
-    radial-gradient(circle at top left, rgba(15, 118, 110, 0.08), transparent 30%),
-    linear-gradient(180deg, rgba(248, 250, 252, 0.86), rgba(255, 255, 255, 0.94));
+    radial-gradient(circle at top left, rgba(15, 118, 110, 0.06), transparent 30%),
+    linear-gradient(180deg, rgba(248, 250, 252, 0.72), rgba(255, 255, 255, 0.86));
 }
 
 .message-row {
   display: grid;
-  grid-template-columns: 38px minmax(0, 760px);
+  grid-template-columns: 38px minmax(0, 860px);
   gap: 12px;
   margin-bottom: 22px;
 }
 
 .message-row.user {
   justify-content: end;
-  grid-template-columns: minmax(0, 700px) 38px;
+  grid-template-columns: minmax(0, 760px) 38px;
 }
 
 .message-row.user .avatar {
@@ -1038,8 +1041,8 @@ onBeforeUnmount(() => {
 }
 
 .message-card {
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 18px;
+  border: 1px solid rgba(15, 23, 42, 0.07);
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.92);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
@@ -1119,16 +1122,136 @@ onBeforeUnmount(() => {
   box-shadow: 0 0 0 4px rgba(247, 144, 9, 0.14);
 }
 
-.message-card p {
+.message-content {
   margin: 0;
   padding: 15px 16px;
   color: var(--text-primary);
   line-height: 1.75;
+}
+
+.message-content.plain {
   white-space: pre-line;
 }
 
 .message-card .streaming-placeholder {
+  margin: 0;
+  padding: 15px 16px;
   color: var(--text-tertiary);
+}
+
+.message-content.markdown {
+  overflow-wrap: anywhere;
+}
+
+.message-content.markdown :deep(h1),
+.message-content.markdown :deep(h2),
+.message-content.markdown :deep(h3),
+.message-content.markdown :deep(h4) {
+  margin: 16px 0 8px;
+  color: var(--text-primary);
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.message-content.markdown :deep(h1:first-child),
+.message-content.markdown :deep(h2:first-child),
+.message-content.markdown :deep(h3:first-child),
+.message-content.markdown :deep(h4:first-child),
+.message-content.markdown :deep(p:first-child) {
+  margin-top: 0;
+}
+
+.message-content.markdown :deep(h1) {
+  font-size: 22px;
+}
+
+.message-content.markdown :deep(h2) {
+  font-size: 19px;
+}
+
+.message-content.markdown :deep(h3) {
+  font-size: 16px;
+}
+
+.message-content.markdown :deep(p) {
+  margin: 10px 0;
+}
+
+.message-content.markdown :deep(ul),
+.message-content.markdown :deep(ol) {
+  margin: 10px 0;
+  padding-left: 22px;
+}
+
+.message-content.markdown :deep(li + li) {
+  margin-top: 6px;
+}
+
+.message-content.markdown :deep(strong) {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.message-content.markdown :deep(a) {
+  color: var(--qa-blue, #2563eb);
+  text-decoration: none;
+}
+
+.message-content.markdown :deep(a:hover) {
+  text-decoration: underline;
+}
+
+.message-content.markdown :deep(blockquote) {
+  margin: 12px 0;
+  padding: 8px 12px;
+  border-left: 3px solid rgba(15, 118, 110, 0.34);
+  border-radius: 0 10px 10px 0;
+  background: rgba(15, 118, 110, 0.06);
+  color: var(--text-secondary);
+}
+
+.message-content.markdown :deep(code) {
+  padding: 2px 5px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.06);
+  color: #b42318;
+  font-family: Consolas, 'SFMono-Regular', Menlo, monospace;
+  font-size: 0.92em;
+}
+
+.message-content.markdown :deep(pre) {
+  overflow-x: auto;
+  margin: 12px 0;
+  padding: 12px;
+  border-radius: 12px;
+  background: #0f172a;
+}
+
+.message-content.markdown :deep(pre code) {
+  padding: 0;
+  background: transparent;
+  color: #e2e8f0;
+  white-space: pre;
+}
+
+.message-content.markdown :deep(table) {
+  display: block;
+  overflow-x: auto;
+  width: 100%;
+  margin: 12px 0;
+  border-collapse: collapse;
+}
+
+.message-content.markdown :deep(th),
+.message-content.markdown :deep(td) {
+  padding: 8px 10px;
+  border: 1px solid rgba(15, 23, 42, 0.1);
+  text-align: left;
+}
+
+.message-content.markdown :deep(th) {
+  background: rgba(248, 250, 252, 0.92);
+  font-weight: 700;
 }
 
 .message-tools {
@@ -1140,10 +1263,39 @@ onBeforeUnmount(() => {
   background: rgba(248, 250, 252, 0.74);
 }
 
-.composer {
-  padding: 16px 26px 22px;
-  border-top: 1px solid var(--border-color);
+.jump-bottom-btn {
+  position: absolute;
+  z-index: 5;
+  top: -42px;
+  left: 50%;
+  display: block;
+  width: fit-content;
+  padding: 8px 14px;
+  border: 1px solid rgba(15, 118, 110, 0.18);
+  border-radius: 999px;
   background: rgba(255, 255, 255, 0.92);
+  color: var(--qa-brand, #0f766e);
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: 0 14px 32px rgba(15, 23, 42, 0.12);
+  transform: translateX(-50%);
+  backdrop-filter: blur(12px);
+}
+
+.composer {
+  position: relative;
+  flex: 0 0 auto;
+  padding: 12px clamp(32px, 6vw, 96px) 18px;
+  border-top: 1px solid rgba(15, 23, 42, 0.06);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.78), rgba(248, 250, 252, 0.92));
+}
+
+.composer-inner {
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.88);
+  padding: 12px;
+  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.07);
 }
 
 .composer-top {
@@ -1154,7 +1306,7 @@ onBeforeUnmount(() => {
 }
 
 .composer :deep(.el-textarea__inner) {
-  border-radius: 18px;
+  border-radius: 14px;
   background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.08);
   line-height: 1.6;
@@ -1209,148 +1361,64 @@ onBeforeUnmount(() => {
   flex: 0 0 auto;
 }
 
-.insight-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  padding: 18px;
-  overflow-y: auto;
-  background:
-    linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 250, 252, 0.96)),
-    radial-gradient(circle at 30% 0%, rgba(15, 118, 110, 0.10), transparent 28%);
+.conversation-list,
+.message-stream {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(15, 118, 110, 0.32) transparent;
 }
 
-.insight-section {
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--border-color-light);
+.conversation-list::-webkit-scrollbar,
+.message-stream::-webkit-scrollbar {
+  width: 8px;
 }
 
-.insight-section:last-child {
-  border-bottom: 0;
+.conversation-list::-webkit-scrollbar-track,
+.message-stream::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-.section-title {
-  gap: 12px;
-  margin-bottom: 12px;
-  color: var(--text-primary);
-  font-weight: 700;
-}
-
-.section-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 24px;
-  height: 24px;
+.conversation-list::-webkit-scrollbar-thumb,
+.message-stream::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
   border-radius: 999px;
-  background: rgba(37, 99, 235, 0.10);
-  color: var(--qa-blue, #2563eb);
-  font-size: 12px;
+  background: rgba(15, 118, 110, 0.26);
+  background-clip: padding-box;
 }
 
-.timeline {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.timeline-item {
-  display: grid;
-  grid-template-columns: 14px minmax(0, 1fr);
-  gap: 10px;
-}
-
-.timeline-dot {
-  width: 10px;
-  height: 10px;
-  margin-top: 5px;
-  border-radius: 50%;
-  background: #17b26a;
-  box-shadow: 0 0 0 4px rgba(23, 178, 106, 0.14);
-}
-
-.timeline-item.running .timeline-dot {
-  background: #f79009;
-  box-shadow: 0 0 0 4px rgba(247, 144, 9, 0.14);
-}
-
-.timeline-item strong {
-  display: block;
-  margin-bottom: 4px;
-}
-
-.timeline-item p,
-.citation-card p {
-  margin: 0;
-  color: var(--text-secondary);
-  font-size: 13px;
-  line-height: 1.65;
-}
-
-.citation-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.citation-card {
-  padding: 12px;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 16px;
-  background: rgba(255, 255, 255, 0.82);
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.04);
-}
-
-.citation-head {
-  align-items: flex-start;
-  gap: 10px;
-  margin-bottom: 8px;
-}
-
-.citation-head strong {
-  min-width: 0;
-  color: var(--text-primary);
-  font-size: 13px;
-}
-
-.citation-head span {
-  color: var(--qa-brand, #0f766e);
-  font-size: 12px;
-  font-weight: 700;
-}
-
-.citation-card small {
-  display: block;
-  margin-top: 8px;
-  color: var(--text-tertiary);
+.conversation-list::-webkit-scrollbar-thumb:hover,
+.message-stream::-webkit-scrollbar-thumb:hover {
+  background: rgba(37, 99, 235, 0.34);
+  background-clip: padding-box;
 }
 
 /* 暗色模式单独适配，避免白底卡片和弱对比文字在夜间主题下看不清。 */
+:global([data-theme='dark']) .qa-chat-shell {
+  border-color: rgba(148, 163, 184, 0.16);
+  background: rgba(15, 23, 42, 0.98);
+  box-shadow: none;
+}
+
 :global([data-theme='dark']) .conversation-panel {
-  background:
-    linear-gradient(180deg, rgba(16, 24, 39, 0.96), rgba(15, 23, 42, 0.98)),
-    radial-gradient(circle at 12% 4%, rgba(45, 212, 191, 0.12), transparent 30%);
+  border-right-color: rgba(148, 163, 184, 0.14);
+  background: rgba(16, 24, 39, 0.96);
 }
 
-:global([data-theme='dark']) .panel-hero {
-  border-color: rgba(45, 212, 191, 0.18);
-  background:
-    radial-gradient(circle at 86% 12%, rgba(59, 130, 246, 0.16), transparent 28%),
-    linear-gradient(135deg, rgba(15, 118, 110, 0.16), rgba(30, 41, 59, 0.88));
-}
-
-:global([data-theme='dark']) .panel-hero strong,
-:global([data-theme='dark']) .panel-hero p {
-  color: var(--text-primary);
-}
-
-:global([data-theme='dark']) .hero-stats span,
+:global([data-theme='dark']) .side-status,
+:global([data-theme='dark']) .side-metrics span,
 :global([data-theme='dark']) .conversation-search :deep(.el-input__wrapper),
-:global([data-theme='dark']) .panel-tabs,
-:global([data-theme='dark']) .panel-tabs button.active {
+:global([data-theme='dark']) .composer-inner {
   border-color: rgba(148, 163, 184, 0.18);
   background: rgba(15, 23, 42, 0.72);
   color: var(--text-secondary);
+}
+
+:global([data-theme='dark']) .model-config-btn {
+  border-color: rgba(45, 212, 191, 0.22);
+  background: rgba(15, 118, 110, 0.14);
+}
+
+:global([data-theme='dark']) .config-icon {
+  background: rgba(15, 23, 42, 0.72);
 }
 
 :global([data-theme='dark']) .conversation-item:hover,
@@ -1360,21 +1428,17 @@ onBeforeUnmount(() => {
   box-shadow: none;
 }
 
-:global([data-theme='dark']) .chat-workspace,
-:global([data-theme='dark']) .insight-panel {
+:global([data-theme='dark']) .chat-workspace {
   background:
     linear-gradient(180deg, rgba(16, 24, 39, 0.98), rgba(15, 23, 42, 0.98)),
     radial-gradient(circle at 96% 2%, rgba(37, 99, 235, 0.12), transparent 28%);
 }
 
-:global([data-theme='dark']) .context-strip,
 :global([data-theme='dark']) .message-tools {
   background: rgba(15, 23, 42, 0.58);
 }
 
-:global([data-theme='dark']) .context-card,
-:global([data-theme='dark']) .message-card,
-:global([data-theme='dark']) .citation-card {
+:global([data-theme='dark']) .message-card {
   border-color: rgba(148, 163, 184, 0.18);
   background: rgba(15, 23, 42, 0.76);
   box-shadow: none;
@@ -1390,8 +1454,32 @@ onBeforeUnmount(() => {
   background: linear-gradient(90deg, rgba(45, 212, 191, 0.12), rgba(37, 99, 235, 0.10));
 }
 
+:global([data-theme='dark']) .message-content.markdown :deep(code) {
+  background: rgba(148, 163, 184, 0.14);
+  color: #fca5a5;
+}
+
+:global([data-theme='dark']) .message-content.markdown :deep(blockquote) {
+  background: rgba(45, 212, 191, 0.08);
+}
+
+:global([data-theme='dark']) .message-content.markdown :deep(th),
+:global([data-theme='dark']) .message-content.markdown :deep(td) {
+  border-color: rgba(148, 163, 184, 0.18);
+}
+
+:global([data-theme='dark']) .message-content.markdown :deep(th) {
+  background: rgba(30, 41, 59, 0.82);
+}
+
 :global([data-theme='dark']) .composer {
   background: rgba(16, 24, 39, 0.96);
+}
+
+:global([data-theme='dark']) .jump-bottom-btn {
+  border-color: rgba(45, 212, 191, 0.24);
+  background: rgba(15, 23, 42, 0.88);
+  color: #7dd3fc;
 }
 
 :global([data-theme='dark']) .composer :deep(.el-textarea__inner),
@@ -1408,14 +1496,10 @@ onBeforeUnmount(() => {
   color: #7dd3fc;
 }
 
-/* 小屏时隐藏右侧溯源栏，优先保证聊天主流程可用。 */
+/* 窄屏时改为单栏，优先保证聊天主流程可用。 */
 @media (max-width: 1320px) {
   .qa-chat-shell {
-    grid-template-columns: 260px minmax(0, 1fr);
-  }
-
-  .insight-panel {
-    display: none;
+    grid-template-columns: 236px minmax(0, 1fr);
   }
 }
 
@@ -1426,20 +1510,6 @@ onBeforeUnmount(() => {
 
   .conversation-panel {
     max-height: 320px;
-  }
-
-  .chat-header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .context-strip {
-    display: flex;
-    overflow-x: auto;
-  }
-
-  .context-card {
-    min-width: 220px;
   }
 
   .message-row,
