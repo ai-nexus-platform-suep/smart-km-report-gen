@@ -41,7 +41,13 @@ public interface DocumentMapper {
                      @Param("errorMsg") String errorMsg);
 
     /**
-     * 批量查询文档（用于检索结果回填文档名称）。
+     * 批量查询文档（用于检索结果回填文档名）
      */
     List<Document> listByIds(@Param("ids") List<String> ids);
+
+    /**
+     * 查询指定知识库下状态为 READY 的文档 ID 列表
+     * 用于 EPIC-05 BM25 降级搜索
+     */
+    List<String> listReadyDocIdsByKbIds(@Param("kbIds") List<String> kbIds);
 }

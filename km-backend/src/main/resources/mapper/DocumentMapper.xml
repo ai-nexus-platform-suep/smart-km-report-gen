@@ -1,4 +1,4 @@
-<?xml version="1.0" encoding="UTF-8" ?>
+﻿<?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.km.repository.DocumentMapper">
 
@@ -74,7 +74,7 @@
         SELECT <include refid="BaseColumns"/>
         FROM document
         WHERE kb_id = #{kbId}
-        <if test="status != null and status != ''">
+        <if test="status != null and status != '\''">
             AND status = #{status}
         </if>
         ORDER BY created_at DESC
@@ -85,7 +85,7 @@
         SELECT COUNT(*)
         FROM document
         WHERE kb_id = #{kbId}
-        <if test="status != null and status != ''">
+        <if test="status != null and status != '\''">
             AND status = #{status}
         </if>
     </select>
@@ -106,6 +106,18 @@
         <foreach collection="ids" item="id" open="(" separator="," close=")">
             #{id}
         </foreach>
+    </select>
+
+    <!-- 查询指定知识库下状态为 READY 的文档 ID 列表 -->
+    <!-- 用于 EPIC-05 BM25 降级搜索 -->
+    <select id="listReadyDocIdsByKbIds" resultType="string">
+        SELECT id
+        FROM document
+        WHERE kb_id IN
+        <foreach collection="kbIds" item="kbId" open="(" separator="," close=")">
+            #{kbId}
+        </foreach>
+        AND status = '\''READY'\''
     </select>
 
 </mapper>

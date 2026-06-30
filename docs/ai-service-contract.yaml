@@ -1,36 +1,36 @@
-openapi: 3.0.3
+﻿openapi: 3.0.3
 info:
-  title: 知识管理 AI 服务内部 API（km-ai-service）
+  title: 鐭ヨ瘑绠＄悊 AI 鏈嶅姟鍐呴儴 API锛坘m-ai-service锛?
   description: |
-    Java `km-backend` ↔ Python `km-ai-service` 内部契约。
-    - **chunk 切分、embedding、rerank** 均由本服务提供
-    - 路径前缀 `/internal`，不对外暴露；经 Gateway 时仅内网可达
-    - 向量库：**Qdrant**
-    - 统一响应：`{ "code": 0, "message": "ok", "data": ... }`（联调前与大组确认是否改为 200）
+    Java `km-backend` 鈫?Python `km-ai-service` 鍐呴儴濂戠害銆?
+    - **chunk 鍒囧垎銆乪mbedding銆乺erank** 鍧囩敱鏈湇鍔℃彁渚?
+    - 璺緞鍓嶇紑 `/internal`锛屼笉瀵瑰鏆撮湶锛涚粡 Gateway 鏃朵粎鍐呯綉鍙揪
+    - 鍚戦噺搴擄細**Milvus**
+    - 缁熶竴鍝嶅簲锛歚{ "code": 0, "message": "ok", "data": ... }`锛堣仈璋冨墠涓庡ぇ缁勭‘璁ゆ槸鍚︽敼涓?200锛?
   version: 1.0.0
   contact:
-    name: 知识管理组
+    name: 鐭ヨ瘑绠＄悊缁?
 
 servers:
   - url: http://localhost:8092
-    description: 本地 km-ai-service
+    description: 鏈湴 km-ai-service
   - url: http://km-ai-service:8092
-    description: Docker / K8s 服务名
+    description: Docker / K8s 鏈嶅姟鍚?
 
 tags:
   - name: health
   - name: process
-    description: 文档处理（解析+chunk+embed+写Qdrant）
+    description: 鏂囨。澶勭悊锛堣В鏋?chunk+embed+鍐橫ilvus锛?
   - name: embed
   - name: rerank
   - name: search
-    description: Qdrant 向量检索
+    description: 鍚戦噺妫€绱紙鍙€夛紝鑻?Java 涓嶇洿杩?Milvus锛?
 
 paths:
   /internal/health:
     get:
       tags: [health]
-      summary: 健康检查
+      summary: 鍋ュ悍妫€鏌?
       operationId: aiHealthCheck
       responses:
         "200":
@@ -43,11 +43,11 @@ paths:
   /internal/process/document:
     post:
       tags: [process]
-      summary: 处理单个文档（异步推荐）
+      summary: 澶勭悊鍗曚釜鏂囨。锛堝紓姝ユ帹鑽愶級
       description: |
-        完整管线：读 MinIO → 解析 → chunk → 回写 MySQL chunk 元数据 → embed → 写 Qdrant。
-        可由 RabbitMQ 消费者内部调用；也可 Java 直接 HTTP 触发。
-        处理过程中通过回调更新 Java 侧 document.status。
+        瀹屾暣绠＄嚎锛氳 MinIO 鈫?瑙ｆ瀽 鈫?chunk 鈫?embed 鈫?鍐?Milvus 鈫?鍥炲啓 chunk 鍏冩暟鎹€?
+        鍙敱 RabbitMQ 娑堣垂鑰呭唴閮ㄨ皟鐢紱涔熷彲 Java 鐩存帴 HTTP 瑙﹀彂銆?
+        澶勭悊杩囩▼涓€氳繃鍥炶皟鏇存柊 Java 渚?document.status銆?
       operationId: processDocument
       requestBody:
         required: true
@@ -57,7 +57,7 @@ paths:
               $ref: "#/components/schemas/ProcessDocumentRequest"
       responses:
         "200":
-          description: 已接受（异步）或处理完成（同步 MVP）
+          description: 宸叉帴鍙楋紙寮傛锛夋垨澶勭悊瀹屾垚锛堝悓姝?MVP锛?
           content:
             application/json:
               schema:
@@ -66,7 +66,7 @@ paths:
   /internal/embed:
     post:
       tags: [embed]
-      summary: 文本批量嵌入
+      summary: 鏂囨湰鎵归噺宓屽叆
       operationId: embedTexts
       requestBody:
         required: true
@@ -85,7 +85,7 @@ paths:
   /internal/rerank:
     post:
       tags: [rerank]
-      summary: 重排序
+      summary: 閲嶆帓搴?
       operationId: rerankPassages
       requestBody:
         required: true
@@ -104,10 +104,10 @@ paths:
   /internal/search:
     post:
       tags: [search]
-      summary: Qdrant 向量检索
+      summary: Milvus 鍚戦噺妫€绱紙鍙€夛級
       description: |
-        由本接口完成 query embedding、Qdrant 向量检索和知识库过滤。
-        km-backend 的 `/api/search` 编排本接口 + `/internal/rerank`。
+        鑻?Java 涓嶇洿杩?Milvus SDK锛岀敱鏈帴鍙ｅ畬鎴愬悜閲忔绱€?
+        km-backend 鐨?`/api/search` 缂栨帓鏈帴鍙?+ `/internal/rerank`銆?
       operationId: vectorSearch
       requestBody:
         required: true
@@ -181,14 +181,14 @@ components:
           format: uuid
         minioPath:
           type: string
-          description: MinIO 对象路径
+          description: MinIO 瀵硅薄璺緞
         mimeType:
           type: string
         chunkStrategy:
           $ref: "#/components/schemas/ChunkStrategy"
         callbackUrl:
           type: string
-          description: Java 状态回调，如 http://km-backend:8091/internal/documents/status
+          description: Java 鐘舵€佸洖璋冿紝濡?http://km-backend:8091/internal/document/status
 
     ProcessDocumentResult:
       type: object
@@ -221,7 +221,7 @@ components:
             type: string
         model:
           type: string
-          description: 可选，默认读取 Java `/internal/config/embedding` 配置
+          description: 鍙€夛紝榛樿璇?Nacos/鐜鍙橀噺
 
     EmbedResult:
       type: object
@@ -265,7 +265,7 @@ components:
       properties:
         index:
           type: integer
-          description: 对应 passages 下标
+          description: 瀵瑰簲 passages 涓嬫爣
         score:
           type: number
           format: float
@@ -300,6 +300,12 @@ components:
           type: integer
           default: 20
         similarityThreshold:
+          default: 0.6
+        tagFilters:
+          type: object
+          additionalProperties:
+            type: string
+          description: 标签过滤器，对应 EPIC-05 05.1
           type: number
           format: float
           default: 0.6
@@ -316,6 +322,9 @@ components:
         chapterPath:
           type: string
         similarityScore:
+        chunkType:
+          type: string
+          description: 切片类型（paragraph/section/chapter），对应 EPIC-05 05.3
           type: number
           format: float
 

@@ -602,7 +602,8 @@ components:
           $ref: "#/components/schemas/ChunkStrategy"
         searchStrategy:
           type: string
-          enum: [vector, vector_rerank]
+          enum: [vector, vector_rerank, bm25]
+          description: 检索模式，bm25 为降级模式（EPIC-05 05.5）
         docCount:
           type: integer
           description: 知识库内文档数量（对应 doc_count 列，上传/删除后立即更新）
@@ -637,7 +638,8 @@ components:
           $ref: "#/components/schemas/ChunkStrategy"
         searchStrategy:
           type: string
-          enum: [vector, vector_rerank]
+          enum: [vector, vector_rerank, bm25]
+          description: 检索模式，bm25 为降级模式（EPIC-05 05.5）
 
     UpdateKnowledgeBaseRequest:
       type: object
@@ -652,7 +654,8 @@ components:
           $ref: "#/components/schemas/ChunkStrategy"
         searchStrategy:
           type: string
-          enum: [vector, vector_rerank]
+          enum: [vector, vector_rerank, bm25]
+          description: 检索模式，bm25 为降级模式（EPIC-05 05.5）
 
     BatchDeleteRequest:
       type: object
@@ -704,15 +707,16 @@ components:
           items:
             type: string
             format: uuid
-          description: 限定知识库，空则检索全部可访问库
+          description: 限定知识库，空则检索用户可访问的全部库（EPIC-05 05.2）
         topK:
           type: integer
           default: 10
           minimum: 1
-          maximum: 50
+          maximum: 100
         searchMode:
           type: string
-          enum: [vector, vector_rerank]
+          enum: [vector, vector_rerank, bm25]
+          description: 检索模式，bm25 为降级模式（EPIC-05 05.5）
           default: vector_rerank
         similarityThreshold:
           type: number
@@ -980,3 +984,4 @@ components:
           properties:
             data:
               $ref: "#/components/schemas/StatsSummary"
+

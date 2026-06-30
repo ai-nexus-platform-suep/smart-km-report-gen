@@ -8,16 +8,20 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
-import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
-import org.springframework.web.bind.MissingRequestHeaderException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
-import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
-import org.springframework.web.multipart.MultipartException;
-import org.springframework.web.multipart.support.MissingServletRequestPartException;
 
+import javax.validation.ConstraintViolation;
+import javax.validation.ConstraintViolationException;
+import java.util.stream.Collectors;
+
+/**
+ * 全局异常处理器
+ * 对应 EPIC-05 05.6 参数校验增强
+ */
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -52,14 +56,6 @@ public class GlobalExceptionHandler {
         return HttpStatus.INTERNAL_SERVER_ERROR;
     }
 
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity<ApiResponse<Void>> handleValidation(MethodArgumentNotValidException ex) {
-        FieldError fieldError = ex.getBindingResult().getFieldError();
-        String message = fieldError != null ? fieldError.getDefaultMessage() : ErrorCode.BAD_REQUEST.getMessage();
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.fail(ErrorCode.BAD_REQUEST.getCode(), message));
-    }
-
     @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
     public ResponseEntity<ApiResponse<Void>> handleMethodNotSupported(HttpRequestMethodNotSupportedException ex) {
         log.warn("Method not supported: {} for path {}", ex.getMethod(), ex.getMethod());
@@ -74,34 +70,34 @@ public class GlobalExceptionHandler {
                 .body(ApiResponse.fail(ErrorCode.BAD_REQUEST.getCode(), ex.getMessage()));
     }
 
-    @ExceptionHandler(MissingRequestHeaderException.class)
-    public ResponseEntity<ApiResponse<Void>> handleMissingHeader(MissingRequestHeaderException ex) {
+    /**
+     * 处理 @RequestBody 参数校验异常
+     * 对应 EPIC-05 05.6 参数校验增强
+     */
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ResponseEntity<ApiResponse<Void>> handleValidation(MethodArgumentNotValidException ex) {
+        String message = ex.getBindingResult().getFieldErrors().stream()
+                .map(FieldError::getDefaultMessage)
+                .collect(Collectors.joining("; "));
+        log.warn("[EPIC-05] Validation failed: {}", message);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.fail(ErrorCode.BAD_REQUEST.getCode(), ex.getMessage()));
+                .body(ApiResponse.fail(ErrorCode.BAD_REQUEST.getCode(), message));
     }
 
-    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
-    public ResponseEntity<ApiResponse<Void>> handleTypeMismatch(MethodArgumentTypeMismatchException ex) {
+    /**
+     * 处理 @Validated 路径参数/查询参数校验异常
+     * 对应 EPIC-05 05.6 参数校验增强
+     */
+    @ExceptionHandler(ConstraintViolationException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public ResponseEntity<ApiResponse<Void>> handleConstraintViolation(ConstraintViolationException ex) {
+        String message = ex.getConstraintViolations().stream()
+                .map(ConstraintViolation::getMessage)
+                .collect(Collectors.joining("; "));
+        log.warn("[EPIC-05] Constraint violation: {}", message);
         return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.fail(ErrorCode.BAD_REQUEST.getCode(), ex.getMessage()));
-    }
-
-    @ExceptionHandler(HttpMessageNotReadableException.class)
-    public ResponseEntity<ApiResponse<Void>> handleUnreadableBody(HttpMessageNotReadableException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.fail(ErrorCode.BAD_REQUEST.getCode(), "Request body is missing or malformed"));
-    }
-
-    @ExceptionHandler(MissingServletRequestPartException.class)
-    public ResponseEntity<ApiResponse<Void>> handleMissingPart(MissingServletRequestPartException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.fail(ErrorCode.BAD_REQUEST.getCode(), ex.getMessage()));
-    }
-
-    @ExceptionHandler(MultipartException.class)
-    public ResponseEntity<ApiResponse<Void>> handleMultipart(MultipartException ex) {
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
-                .body(ApiResponse.fail(ErrorCode.KM_DOC_004.getCode(), "Upload file cannot exceed 50MB"));
+                .body(ApiResponse.fail(ErrorCode.BAD_REQUEST.getCode(), message));
     }
 
     @ExceptionHandler(Exception.class)

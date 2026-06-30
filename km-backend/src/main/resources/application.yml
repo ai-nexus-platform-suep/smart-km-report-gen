@@ -54,6 +54,10 @@ km:
     expire-hours: 24
   ai-service:
     base-url: http://localhost:8092
+    connect-timeout: 5000
+    read-timeout: 10000
+    retry:
+      max-attempts: 2
   document-processing:
     queue:
       enabled: true
