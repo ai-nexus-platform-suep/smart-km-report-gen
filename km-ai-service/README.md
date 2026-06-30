@@ -25,3 +25,5 @@ uvicorn app.main:app --host 0.0.0.0 --port 8092 --reload
 ```
 
 依赖中间件：`docker compose up -d`（含 Milvus、RabbitMQ、MinIO）。
+
+实现进度见分支 `feat/a-pipeline-v2`（EPIC-04，合入 `feat-a` 后本目录补充完整代码）。
