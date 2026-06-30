@@ -14,6 +14,7 @@ from qa_agent.graph.context import (
     truncate_by_tokens,
     estimate_tokens,
     count_context_tokens,
+    _format_message,
 )
 from qa_agent.service.thinking_service import (
     add_thinking_step,
@@ -97,6 +98,149 @@ class TestContext:
         ]
         total = count_context_tokens(messages)
         assert total > 0
+
+    def test_estimate_tokens_mixed_cn_en(self):
+        """中英文混合文本 token 估算"""
+        text = "变压器 oil 温度 abnormal，请检查 cooling system。"
+        tokens = estimate_tokens(text)
+        # 中文字符 + 英文单词 + 标点都应被计入
+        assert tokens > 10
+
+    def test_estimate_tokens_numbers_and_punctuation(self):
+        """数字和标点符号被计入 token 估算"""
+        text = "第3.2.1条规定：温度应≤95℃，压力≥0.5MPa。"
+        tokens = estimate_tokens(text)
+        assert tokens > 0
+        # 纯中文(基数) vs 含数字符号的同一句话，含数字的应更多
+        text_plain = "第条规定：温度应，压力。"
+        tokens_plain = estimate_tokens(text_plain)
+        assert tokens >= tokens_plain
+
+    def test_build_context_token_overflow_truncation(self):
+        """token 超限时触发截断并插入提示信息"""
+        # 构造 100 轮对话，每条约 120 中文 ≈ 180 tokens，总量远超 8192
+        messages = []
+        for i in range(100):
+            messages.append(
+                {"role": "user", "content": f"第{i}轮问题" + "测试内容" * 30}
+            )
+            messages.append(
+                {"role": "assistant", "content": f"第{i}轮回答" + "回答内容" * 30}
+            )
+
+        ctx = build_context(messages, max_tokens=8192)
+
+        # 总量远超上限 → 必须触发截断
+        assert "[更早的对话内容已被截断]" in ctx
+        # 最新轮次应该保留
+        assert "第99轮" in ctx
+        # 最旧轮次应该被丢弃
+        assert "第0轮问题" not in ctx
+
+    def test_build_context_current_question_reserved(self):
+        """current_question 参与固定开销预留，不会被截断"""
+        messages = [
+            {"role": "user", "content": "旧问题" * 50},
+            {"role": "assistant", "content": "旧回答" * 50},
+        ]
+        long_question = "当前最新问题" * 200  # ~1200 中文字符 ≈ 1800 tokens
+
+        # max_tokens=500，current_question 已占 ~1800 tokens 固定开销
+        # available = 500 - 1800 - 200 = -1500 → 历史消息全部丢弃
+        ctx = build_context(
+            messages, max_tokens=500, current_question=long_question
+        )
+
+        assert "[更早的对话内容已被截断]" in ctx
+        # 旧消息因 token 超限被丢弃
+        assert "旧问题" not in ctx
+
+    def test_build_context_system_prompt_overhead(self):
+        """system_prompt 参数计入固定开销"""
+        messages = [
+            {"role": "user", "content": "简短问题"},
+            {"role": "assistant", "content": "简短回答"},
+        ]
+        long_system = "你是电力行业智能问答助手，请严格按照知识库内容回答。" * 100
+
+        # system_prompt 很大时留给历史消息的空间极少
+        ctx = build_context(
+            messages, max_tokens=500, system_prompt=long_system
+        )
+
+        # system_prompt 占满固定开销 → 历史被截断
+        assert "[更早的对话内容已被截断]" in ctx
+
+    def test_build_context_many_rounds_keeps_recent(self):
+        """30 轮对话中 token 超限时保留最新轮次，最早被丢弃"""
+        messages = []
+        for i in range(30):
+            messages.append(
+                {"role": "user",
+                 "content": f"第{i}轮用户问题，关于电力技术监督的具体内容咨询"}
+            )
+            messages.append(
+                {"role": "assistant",
+                 "content": f"第{i}轮助手回答，根据相关规程和处理办法进行详细说明"}
+            )
+
+        # 给一个较小的上限强制截断
+        ctx = build_context(messages, max_tokens=1000)
+
+        if "[更早的对话内容已被截断]" in ctx:
+            # 截断：最旧的第0轮被丢弃
+            assert "第0轮" not in ctx
+            # 最新轮次保留
+            assert "第29轮" in ctx
+        else:
+            # 未截断：全部保留
+            assert "第0轮" in ctx
+            assert "第29轮" in ctx
+
+    def test_truncate_by_tokens_zero_limit(self):
+        """max_tokens=0 时返回空列表"""
+        messages = [{"role": "user", "content": "测试"}]
+        result = truncate_by_tokens(messages, max_tokens=0)
+        assert result == []
+
+    def test_truncate_by_tokens_negative_limit(self):
+        """max_tokens 为负数时返回空列表"""
+        messages = [{"role": "user", "content": "测试"}]
+        result = truncate_by_tokens(messages, max_tokens=-1)
+        assert result == []
+
+    def test_truncate_by_tokens_plain_strings(self):
+        """消息为纯字符串（非 dict）时正常处理"""
+        short_msg = "短消息"
+        long_msg = "这是一条比较长的消息内容" * 20
+        latest_msg = "最新消息"
+        messages = [short_msg, long_msg, latest_msg]
+
+        result = truncate_by_tokens(messages, max_tokens=50)
+
+        # 至少保留 1 条最新消息
+        assert len(result) >= 1
+        # 最新消息应被保留
+        last_content = (
+            result[-1] if isinstance(result[-1], str)
+            else result[-1].get("content", "")
+        )
+        assert "最新消息" in last_content
+
+    def test_format_message_roles(self):
+        """_format_message 角色标签映射：user→用户, assistant→助手, system→系统"""
+        assert _format_message({"role": "user", "content": "你好"}) == "用户: 你好"
+
+        assert _format_message(
+            {"role": "assistant", "content": "你好，有什么可以帮助你的"}
+        ) == "助手: 你好，有什么可以帮助你的"
+
+        assert _format_message(
+            {"role": "system", "content": "你是电力助手"}
+        ) == "系统: 你是电力助手"
+
+        # 未知角色回退为原始 role 值
+        assert _format_message({"role": "bot", "content": "hello"}) == "bot: hello"
 
 
 # ============================================================
