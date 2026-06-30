@@ -49,6 +49,7 @@ class SearchServiceImplTest {
     void shouldThrowExceptionWhenQueryIsEmpty() {
         SearchRequest request = new SearchRequest();
         request.setQuery("   ");
+        request.setKnowledgeBaseIds(Arrays.asList("kb-1", "kb-2"));
 
         assertThrows(BusinessException.class, () -> searchService.search(request, mockUserId));
     }
@@ -57,6 +58,7 @@ class SearchServiceImplTest {
     void shouldThrowExceptionWhenQueryIsNull() {
         SearchRequest request = new SearchRequest();
         request.setQuery(null);
+        request.setKnowledgeBaseIds(Arrays.asList("kb-1", "kb-2"));
 
         assertThrows(BusinessException.class, () -> searchService.search(request, mockUserId));
     }
@@ -88,9 +90,11 @@ class SearchServiceImplTest {
     }
 
     @Test
-    void shouldFallbackToEmptyResultWhenAiServiceThrows() {
+    void shouldFallbackToBm25WhenAiServiceThrows() {
         SearchRequest request = createDefaultRequest("变压器油温异常");
         when(kmAiClient.vectorSearch(any())).thenThrow(new RuntimeException("Connection refused"));
+        // BM25 降级需要 mock listReadyDocIdsByKbIds
+        when(documentMapper.listReadyDocIdsByKbIds(any())).thenReturn(Collections.emptyList());
 
         SearchResultVO result = searchService.search(request, mockUserId);
 
@@ -101,7 +105,6 @@ class SearchServiceImplTest {
 
     @Test
     void shouldReturnVectorSearchResultsInDefaultMode() {
-        // 默认 searchMode = "vector_rerank"，但重排序服务异常时回退
         SearchRequest request = createDefaultRequest("变压器油温异常");
         request.setSearchMode("vector");
 
@@ -118,7 +121,7 @@ class SearchServiceImplTest {
         assertNotNull(first.getChunkId());
         assertNotNull(first.getContent());
         assertNotNull(first.getSimilarityScore());
-        assertNull(first.getRerankScore()); // vector 模式不设置 rerankScore
+        assertNull(first.getRerankScore());
     }
 
     @Test
@@ -129,7 +132,6 @@ class SearchServiceImplTest {
         VectorSearchResponse vsResponse = createVectorSearchResponse(3);
         when(kmAiClient.vectorSearch(any())).thenReturn(vsResponse);
 
-        // 重排序返回：第1条 0.92，第2条 0.55，第3条 0.30
         RerankResponse rerankResponse = createRerankResponse(
                 Arrays.asList(0, 1, 2),
                 Arrays.asList(0.92f, 0.55f, 0.30f));
@@ -141,7 +143,6 @@ class SearchServiceImplTest {
         // rerankThreshold=0.5，过滤掉第3条（0.30）
         assertEquals(2, result.getTotal());
 
-        // 验证按 rerankScore 降序排列
         assertEquals(0.92f, result.getResults().get(0).getRerankScore(), 0.001f);
         assertEquals(0.55f, result.getResults().get(1).getRerankScore(), 0.001f);
     }
@@ -167,7 +168,6 @@ class SearchServiceImplTest {
         request.setSearchMode("vector");
         request.setSimilarityThreshold(0.7f);
 
-        // AI 服务内部已做阈值过滤，这里验证 mock 传参
         VectorSearchResponse response = createVectorSearchResponse(2);
         when(kmAiClient.vectorSearch(any())).thenReturn(response);
 
@@ -200,7 +200,7 @@ class SearchServiceImplTest {
             hit.setDocumentId("doc-" + i);
             hit.setContent("这是第" + (i + 1) + "条匹配结果的内容。" +
                     "变压器油温异常时应立即检查冷却系统运行状态。");
-            hit.setChapterPath("第" + (i + 1) + "章 > 第" + (i + 1) + "节");
+            hit.setChapterPath("第" + (i + 1) + "章> 第" + (i + 1) + "节");
             hit.setSimilarityScore(0.9f - i * 0.1f);
             hits.add(hit);
         }
