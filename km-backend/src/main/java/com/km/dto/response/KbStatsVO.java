@@ -1,4 +1,4 @@
-package com.km.vo;
+package com.km.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 

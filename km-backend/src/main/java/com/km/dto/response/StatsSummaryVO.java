@@ -37,7 +37,7 @@ public class StatsSummaryVO {
     public void setProcessingDocumentCount(long v) { this.processingDocumentCount = v; }
     public long getFailedDocumentCount() { return failedDocumentCount; }
     public void setFailedDocumentCount(long v) { this.failedDocumentCount = v; }
-        public long getReadyDocumentCount() { return readyDocumentCount; }
+    public long getReadyDocumentCount() { return readyDocumentCount; }
     public void setReadyDocumentCount(long v) { this.readyDocumentCount = v; }
     public List<Map<String, Object>> getDailyUploadTrend() { return dailyUploadTrend; }
     public void setDailyUploadTrend(List<Map<String, Object>> v) { this.dailyUploadTrend = v; }

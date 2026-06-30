@@ -1,9 +1,11 @@
 package com.km.service.impl;
 
+import com.km.common.exception.BusinessException;
+import com.km.common.exception.ErrorCode;
 import com.km.dto.response.StatsSummaryVO;
 import com.km.repository.StatsMapper;
 import com.km.service.StatsService;
-import com.km.vo.KbStatsVO;
+import com.km.dto.response.KbStatsVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
@@ -30,9 +32,13 @@ public class StatsServiceImpl implements StatsService {
 
     @Override
     public KbStatsVO getKbStats(String kbId) {
+        String kbName = statsMapper.getKbNameById(kbId);
+        if (kbName == null) {
+            throw new BusinessException(ErrorCode.KM_KB_001);
+        }
         KbStatsVO vo = new KbStatsVO();
         vo.setKbId(kbId);
-        vo.setKbName(statsMapper.getKbNameById(kbId));
+        vo.setKbName(kbName);
         vo.setDocumentCount(statsMapper.countKbDocuments(kbId));
         vo.setChunkCount(statsMapper.countKbChunks(kbId));
         return vo;

@@ -3,6 +3,7 @@ package com.km.controller;
 import com.km.common.dto.ApiResponse;
 import com.km.dto.response.StatsSummaryVO;
 import com.km.service.StatsService;
+import com.km.dto.response.KbStatsVO;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -22,7 +23,7 @@ public class StatsController {
     }
 
     @GetMapping("/knowledge-bases/{kbId}")
-    public ApiResponse<com.km.vo.KbStatsVO> kbStats(@PathVariable String kbId) {
+    public ApiResponse<KbStatsVO> kbStats(@PathVariable String kbId) {
         return ApiResponse.ok(statsService.getKbStats(kbId));
     }
 }

@@ -20,7 +20,7 @@
 
 
     <select id="countProcessingDocuments" resultType="long">
-        SELECT COUNT(*) FROM document WHERE status IN ('PARSING', 'CHUNKING', 'EMBEDDING')
+        SELECT COUNT(*) FROM document WHERE status IN ('UPLOADED', 'PARSING', 'CHUNKING', 'EMBEDDING')
     </select>
 
     <select id="countFailedDocuments" resultType="long">

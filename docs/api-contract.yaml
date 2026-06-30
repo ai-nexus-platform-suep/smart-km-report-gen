@@ -472,7 +472,7 @@ paths:
           content:
             application/json:
               schema:
-$ref: "#/components/schemas/ApiResponseKbStats"
+                $ref: "#/components/schemas/ApiResponseKbStats"
 
 components:
   parameters:
