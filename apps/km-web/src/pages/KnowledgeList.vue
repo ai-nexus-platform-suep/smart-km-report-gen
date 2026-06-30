@@ -42,7 +42,13 @@
     <el-table v-else :data="list" style="width: 100%" v-loading="loading" @selection-change="onSelectionChange">
       <el-table-column type="selection" width="50" />
       <el-table-column prop="id" label="ID" width="80" />
-      <el-table-column prop="name" label="名称" min-width="200" />
+      <el-table-column label="名称" min-width="200">
+        <template #default="{ row }">
+          <el-link type="primary" :underline="false" @click="router.push(`/knowledge/${row.id}`)">
+            {{ row.name }}
+          </el-link>
+        </template>
+      </el-table-column>
       <el-table-column label="文档类型" width="120">
         <template #default="{ row }">
           {{ typeLabel(row.type) }}
