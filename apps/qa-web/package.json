@@ -23,5 +23,10 @@
     "vite": "^5.4.0",
     "typescript": "^5.4.0",
     "unplugin-element-plus": "^0.8.0"
+  },
+  "msw": {
+    "workerDirectory": [
+      "public"
+    ]
   }
 }

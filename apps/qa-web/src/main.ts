@@ -9,7 +9,7 @@ import App from './App.vue'
 import router from './router'
 
 async function bootstrap() {
-  if (import.meta.env.DEV) {
+  if (import.meta.env.DEV && import.meta.env.VITE_ENABLE_MOCK !== 'false') {
     const { startWorker } = await import('@platform/mock')
     await startWorker()
   }
