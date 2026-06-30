@@ -1,5 +1,6 @@
 package com.km.service.impl;
 
+import com.km.client.ModelConfigTestClient;
 import com.km.common.constant.ConfigKeys;
 import com.km.common.exception.BusinessException;
 import com.km.common.exception.ErrorCode;
@@ -11,6 +12,7 @@ import com.km.entity.SystemConfig;
 import com.km.repository.SystemConfigMapper;
 import com.km.service.ConfigService;
 import com.km.util.ConfigMaskUtil;
+import com.km.vo.ConfigTestResultVO;
 import com.km.vo.EmbeddingConfigVO;
 import com.km.vo.ParserConfigVO;
 import com.km.vo.RerankConfigVO;
@@ -25,10 +27,16 @@ import java.util.Map;
 public class ConfigServiceImpl implements ConfigService {
 
     private final SystemConfigMapper systemConfigMapper;
+    private final ModelConfigTestClient modelConfigTestClient;
 
     @Override
     public EmbeddingConfigVO getEmbeddingConfig() {
         return toEmbeddingVO(loadConfig(ConfigKeys.EMBEDDING), true);
+    }
+
+    @Override
+    public EmbeddingConfigVO getEmbeddingConfigInternal() {
+        return toEmbeddingVO(loadConfig(ConfigKeys.EMBEDDING), false);
     }
 
     @Override
@@ -53,6 +61,11 @@ public class ConfigServiceImpl implements ConfigService {
     @Override
     public RerankConfigVO getRerankConfig() {
         return toRerankVO(loadConfig(ConfigKeys.RERANK), true);
+    }
+
+    @Override
+    public RerankConfigVO getRerankConfigInternal() {
+        return toRerankVO(loadConfig(ConfigKeys.RERANK), false);
     }
 
     @Override
@@ -90,6 +103,50 @@ public class ConfigServiceImpl implements ConfigService {
         }
         saveConfig(ConfigKeys.PARSER, current);
         return toParserVO(loadConfig(ConfigKeys.PARSER));
+    }
+
+    @Override
+    public ConfigTestResultVO testEmbeddingConfig() {
+        Map<String, Object> config = loadConfigMap(ConfigKeys.EMBEDDING);
+        return runConnectivityTest(
+                (String) config.get("apiUrl"),
+                (String) config.getOrDefault("apiKey", ""),
+                (String) config.get("modelName"),
+                true);
+    }
+
+    @Override
+    public ConfigTestResultVO testRerankConfig() {
+        Map<String, Object> config = loadConfigMap(ConfigKeys.RERANK);
+        return runConnectivityTest(
+                (String) config.get("apiUrl"),
+                (String) config.getOrDefault("apiKey", ""),
+                (String) config.get("modelName"),
+                false);
+    }
+
+    private ConfigTestResultVO runConnectivityTest(String apiUrl, String apiKey, String modelName, boolean embedding) {
+        if (!StringUtils.hasText(apiKey)) {
+            throw new BusinessException(ErrorCode.KM_CFG_002, "API Key 未配置，请先保存有效密钥");
+        }
+        if (!StringUtils.hasText(modelName)) {
+            throw new BusinessException(ErrorCode.KM_CFG_002, "模型名称未配置");
+        }
+        long start = System.currentTimeMillis();
+        try {
+            if (embedding) {
+                modelConfigTestClient.testEmbedding(apiUrl, apiKey, modelName);
+            } else {
+                modelConfigTestClient.testRerank(apiUrl, apiKey, modelName);
+            }
+            ConfigTestResultVO result = new ConfigTestResultVO();
+            result.setSuccess(true);
+            result.setMessage("连通性测试成功");
+            result.setLatencyMs(System.currentTimeMillis() - start);
+            return result;
+        } catch (Exception e) {
+            throw new BusinessException(ErrorCode.KM_CFG_002, "连通性测试失败: " + e.getMessage());
+        }
     }
 
     private SystemConfig loadConfig(String key) {
