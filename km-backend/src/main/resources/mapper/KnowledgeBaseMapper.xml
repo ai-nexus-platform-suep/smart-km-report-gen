@@ -11,43 +11,51 @@
         <result column="search_strategy" property="searchStrategy"/>
         <result column="doc_count" property="docCount"/>
         <result column="owner_id" property="ownerId"/>
+        <result column="owner_name" property="ownerName"/>
         <result column="created_at" property="createdAt"/>
         <result column="updated_at" property="updatedAt"/>
     </resultMap>
 
     <sql id="BaseColumns">
-        id, name, description, doc_type, chunk_strategy_json,
-        search_strategy, doc_count, owner_id, created_at, updated_at
+        kb.id, kb.name, kb.description, kb.doc_type, kb.chunk_strategy_json,
+        kb.search_strategy, kb.doc_count, kb.owner_id,
+        COALESCE(u.nickname, u.username) AS owner_name,
+        kb.created_at, kb.updated_at
     </sql>
 
     <select id="getById" resultMap="BaseResultMap">
-        SELECT <include refid="BaseColumns"/> FROM knowledge_base WHERE id = #{id}
+        SELECT <include refid="BaseColumns"/>
+        FROM knowledge_base kb
+        LEFT JOIN user u ON u.id = kb.owner_id
+        WHERE kb.id = #{id}
     </select>
 
     <select id="findAll" resultMap="BaseResultMap">
-        SELECT <include refid="BaseColumns"/> FROM knowledge_base
+        SELECT <include refid="BaseColumns"/>
+        FROM knowledge_base kb
+        LEFT JOIN user u ON u.id = kb.owner_id
         <where>
             <if test="docType != null and docType != &#39;&#39;">
-                AND doc_type = #{docType}
+                AND kb.doc_type = #{docType}
             </if>
             <if test="keyword != null and keyword != &#39;&#39;">
-                AND (name LIKE CONCAT(&#39;%&#39;, #{keyword}, &#39;%&#39;)
-                     OR description LIKE CONCAT(&#39;%&#39;, #{keyword}, &#39;%&#39;))
+                AND (kb.name LIKE CONCAT(&#39;%&#39;, #{keyword}, &#39;%&#39;)
+                     OR kb.description LIKE CONCAT(&#39;%&#39;, #{keyword}, &#39;%&#39;))
             </if>
         </where>
-        ORDER BY updated_at DESC
+        ORDER BY kb.updated_at DESC
         LIMIT #{limit} OFFSET #{offset}
     </select>
 
     <select id="countAll" resultType="int">
-        SELECT COUNT(*) FROM knowledge_base
+        SELECT COUNT(*) FROM knowledge_base kb
         <where>
             <if test="docType != null and docType != &#39;&#39;">
-                AND doc_type = #{docType}
+                AND kb.doc_type = #{docType}
             </if>
             <if test="keyword != null and keyword != &#39;&#39;">
-                AND (name LIKE CONCAT(&#39;%&#39;, #{keyword}, &#39;%&#39;)
-                     OR description LIKE CONCAT(&#39;%&#39;, #{keyword}, &#39;%&#39;))
+                AND (kb.name LIKE CONCAT(&#39;%&#39;, #{keyword}, &#39;%&#39;)
+                     OR kb.description LIKE CONCAT(&#39;%&#39;, #{keyword}, &#39;%&#39;))
             </if>
         </where>
     </select>

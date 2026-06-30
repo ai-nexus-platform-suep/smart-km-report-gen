@@ -40,11 +40,11 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         kb.setName(request.getName());
         kb.setDescription(request.getDescription());
         kb.setDocType(request.getDocType() != null ? request.getDocType() : "通用文档");
-        kb.setChunkStrategyJson(request.getChunkStrategy());
+        kb.setChunkStrategyJson(request.getChunkStrategy() != null ? "\"" + request.getChunkStrategy() + "\"" : null);
         kb.setSearchStrategy(request.getSearchStrategy() != null ? request.getSearchStrategy() : "vector_rerank");
         kb.setOwnerId(ownerId);
         knowledgeBaseMapper.insert(kb);
-        return toVO(kb);
+        return getById(kb.getId());
     }
 
     @Override
@@ -67,7 +67,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         kb.setId(id);
         kb.setName(request.getName());
         kb.setDescription(request.getDescription());
-        kb.setChunkStrategyJson(request.getChunkStrategy());
+        kb.setChunkStrategyJson(request.getChunkStrategy() != null ? "\"" + request.getChunkStrategy() + "\"" : null);
         kb.setSearchStrategy(request.getSearchStrategy());
         knowledgeBaseMapper.updateById(kb);
         return getById(id);
@@ -86,6 +86,12 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     @Override
     @Transactional
     public void batchDelete(List<String> ids) {
+        for (String id : ids) {
+            KnowledgeBase existing = knowledgeBaseMapper.getById(id);
+            if (existing == null) {
+                throw new BusinessException(ErrorCode.KM_KB_001);
+            }
+        }
         knowledgeBaseMapper.batchDelete(ids);
     }
 
@@ -96,9 +102,14 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         vo.setDescription(kb.getDescription());
         vo.setDocType(kb.getDocType());
         vo.setDocCount(kb.getDocCount());
-        vo.setChunkStrategy(kb.getChunkStrategyJson());
+        String cs = kb.getChunkStrategyJson();
+        if (cs != null && cs.startsWith("\"") && cs.endsWith("\"")) {
+            cs = cs.substring(1, cs.length() - 1);
+        }
+        vo.setChunkStrategy(cs);
         vo.setSearchStrategy(kb.getSearchStrategy());
         vo.setOwnerId(kb.getOwnerId());
+        vo.setOwnerName(kb.getOwnerName());
         vo.setCreatedAt(kb.getCreatedAt());
         vo.setUpdatedAt(kb.getUpdatedAt());
         return vo;
