@@ -1,0 +1,43 @@
+spring:
+  application:
+    name: qa-gateway
+  cloud:
+    gateway:
+      routes:
+        # --- Auth（共用） ---
+        - id: auth
+          uri: http://localhost:8081
+          predicates:
+            - Path=/api/auth/**
+        # --- QA: 会话 & 聊天 (Python) ---
+        - id: qa-agent
+          uri: http://localhost:8000
+          predicates:
+            - Path=/api/conversations/**,/api/chat/**
+        # --- QA: 模型配置 & 统计 (Java) ---
+        - id: qa-chat-service
+          uri: http://localhost:8082
+          predicates:
+            - Path=/api/model-configs/**,/api/stats/qa/**
+        # --- Report ---
+        - id: report
+          uri: http://localhost:8092
+          predicates:
+            - Path=/api/reports/**,/api/admin/**,/api/health
+        # --- KM ---
+        - id: km
+          uri: http://localhost:8091
+          predicates:
+            - Path=/api/knowledge-bases/**,/api/documents/**,/api/search,/api/stats/summary
+
+server:
+  port: 8080
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:/O+iqksxQ8P7xHjF9z0bxKXvEClBvG3ORdIdL440AA0=}
+    issuer: tech-supervision-platform
+  gateway:
+    public-paths:
+      - /api/auth/**
+      - /api/health
