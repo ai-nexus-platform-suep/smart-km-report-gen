@@ -4,7 +4,8 @@ import type { KnowledgeBase, Document, SearchResultItem } from '@platform/core/t
 
 const now = new Date().toISOString()
 
-const mockKnowledgeBases: KnowledgeBase[] = [
+let nextKbId = 5
+let mockKnowledgeBases: KnowledgeBase[] = [
   {
     id: 1, name: '汽轮机检修规程', description: '火力发电厂汽轮机设备检修标准规范',
     type: 'REGULATION', searchMode: 'VECTOR_RERANK', documentCount: 12, creator: '管理员', createdAt: now,
@@ -37,28 +38,80 @@ const mockSearchResults: SearchResultItem[] = [
   { documentId: 1, documentName: '汽轮机检修规程_v3.0.pdf', content: '汽轮机润滑油系统应定期取样化验，油质不合格时应及时更换。轴承温度报警值为85℃，跳机值为95℃。', score: 0.78 },
 ]
 
+const typeMap: Record<string, string> = {
+  '规程规范': 'REGULATION', '技术报告论文': 'REPORT', '术语条目': 'TERM', '通用文档': 'GENERAL',
+}
+
+const searchModeMap: Record<string, string> = {
+  vector_rerank: 'VECTOR_RERANK', vector: 'VECTOR', keyword: 'KEYWORD', hybrid: 'HYBRID',
+}
+
 export const kmHandlers = [
   // === 知识库 CRUD ===
-  http.get(API_KM.KB.LIST, async () => {
+  http.get(`/api/knowledge-bases/:id`, async ({ params }) => {
+    await delay(200)
+    const id = Number(params.id)
+    const kb = mockKnowledgeBases.find(k => k.id === id)
+    if (!kb) return HttpResponse.json({ code: 404, message: '知识库不存在', data: null }, { status: 404 })
+    return HttpResponse.json({ code: 200, message: 'ok', data: kb })
+  }),
+
+  http.get(API_KM.KB.LIST, async ({ request }) => {
     await delay(400)
+    const url = new URL(request.url)
+    const docType = url.searchParams.get('docType') || ''
+    const keyword = url.searchParams.get('keyword') || ''
+    let filtered = [...mockKnowledgeBases]
+    if (docType) filtered = filtered.filter(kb => kb.type === docType)
+    if (keyword) filtered = filtered.filter(kb => kb.name.includes(keyword))
     return HttpResponse.json({
       code: 200, message: 'ok',
-      data: { records: mockKnowledgeBases, total: mockKnowledgeBases.length, page: 1, pageSize: 10 },
+      data: { records: filtered, total: filtered.length, page: 1, pageSize: 10 },
     })
   }),
 
-  http.post(API_KM.KB.CREATE, async () => {
-    await delay(500)
-    return HttpResponse.json({ code: 200, message: '创建成功', data: { id: Date.now() } })
+  http.post(API_KM.KB.BATCH_DELETE, async ({ request }) => {
+    await delay(400)
+    const body = await request.json() as any
+    const ids: number[] = body?.ids || []
+    mockKnowledgeBases = mockKnowledgeBases.filter(kb => !ids.includes(kb.id))
+    return HttpResponse.json({ code: 200, message: '批量删除成功', data: null })
   }),
 
-  http.put(API_KM.KB.UPDATE, async () => {
+  http.post(API_KM.KB.CREATE, async ({ request }) => {
     await delay(500)
+    const body = await request.json() as any
+    const newKb: KnowledgeBase = {
+      id: nextKbId++,
+      name: body.name || '未命名',
+      description: body.description || '',
+      type: typeMap[body.docType] || 'GENERAL',
+      searchMode: searchModeMap[body.searchStrategy] || 'VECTOR_RERANK',
+      documentCount: 0,
+      creator: '管理员',
+      createdAt: new Date().toISOString(),
+    }
+    mockKnowledgeBases.unshift(newKb)
+    return HttpResponse.json({ code: 200, message: '创建成功', data: newKb })
+  }),
+
+  http.put(API_KM.KB.UPDATE, async ({ request }) => {
+    await delay(500)
+    const url = new URL(request.url)
+    const id = Number(url.searchParams.get('id'))
+    const body = await request.json() as any
+    const idx = mockKnowledgeBases.findIndex(k => k.id === id)
+    if (idx > -1) {
+      mockKnowledgeBases[idx] = { ...mockKnowledgeBases[idx], name: body.name || mockKnowledgeBases[idx].name, description: body.description ?? mockKnowledgeBases[idx].description }
+    }
     return HttpResponse.json({ code: 200, message: '更新成功', data: null })
   }),
 
-  http.delete(API_KM.KB.DELETE, async () => {
+  http.delete(API_KM.KB.DELETE, async ({ request }) => {
     await delay(400)
+    const url = new URL(request.url)
+    const id = Number(url.searchParams.get('id'))
+    mockKnowledgeBases = mockKnowledgeBases.filter(kb => kb.id !== id)
     return HttpResponse.json({ code: 200, message: '删除成功', data: null })
   }),
 
