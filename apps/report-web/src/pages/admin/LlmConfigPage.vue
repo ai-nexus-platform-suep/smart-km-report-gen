@@ -40,7 +40,7 @@
             >
               <template #title>{{ testResult[String(config.id)]?.message }}</template>
             </el-alert>
-            <el-button :loading="testingId === config.id" @click="test(config.id)">连通性测试</el-button>
+            <el-button class="test-button" :loading="testingId === config.id" @click="test(config.id)">连通性测试</el-button>
           </el-form>
         </div>
       </section>
@@ -184,17 +184,69 @@ async function test(id: EntityId) {
 <style scoped>
 .config-list {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(460px, 1fr));
+  grid-auto-rows: auto;
+  align-items: start;
+  gap: 14px;
 }
 
 .llm-card {
   overflow: hidden;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.llm-card :deep(.surface-title h2) {
+  font-size: 22px;
+}
+
+.llm-card :deep(.el-switch) {
+  transform: scale(1.08);
 }
 
 .llm-form {
   display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+  gap: 14px 18px;
   padding: 18px;
+}
+
+.llm-form :deep(.el-form-item) {
+  margin-bottom: 0;
+}
+
+.llm-form :deep(.el-form-item:nth-child(1)),
+.llm-form :deep(.el-form-item:nth-child(4)),
+.llm-form :deep(.el-alert),
+.test-button {
+  grid-column: 1 / -1;
+}
+
+.llm-form :deep(.el-form-item__label) {
+  margin-bottom: 8px;
+  color: var(--text-secondary);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.llm-form :deep(.el-input__wrapper),
+.llm-form :deep(.el-input-number),
+.llm-form :deep(.el-input-number .el-input__wrapper) {
+  width: 100%;
+  min-height: 44px;
+  font-size: 15px;
+}
+
+.llm-form :deep(.el-input__inner) {
+  font-size: 15px;
+}
+
+.test-button {
+  min-height: 42px;
+  justify-self: start;
+  padding: 0 18px;
+  font-size: 15px;
 }
 
 .create-grid {

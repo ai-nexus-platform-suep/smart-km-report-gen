@@ -159,14 +159,40 @@ async function remove(template: TemplateRecord) {
   padding: 0;
 }
 
+.admin-table {
+  font-size: 15px;
+}
+
+.admin-table :deep(.el-table__cell) {
+  padding: 13px 0;
+}
+
+.admin-table :deep(th.el-table__cell) {
+  padding: 12px 0;
+  font-size: 15px;
+}
+
 .admin-table :deep(strong),
 .admin-table :deep(small) {
   display: block;
 }
 
+.admin-table :deep(strong) {
+  font-size: 16px;
+  line-height: 1.35;
+}
+
 .admin-table :deep(small) {
-  margin-top: 4px;
+  margin-top: 5px;
   color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.35;
+}
+
+.admin-table :deep(.el-button) {
+  min-height: 34px;
+  padding: 0 13px;
+  font-size: 14px;
 }
 
 .config-grid {

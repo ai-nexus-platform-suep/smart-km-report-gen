@@ -15,9 +15,11 @@
         <span class="terminal-label">STREAM STATUS</span>
         <strong>{{ store.streamMessage }}</strong>
       </div>
-      <div>
+      <div class="workspace-status">
         <span class="terminal-label">REPORT STATUS</span>
-        <StatusBadge :status="report.status" />
+        <div class="workspace-status-badge">
+          <StatusBadge :status="report.status" />
+        </div>
       </div>
       <div>
         <span class="terminal-label">PROGRESS</span>
@@ -61,7 +63,7 @@
             v-model="draft"
             type="textarea"
             :disabled="selectedSection.status === 'GENERATING'"
-            :autosize="{ minRows: 18 }"
+            :autosize="{ minRows: 12, maxRows: 12 }"
             placeholder="章节正文将随生成流写入，也可以在生成完成后编辑。"
             @input="dirty = true"
           />
@@ -170,8 +172,23 @@ watch(
   },
 )
 
+watch(
+  () => store.lastEvent,
+  (event) => {
+    if (!event || (event.type !== 'section_started' && event.type !== 'content_delta')) return
+    selectSectionBySectionId(event.sectionId)
+  },
+)
+
 function selectOutline(id: EntityId) {
   selectedOutlineId.value = id
+}
+
+function selectSectionBySectionId(sectionId: EntityId) {
+  const section = report.value?.sections.find((item) => sameId(item.id, sectionId))
+  if (section && !sameId(section.outlineNodeId, selectedOutlineId.value)) {
+    selectedOutlineId.value = section.outlineNodeId
+  }
 }
 
 async function startGenerate() {
@@ -205,9 +222,9 @@ async function confirmRegenerate() {
 .workspace-band {
   display: grid;
   grid-template-columns: minmax(240px, 1fr) 220px 320px;
-  gap: 24px;
-  padding: 18px 20px;
-  margin-bottom: 16px;
+  gap: 18px;
+  padding: 14px 18px;
+  margin-bottom: 12px;
 }
 
 .workspace-band strong,
@@ -216,19 +233,30 @@ async function confirmRegenerate() {
   margin-top: 6px;
 }
 
+.workspace-status-badge {
+  display: flex;
+  align-items: center;
+  margin-top: 10px;
+}
+
+.workspace-status-badge :deep(.status-badge) {
+  gap: 10px;
+  color: rgba(248, 251, 255, 0.72);
+}
+
 .editor-surface {
-  min-height: 640px;
+  min-height: 0;
 }
 
 .editor-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(300px, 0.8fr);
-  gap: 14px;
-  padding: 16px;
+  gap: 12px;
+  padding: 14px;
 }
 
 .preview {
-  min-height: 380px;
+  min-height: 300px;
   padding: 14px;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);

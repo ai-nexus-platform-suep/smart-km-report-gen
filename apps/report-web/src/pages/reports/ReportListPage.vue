@@ -168,14 +168,37 @@ async function confirmDelete(report: Report) {
 <style scoped>
 .filter-bar {
   display: grid;
-  grid-template-columns: minmax(260px, 1fr) 150px 210px 180px 130px 92px;
+  grid-template-columns: minmax(220px, 1fr) minmax(120px, 0.55fr) minmax(170px, 0.7fr) minmax(150px, 0.65fr) 140px 96px;
   gap: 12px;
-  padding: 16px;
-  margin-bottom: 16px;
+  align-items: center;
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+
+.filter-bar :deep(.el-input-number),
+.filter-bar :deep(.el-button) {
+  width: 100%;
+}
+
+.filter-bar :deep(.el-input-number .el-input__wrapper) {
+  width: 100%;
 }
 
 .table-surface {
-  padding: 0 0 16px;
+  padding: 0 0 12px;
+}
+
+.report-table {
+  font-size: 15px;
+}
+
+.report-table :deep(.el-table__cell) {
+  padding: 12px 0;
+}
+
+.report-table :deep(th.el-table__cell) {
+  padding: 12px 0;
+  font-size: 15px;
 }
 
 .report-table :deep(strong),
@@ -183,23 +206,61 @@ async function confirmDelete(report: Report) {
   display: block;
 }
 
+.report-table :deep(strong) {
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 800;
+  line-height: 1.35;
+}
+
 .report-table :deep(small) {
-  margin-top: 4px;
+  margin-top: 5px;
   color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.35;
 }
 
 .pagination-row {
   display: flex;
   justify-content: flex-end;
-  padding: 16px 16px 0;
+  padding: 12px 16px 0;
 }
 
 .record-action-row {
+  width: 100%;
   flex-wrap: nowrap;
+  justify-content: center;
+  gap: 12px;
 }
 
 .record-action-row :deep(.el-button + .el-button),
 .doc-action {
   margin-left: 0;
+}
+
+.record-action-row :deep(.el-button) {
+  flex: 0 0 auto;
+  min-height: 34px;
+  padding: 0 13px;
+  font-size: 14px;
+}
+
+.doc-action,
+.doc-action.is-plain {
+  --el-button-text-color: #ffffff;
+  --el-button-hover-text-color: #ffffff;
+  --el-button-active-text-color: #ffffff;
+  --el-button-bg-color: transparent;
+  --el-button-hover-bg-color: transparent;
+  --el-button-active-bg-color: transparent;
+  color: #ffffff !important;
+  border-color: transparent !important;
+  background: linear-gradient(135deg, #1f7cf2, #0fb2cf) !important;
+  box-shadow: 0 8px 16px rgba(30, 107, 255, 0.16);
+}
+
+.doc-action:hover {
+  color: #ffffff !important;
+  box-shadow: 0 10px 20px rgba(30, 107, 255, 0.2);
 }
 </style>
