@@ -1,42 +1,26 @@
 <template>
   <el-container class="layout">
-    <!-- 深色侧边栏 -->
     <el-aside :width="collapsed ? 'var(--sidebar-collapsed-width)' : 'var(--sidebar-width)'" class="sidebar">
-      <!-- Logo 区域 -->
       <div class="sidebar-logo" :class="{ collapsed }">
-        <div class="logo-icon-wrap">
-          <svg viewBox="0 0 32 32" fill="none" class="logo-svg">
-            <rect width="32" height="32" rx="8" fill="var(--color-primary)"/>
-            <path d="M9 16L14 21L23 11" stroke="white" stroke-width="2.5"
-                  stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </div>
+        <div class="logo-icon-wrap">监</div>
         <transition name="fade">
           <span v-show="!collapsed" class="logo-text">
+            <small class="brand-kicker">Workspace</small>
             <strong>技术监督平台</strong>
-            <small>AI Nexus</small>
           </span>
         </transition>
       </div>
 
-      <!-- 导航菜单 -->
       <SideNav :items="navItems" :collapsed="collapsed" />
     </el-aside>
 
-    <!-- 右侧内容区 -->
     <el-container class="main-area">
       <el-header class="header">
         <div class="header-left">
-          <button class="collapse-btn" @click="collapsed = !collapsed">
-            <svg viewBox="0 0 20 20" fill="currentColor" width="20" height="20">
-              <path v-if="!collapsed" d="M4 4.5h12M4 10h12M4 15.5h12" stroke="currentColor"
-                    stroke-width="1.8" stroke-linecap="round" fill="none"/>
-              <path v-else d="M4 4.5h12M4 10h12M4 15.5h12" stroke="currentColor"
-                    stroke-width="1.8" stroke-linecap="round" fill="none"/>
-            </svg>
+          <button class="collapse-btn" :title="collapsed ? '展开导航' : '收起导航'" @click="collapsed = !collapsed">
+            <el-icon><Fold v-if="!collapsed" /><Expand v-else /></el-icon>
           </button>
           <span class="header-title-group">
-            <small>Unified Platform</small>
             <strong class="header-title">{{ pageTitle }}</strong>
           </span>
         </div>
@@ -53,6 +37,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRoute } from 'vue-router'
+import { Expand, Fold } from '@element-plus/icons-vue'
 import SideNav from './SideNav.vue'
 import HeaderBar from './HeaderBar.vue'
 import type { NavItem } from './SideNav.vue'
@@ -68,32 +53,29 @@ const pageTitle = computed(() => (route.meta.title as string) || '技术监督�
 .layout {
   height: 100vh;
   overflow: hidden;
-  background: var(--sidebar-bg);
+  background: var(--bg-page);
 }
 
-/* ======= 深色侧边栏 ======= */
 .sidebar {
   position: relative;
   z-index: 3;
   background:
-    radial-gradient(circle at 18% 8%, rgba(21, 94, 239, 0.3), transparent 34%),
-    linear-gradient(180deg, #101828 0%, #17191f 46%, #10131a 100%);
+    radial-gradient(circle at 22% 0%, rgba(59, 130, 246, 0.18), transparent 27%),
+    linear-gradient(180deg, #0d1726 0%, var(--sidebar-bg) 58%, #060c16 100%);
   transition: width var(--transition-slow);
   overflow: hidden;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  border-right: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 18px 0 48px rgba(15, 23, 42, 0.14);
+  border-right: 1px solid var(--sidebar-border);
+  box-shadow: 8px 0 22px rgba(15, 23, 42, 0.08);
 }
 
 .sidebar::after {
   position: absolute;
-  inset: auto 18px 16px 18px;
-  height: 120px;
-  border-radius: 999px;
-  background: rgba(21, 94, 239, 0.13);
-  filter: blur(42px);
+  inset: 0 0 auto;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(96, 165, 250, 0.44), transparent 72%);
   content: "";
   pointer-events: none;
 }
@@ -103,8 +85,8 @@ const pageTitle = computed(() => (route.meta.title as string) || '技术监督�
   z-index: 1;
   display: flex;
   align-items: center;
-  gap: 12px;
-  height: 72px;
+  gap: 11px;
+  height: 74px;
   padding: 0 18px;
   border-bottom: 1px solid var(--sidebar-logo-border);
   flex-shrink: 0;
@@ -118,41 +100,42 @@ const pageTitle = computed(() => (route.meta.title as string) || '技术监督�
 }
 
 .logo-icon-wrap {
+  display: grid;
+  place-items: center;
   flex-shrink: 0;
-  width: 38px;
-  height: 38px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.08);
-  box-shadow: 0 10px 24px rgba(21, 94, 239, 0.22);
-}
-
-.logo-svg {
-  width: 34px;
-  height: 34px;
+  width: 42px;
+  height: 42px;
+  border: 1px solid rgba(147, 197, 253, 0.28);
+  border-radius: 11px;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.18), transparent 46%),
+    linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%);
+  color: #ffffff;
+  font-size: 20px;
+  font-weight: 800;
+  box-shadow: 0 10px 20px rgba(37, 99, 235, 0.26);
 }
 
 .logo-text {
   display: grid;
-  gap: 2px;
+  gap: 3px;
   line-height: 1.15;
   white-space: nowrap;
+  min-width: 0;
 }
 
 .logo-text strong {
-  font-size: var(--font-lg);
-  font-weight: 700;
+  font-size: 18px;
+  font-weight: 800;
   color: #ffffff;
-  letter-spacing: 0.3px;
+  letter-spacing: 0;
 }
 
-.logo-text small {
-  color: rgba(255, 255, 255, 0.42);
-  font-size: 11px;
+.brand-kicker {
+  color: rgba(147, 197, 253, 0.78);
+  font-size: 10px;
   font-weight: 700;
-  letter-spacing: 0.16em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
 }
 
@@ -166,27 +149,11 @@ const pageTitle = computed(() => (route.meta.title as string) || '技术监督�
   opacity: 0;
 }
 
-/* ======= 主内容区 ======= */
 .main-area {
   position: relative;
   flex: 1;
   overflow: hidden;
-  background:
-    radial-gradient(circle at 18% -8%, rgba(21, 94, 239, 0.13), transparent 28%),
-    radial-gradient(circle at 90% 10%, rgba(0, 184, 217, 0.12), transparent 30%),
-    linear-gradient(180deg, #f8fbff 0%, var(--bg-page) 42%, #eef3f8 100%);
-}
-
-.main-area::before {
-  position: absolute;
-  inset: 0;
-  background-image:
-    linear-gradient(rgba(15, 23, 42, 0.035) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(15, 23, 42, 0.035) 1px, transparent 1px);
-  background-size: 28px 28px;
-  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.55), transparent 58%);
-  content: "";
-  pointer-events: none;
+  background: var(--bg-page);
 }
 
 .header {
@@ -195,12 +162,12 @@ const pageTitle = computed(() => (route.meta.title as string) || '技术监督�
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: rgba(255, 255, 255, 0.72);
-  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
-  padding: 0 26px;
-  height: 68px;
+  background: color-mix(in srgb, var(--bg-container) 92%, transparent);
+  border-bottom: 1px solid var(--platform-border);
+  padding: 0 22px;
+  height: 58px;
   flex-shrink: 0;
-  backdrop-filter: blur(18px);
+  backdrop-filter: blur(14px);
 }
 
 .header-left {
@@ -214,12 +181,12 @@ const pageTitle = computed(() => (route.meta.title as string) || '技术监督�
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
-  border: 1px solid rgba(148, 163, 184, 0.22);
-  border-radius: 12px;
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--platform-border);
+  border-radius: 8px;
   color: var(--text-secondary);
-  background: rgba(255, 255, 255, 0.72);
+  background: rgba(255, 255, 255, 0.74);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
@@ -230,25 +197,10 @@ const pageTitle = computed(() => (route.meta.title as string) || '技术监督�
   box-shadow: var(--shadow-sm);
 }
 
-.header-title-group {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-
-.header-title-group small {
-  color: var(--text-tertiary);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.14em;
-  line-height: 1;
-  text-transform: uppercase;
-}
-
 .header-title {
   color: var(--text-primary);
-  font-size: 18px;
-  font-weight: 800;
+  font-size: 17px;
+  font-weight: 700;
   line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -259,7 +211,7 @@ const pageTitle = computed(() => (route.meta.title as string) || '技术监督�
   position: relative;
   z-index: 1;
   background: transparent;
-  padding: 24px;
+  padding: 22px;
   overflow-y: auto;
   flex: 1;
 }
@@ -270,19 +222,17 @@ const pageTitle = computed(() => (route.meta.title as string) || '技术监督�
 }
 
 [data-theme='dark'] .main-area {
-  background:
-    radial-gradient(circle at 18% -8%, rgba(80, 132, 255, 0.16), transparent 30%),
-    radial-gradient(circle at 90% 10%, rgba(34, 211, 238, 0.1), transparent 30%),
-    linear-gradient(180deg, #111827 0%, var(--bg-page) 54%, #0b1020 100%);
+  background: var(--bg-page);
 }
 
 [data-theme='dark'] .header {
-  background: rgba(17, 24, 39, 0.72);
-  border-bottom-color: rgba(148, 163, 184, 0.16);
+  background: rgba(17, 24, 39, 0.86);
+  border-bottom-color: rgba(148, 163, 184, 0.18);
 }
 
 [data-theme='dark'] .collapse-btn {
   background: rgba(15, 23, 42, 0.72);
+  border-color: rgba(148, 163, 184, 0.2);
 }
 
 @media (max-width: 760px) {
@@ -290,11 +240,6 @@ const pageTitle = computed(() => (route.meta.title as string) || '技术监督�
     height: 62px;
     padding: 0 14px;
   }
-
-  .header-title-group small {
-    display: none;
-  }
-
   .main-content {
     padding: 14px;
   }
