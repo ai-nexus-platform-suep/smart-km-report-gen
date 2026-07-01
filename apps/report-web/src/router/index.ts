@@ -37,10 +37,16 @@ const moduleRoutes: RouteRecordRaw[] = [
     meta: { title: "报告导出" }
   },
   {
-    path: "/admin/dashboard",
-    name: "AdminDashboard",
+    path: "/reports/dashboard",
+    name: "ReportDashboard",
     component: () => import("../pages/admin/AdminDashboardPage.vue"),
-    meta: { title: "趋势监控", admin: true }
+    meta: { title: "趋势统计", admin: true }
+  },
+  {
+    path: "/admin/dashboard",
+    name: "AdminDashboardCompat",
+    component: () => import("../pages/admin/AdminDashboardPage.vue"),
+    meta: { title: "趋势统计", admin: true }
   },
   {
     path: "/admin/templates",

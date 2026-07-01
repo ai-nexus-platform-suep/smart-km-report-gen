@@ -4,13 +4,13 @@ import {
   DataAnalysis,
   DocumentAdd,
   DocumentCopy,
-  Files,
   FolderOpened,
   Histogram,
   Management,
   Notebook,
   Search,
   Setting,
+  SetUp,
   UserFilled,
 } from '@element-plus/icons-vue'
 import type { NavItem } from '@platform/ui/src/components/SideNav.vue'
@@ -27,10 +27,8 @@ export const platformNavItems: NavItem[] = [
     icon: Collection,
     children: [
       { path: '/km/bases', title: '知识库管理' },
-      { path: '/km/documents', title: '文档管理' },
+      { path: '/km/resources', title: '文档与素材' },
       { path: '/km/search', title: '知识检索' },
-      { path: '/km/materials', title: '素材管理' },
-      { path: '/km/settings', title: '模型配置', admin: true },
     ],
   },
   {
@@ -42,7 +40,6 @@ export const platformNavItems: NavItem[] = [
       { path: '/qa/conversations', title: '会话记录' },
       { path: '/qa/retrieval-test', title: '检索测试', admin: true },
       { path: '/qa/settings', title: '问答配置', admin: true },
-      { path: '/qa/llm', title: 'LLM 配置', admin: true },
     ],
   },
   {
@@ -52,8 +49,19 @@ export const platformNavItems: NavItem[] = [
     children: [
       { path: '/reports', title: '报告记录' },
       { path: '/reports/new', title: '新建报告' },
+      { path: '/reports/dashboard', title: '趋势统计', admin: true },
       { path: '/reports/templates', title: '模板管理', admin: true },
       { path: '/reports/materials', title: '素材映射', admin: true },
+    ],
+  },
+  {
+    path: '/model-config',
+    title: '模型配置',
+    icon: SetUp,
+    admin: true,
+    children: [
+      { path: '/km/settings', title: '知识模型配置', admin: true },
+      { path: '/qa/llm', title: 'LLM / 报告模型配置', admin: true },
     ],
   },
   {
@@ -72,31 +80,41 @@ export const platformNavItems: NavItem[] = [
 export const quickAccessCards = [
   {
     title: '知识管理',
-    description: '已接入知识库列表、文档管理、检索和模型配置页面。',
+    description: '已接入知识库列表、文档与素材管理、知识检索页面。',
     icon: FolderOpened,
     links: [
       { label: '知识库管理', to: '/km/bases' },
-      { label: '文档管理', to: '/km/documents' },
+      { label: '文档与素材', to: '/km/resources' },
       { label: '知识检索', to: '/km/search' },
     ],
   },
   {
     title: '智能问答',
-    description: '已接入智能问答页、会话记录、检索测试和模型配置页面。',
+    description: '已接入智能问答页、会话记录、检索测试和问答配置页面。',
     icon: ChatDotRound,
     links: [
       { label: '智能对话', to: '/qa/chat' },
       { label: '会话记录', to: '/qa/conversations' },
-      { label: '模型配置', to: '/qa/llm' },
+      { label: '问答配置', to: '/qa/settings' },
     ],
   },
   {
     title: '报告生成',
-    description: '已接入报告记录、新建、大纲、工作台、导出和模板管理页面。',
-    icon: Files,
+    description: '已接入报告记录、新建、大纲、工作台、导出、趋势统计和模板管理页面。',
+    icon: DocumentCopy,
     links: [
       { label: '报告记录', to: '/reports' },
       { label: '新建报告', to: '/reports/new' },
+      { label: '趋势统计', to: '/reports/dashboard' },
+    ],
+  },
+  {
+    title: '模型配置',
+    description: '集中维护知识模型和统一 LLM 配置，报告生成复用同一套模型配置。',
+    icon: SetUp,
+    links: [
+      { label: '知识模型配置', to: '/km/settings' },
+      { label: 'LLM / 报告模型配置', to: '/qa/llm' },
     ],
   },
 ] as const
@@ -111,7 +129,7 @@ export const mergePhases = [
   {
     title: '第 2 次',
     subtitle: '页面骨架合并',
-    items: ['知识管理：知识库列表、文档列表、知识检索', '智能问答：问答页、会话列表、模型配置', '报告生成：新建报告、报告工作台、历史记录'],
+    items: ['知识管理：知识库列表、文档素材、知识检索', '智能问答：问答页、会话列表、问答配置', '报告生成：新建报告、报告工作台、趋势统计'],
     icon: DocumentAdd,
   },
   {
@@ -125,6 +143,6 @@ export const mergePhases = [
 export const dashboardStats = [
   { label: '统一入口', value: '1 个', icon: Histogram },
   { label: '聚合模块', value: '3 个', icon: Collection },
-  { label: '一级菜单', value: '5 项', icon: Search },
+  { label: '一级菜单', value: '6 项', icon: Search },
   { label: '权限角色', value: '3 类', icon: UserFilled },
 ] as const

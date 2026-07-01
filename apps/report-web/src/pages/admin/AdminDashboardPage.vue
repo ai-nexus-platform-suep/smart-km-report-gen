@@ -3,8 +3,8 @@
     <div class="page dashboard-page" v-loading="loading">
       <PageHeader
         eyebrow="ADMIN TREND MONITOR"
-        title="趋势监控"
-        description="系统运行状态、报告生成质量和 C 组报告任务趋势。"
+        title="趋势统计"
+        description="系统运行状态、报告生成质量和报告生成模块任务趋势。"
       >
         <el-radio-group v-model="days" size="small" @change="load">
           <el-radio-button :label="7">7 天</el-radio-button>

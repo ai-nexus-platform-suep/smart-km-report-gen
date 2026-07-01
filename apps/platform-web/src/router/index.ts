@@ -18,19 +18,20 @@ const platformOwnedRoutes: RouteRecordRaw[] = [
     meta: { title: '平台首页' },
   },
   {
-    path: '/km/documents',
-    name: 'KnowledgeDocuments',
+    path: '/km/resources',
+    name: 'KnowledgeResources',
     component: () => import('../pages/km/DocumentsPage.vue'),
-    meta: { title: '文档管理' },
+    meta: { title: '文档与素材' },
+  },
+  {
+    path: '/km/documents',
+    name: 'KnowledgeDocumentsCompat',
+    component: () => import('../pages/km/DocumentsPage.vue'),
+    meta: { title: '文档与素材' },
   },
   {
     path: '/km/materials',
-    name: 'KnowledgeMaterials',
-    component: () => import('../pages/PlaceholderPage.vue'),
-    meta: {
-      title: '素材管理',
-      description: '素材管理会在后续阶段接入标签编辑、筛选和批量操作能力。',
-    },
+    redirect: '/km/resources',
   },
   {
     path: '/reports/materials',
