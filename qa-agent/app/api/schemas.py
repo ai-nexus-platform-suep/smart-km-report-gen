@@ -73,7 +73,6 @@ class ConversationDetailVO(BaseModel):
 class ChatReq(BaseModel):
     conversation_id: int
     question: str = Field(min_length=1)
-    user_id: int | None = None
     selected_kb_ids: list[int] = Field(default_factory=list)
 
 
@@ -85,7 +84,6 @@ class ChatHistoryMessage(BaseModel):
 class ChatTestReq(BaseModel):
     question: str = Field(min_length=1, examples=["什么是电力技术监督？"])
     selected_kb_ids: list[int] = Field(default_factory=list)
-    user_id: int | None = None
     messages: list[ChatHistoryMessage] = Field(default_factory=list)
 
 

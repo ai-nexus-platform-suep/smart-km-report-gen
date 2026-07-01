@@ -3,6 +3,7 @@ package com.myenglish.qachat.controller;
 import com.myenglish.qachat.dto.resp.QaStatsOverviewVO;
 import com.myenglish.qachat.service.QaStatsService;
 import com.myenglish.qacommon.dto.ApiResponse;
+import com.myenglish.qacommon.security.RequirePermission;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -31,6 +32,7 @@ public class QaStatsController {
      * @return 统计概览（totalCount + dailyTrends）
      */
     @GetMapping("/overview")
+    @RequirePermission("chat:stats:view")
     public ApiResponse<QaStatsOverviewVO> overview() {
         log.info("查询 QA 统计概览");
         return ApiResponse.success(qaStatsService.getOverview());

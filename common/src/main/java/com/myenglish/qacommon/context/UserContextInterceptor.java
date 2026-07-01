@@ -6,24 +6,19 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.StringUtils;
 import org.springframework.web.servlet.HandlerInterceptor;
 
-/**
- * 用户上下文拦截器
- *
- * 从网关传递的请求头中提取用户信息，设置到 UserContextHolder，
- * 请求结束后自动清理 ThreadLocal，防止内存泄漏。
- */
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+
 @Slf4j
 public class UserContextInterceptor implements HandlerInterceptor {
 
-    private static final String X_USER_ID_HEADER = "X-User-Id";
-    private static final String X_USERNAME_HEADER = "X-Username";
-    private static final String X_ROLES_HEADER = "X-Roles";
-
     @Override
     public boolean preHandle(HttpServletRequest request, HttpServletResponse response, Object handler) {
-        String userIdStr = request.getHeader(X_USER_ID_HEADER);
-        String username = request.getHeader(X_USERNAME_HEADER);
-        String roles = request.getHeader(X_ROLES_HEADER);
+        String userIdStr = request.getHeader(UserContextHeaders.USER_ID);
+        String username = request.getHeader(UserContextHeaders.USERNAME);
+        String roles = request.getHeader(UserContextHeaders.ROLES);
+        String permissions = request.getHeader(UserContextHeaders.PERMISSIONS);
 
         if (StringUtils.hasText(userIdStr)) {
             UserContextHolder.setUserId(Long.valueOf(userIdStr));
@@ -34,9 +29,22 @@ public class UserContextInterceptor implements HandlerInterceptor {
         if (StringUtils.hasText(roles)) {
             UserContextHolder.setRoles(roles);
         }
+        if (StringUtils.hasText(permissions)) {
+            UserContextHolder.setPermissions(parsePermissions(permissions));
+        }
 
-        log.debug("UserContext restored from headers: userId={}, username={}", userIdStr, username);
+        log.debug("UserContext: userId={}, username={}", userIdStr, username);
         return true;
+    }
+
+    static List<String> parsePermissions(String header) {
+        if (!StringUtils.hasText(header)) {
+            return Collections.emptyList();
+        }
+        return Arrays.stream(header.split(","))
+                .map(String::trim)
+                .filter(s -> !s.isEmpty())
+                .toList();
     }
 
     @Override

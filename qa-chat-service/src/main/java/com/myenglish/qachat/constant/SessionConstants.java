@@ -14,7 +14,7 @@ public final class SessionConstants {
     /** 消息生成失败 */
     public static final int GENERATE_STATUS_FAILED = 2;
 
-    /** 开发阶段默认用户，已接入 Gateway JWT 鉴权，userId 从 X-User-Id Header 获取 */
+    /** 已接入 Gateway JWT 鉴权，userId 从 user-id Header 获取 */
     // public static final long DEFAULT_USER_ID = 1L;
 
     public static final String ROLE_ASSISTANT = "assistant";

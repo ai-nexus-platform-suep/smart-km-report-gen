@@ -1,25 +1,29 @@
 package com.myenglish.qacommon.config;
 
 import com.myenglish.qacommon.context.UserContextInterceptor;
+import com.myenglish.qacommon.security.PermissionAspect;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.EnableAspectJAutoProxy;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
-/**
- * 用户上下文自动装配
- *
- * 仅在 Servlet Web 应用（非 WebFlux/Netty）中生效。
- * 各下游服务引入 common 依赖后自动注册 UserContextInterceptor。
- */
 @AutoConfiguration
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+@ConditionalOnClass(WebMvcConfigurer.class)
+@EnableAspectJAutoProxy
 public class UserContextAutoConfiguration implements WebMvcConfigurer {
 
     @Bean
     public UserContextInterceptor userContextInterceptor() {
         return new UserContextInterceptor();
+    }
+
+    @Bean
+    public PermissionAspect permissionAspect() {
+        return new PermissionAspect();
     }
 
     @Override

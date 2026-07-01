@@ -99,6 +99,17 @@ async def get_conversation(session: AsyncSession, conversation_id: int) -> QaSes
     return (await session.execute(stmt)).scalar_one_or_none()
 
 
+async def require_conversation_for_user(
+    session: AsyncSession,
+    conversation_id: int,
+    user_id: int,
+) -> QaSession:
+    conversation = await get_conversation(session, conversation_id)
+    if conversation is None or conversation.user_id != user_id:
+        raise ValueError("会话不存在")
+    return conversation
+
+
 async def update_conversation_title(
     session: AsyncSession,
     conversation_id: int,

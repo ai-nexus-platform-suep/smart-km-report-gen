@@ -3,19 +3,21 @@
 import json
 from collections.abc import AsyncIterator
 
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sse_starlette.sse import EventSourceResponse
 
 from .schemas import ChatReq, ChatTestReq, ChatTestResp
 from ..core.constants import SSEEventType
+from ..core.deps import require_user_id
+from ..core.user_context import get_user_id
 from ..db.constants import (
     GENERATE_STATUS_COMPLETED,
     GENERATE_STATUS_FAILED,
     ROLE_ASSISTANT,
     ROLE_USER,
 )
-from ..db.repository import get_conversation, get_messages, save_message, update_message
+from ..db.repository import get_messages, require_conversation_for_user, save_message, update_message
 from ..db.session import get_session_factory
 from ..graph.workflow import agent_graph
 from ..service.citation_service import citation_to_sse
@@ -43,10 +45,11 @@ def _test_history_messages(req: ChatTestReq) -> list[dict]:
 async def _stream_chat(
     req: ChatReq,
     db: AsyncSession,
-    user_id: int,
 ) -> AsyncIterator[dict]:
-    conversation = await get_conversation(db, req.conversation_id)
-    if conversation is None:
+    user_id = get_user_id()
+    try:
+        await require_conversation_for_user(db, req.conversation_id, user_id)
+    except ValueError:
         yield _sse_payload(SSEEventType.ERROR, {"message": "会话不存在"})
         yield _sse_payload(SSEEventType.DONE, {})
         return
@@ -196,12 +199,10 @@ async def _stream_chat(
 
 
 @router.post("/chat")
-async def chat(
-    req: ChatReq,
-    user_id: int = Header(alias="user-id"),
-) -> EventSourceResponse:
+async def chat(req: ChatReq) -> EventSourceResponse:
     if not req.question.strip():
         raise HTTPException(status_code=400, detail="问题不能为空")
+    require_user_id()
 
     async def event_generator() -> AsyncIterator[dict]:
         try:
@@ -213,7 +214,7 @@ async def chat(
 
         async with session_factory() as db:
             try:
-                async for event in _stream_chat(req, db, user_id):
+                async for event in _stream_chat(req, db):
                     yield event
                 await db.commit()
             except Exception:
@@ -224,14 +225,11 @@ async def chat(
 
 
 @router.post("/chat/test", response_model=ChatTestResp)
-async def chat_test(
-    req: ChatTestReq,
-    user_id: int = Header(alias="user-id"),
-) -> ChatTestResp:
+async def chat_test(req: ChatTestReq) -> ChatTestResp:
     if not req.question.strip():
         raise HTTPException(status_code=400, detail="问题不能为空")
 
-    user_id = req.user_id or user_id
+    user_id = require_user_id()
     model_config = await fetch_llm_config(user_id=user_id)
     agent_input = {
         "messages": _test_history_messages(req),

@@ -19,6 +19,11 @@ public class GlobalExceptionHandler {
         return ApiResponse.error(ex.getCode(), ex.getMessage());
     }
 
+    @ExceptionHandler(com.myenglish.qacommon.exception.BusinessException.class)
+    public ApiResponse<Void> handleCommonBusinessException(com.myenglish.qacommon.exception.BusinessException ex) {
+        return ApiResponse.error(ex.getCode(), ex.getMessage());
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public ApiResponse<Void> handleValidationException(MethodArgumentNotValidException ex) {

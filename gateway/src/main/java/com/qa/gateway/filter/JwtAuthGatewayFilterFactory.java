@@ -1,5 +1,6 @@
 package com.qa.gateway.filter;
 
+import com.myenglish.qacommon.context.UserContextHeaders;
 import com.qa.gateway.config.RouteProperties;
 import com.qa.gateway.util.JwtTokenProvider;
 import io.jsonwebtoken.ExpiredJwtException;
@@ -35,9 +36,6 @@ public class JwtAuthGatewayFilterFactory implements GlobalFilter, Ordered {
 
     private static final String AUTHORIZATION_HEADER = "Authorization";
     private static final String BEARER_PREFIX = "Bearer ";
-    private static final String X_USER_ID_HEADER = "X-User-Id";
-    private static final String X_USERNAME_HEADER = "X-Username";
-    private static final String X_ROLES_HEADER = "X-Roles";
 
     private final JwtTokenProvider jwtTokenProvider;
     private final RouteProperties routeProperties;
@@ -75,15 +73,24 @@ public class JwtAuthGatewayFilterFactory implements GlobalFilter, Ordered {
 
             String username = jwtTokenProvider.getUsername(token);
             Long userId = jwtTokenProvider.getUserId(token);
-            String roles = String.join(",", jwtTokenProvider.getRoles(token));
+            var roleList = jwtTokenProvider.getRoles(token);
+            var permList = jwtTokenProvider.getPermissions(token);
+            String roles = String.join(",", roleList);
+            String permissions = String.join(",", permList);
+
+            if (pathMatcher.match("/api/admin/**", path)
+                    && !roleList.contains("ROLE_ADMIN")
+                    && !roleList.contains("ROLE_SUPER_ADMIN")) {
+                return forbiddenResponse(exchange, "无权访问管理接口");
+            }
 
             log.info("JWT auth success: userId={}, username={}, path={}", userId, username, path);
 
-            // 将用户信息注入请求头，传递给下游服务
             ServerHttpRequest mutatedRequest = request.mutate()
-                    .header(X_USER_ID_HEADER, String.valueOf(userId))
-                    .header(X_USERNAME_HEADER, username)
-                    .header(X_ROLES_HEADER, roles)
+                    .header(UserContextHeaders.USER_ID, String.valueOf(userId))
+                    .header(UserContextHeaders.USERNAME, username)
+                    .header(UserContextHeaders.ROLES, roles)
+                    .header(UserContextHeaders.PERMISSIONS, permissions)
                     .build();
 
             return chain.filter(exchange.mutate().request(mutatedRequest).build());
@@ -122,6 +129,15 @@ public class JwtAuthGatewayFilterFactory implements GlobalFilter, Ordered {
         );
         DataBuffer buffer = response.bufferFactory()
                 .wrap(body.getBytes(StandardCharsets.UTF_8));
+        return response.writeWith(Mono.just(buffer));
+    }
+
+    private Mono<Void> forbiddenResponse(ServerWebExchange exchange, String message) {
+        ServerHttpResponse response = exchange.getResponse();
+        response.setStatusCode(HttpStatus.FORBIDDEN);
+        response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+        String body = String.format("{\"code\":403,\"message\":\"%s\",\"data\":null}", message);
+        DataBuffer buffer = response.bufferFactory().wrap(body.getBytes(StandardCharsets.UTF_8));
         return response.writeWith(Mono.just(buffer));
     }
 

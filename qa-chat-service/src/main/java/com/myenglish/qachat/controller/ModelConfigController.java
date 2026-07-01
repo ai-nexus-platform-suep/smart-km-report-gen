@@ -1,5 +1,6 @@
 package com.myenglish.qachat.controller;
 
+import com.myenglish.qacommon.security.RequirePermission;
 import com.myenglish.qachat.dto.req.SaveModelConfigReq;
 import com.myenglish.qachat.dto.resp.ModelConfigVO;
 import com.myenglish.qachat.service.ModelConfigService;
@@ -40,6 +41,7 @@ public class ModelConfigController {
      * @return 当前用户的所有模型配置（按创建时间倒序）
      */
     @GetMapping
+    @RequirePermission({"chat:model:view", "chat:model:manage"})
     public ApiResponse<List<ModelConfigVO>> list() {
         log.info("查询模型配置列表 userId={}", UserContextHolder.getUserId());
         Long userId = UserContextHolder.getUserId();
@@ -55,6 +57,7 @@ public class ModelConfigController {
      * @return 创建成功的模型配置（含加密掩码后的 API Key）
      */
     @PostMapping
+    @RequirePermission("chat:model:manage")
     public ApiResponse<ModelConfigVO> create(
             @Valid @RequestBody SaveModelConfigReq req) {
         Long userId = UserContextHolder.getUserId();
@@ -72,6 +75,7 @@ public class ModelConfigController {
      * @return 更新后的模型配置
      */
     @PutMapping("/{id}")
+    @RequirePermission("chat:model:manage")
     public ApiResponse<ModelConfigVO> update(
             @PathVariable Long id,
             @Valid @RequestBody SaveModelConfigReq req) {
@@ -89,6 +93,7 @@ public class ModelConfigController {
      * @return 空响应（成功）
      */
     @DeleteMapping("/{id}")
+    @RequirePermission("chat:model:manage")
     public ApiResponse<Void> delete(
             @PathVariable Long id) {
         Long userId = UserContextHolder.getUserId();
@@ -107,6 +112,7 @@ public class ModelConfigController {
      * @return 空响应（成功）
      */
     @PostMapping("/{id}/default")
+    @RequirePermission("chat:model:manage")
     public ApiResponse<Void> setDefault(
             @PathVariable Long id) {
         Long userId = UserContextHolder.getUserId();

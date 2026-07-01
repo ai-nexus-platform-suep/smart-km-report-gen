@@ -1,6 +1,6 @@
 """GET/POST/DELETE /conversations (人员 B 独占)"""
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..api.schemas import (
@@ -12,13 +12,14 @@ from ..api.schemas import (
     PageResult,
     UpdateConversationReq,
 )
+from app.core.deps import require_user_id
 from app.db.models import QaMessage, QaSession
 from app.db.repository import (
     create_conversation,
     delete_conversation,
-    get_conversation,
     get_messages,
     list_conversations,
+    require_conversation_for_user,
     update_conversation_title,
 )
 from app.db.session import get_db
@@ -54,11 +55,11 @@ def _to_message_vo(message: QaMessage) -> MessageVO:
 
 @router.get("/conversations")
 async def list_conversations_api(
-    user_id: int = Header(alias="user-id"),
     page: int = Query(default=1, ge=1),
     size: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[PageResult[ConversationVO]]:
+    user_id = require_user_id()
     items, total = await list_conversations(db, user_id=user_id, page=page, size=size)
     return ApiResponse(
         data=PageResult(
@@ -73,11 +74,10 @@ async def list_conversations_api(
 @router.post("/conversations")
 async def create_conversation_api(
     req: CreateConversationReq | None = None,
-    user_id: int = Header(alias="user-id"),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[ConversationVO]:
     title = req.title if req else None
-    conversation = await create_conversation(db, user_id=user_id, title=title)
+    conversation = await create_conversation(db, user_id=require_user_id(), title=title)
     return ApiResponse(data=_to_conversation_vo(conversation))
 
 
@@ -86,7 +86,9 @@ async def delete_conversation_api(
     conversation_id: int,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[None]:
+    user_id = require_user_id()
     try:
+        await require_conversation_for_user(db, conversation_id, user_id)
         await delete_conversation(db, conversation_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
@@ -100,14 +102,12 @@ async def get_messages_api(
     size: int = Query(default=50, ge=1, le=200),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[ConversationDetailVO]:
+    user_id = require_user_id()
     try:
+        conversation = await require_conversation_for_user(db, conversation_id, user_id)
         messages, total = await get_messages(db, conversation_id, page=page, size=size)
-        conversation = await get_conversation(db, conversation_id)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-    if conversation is None:
-        raise HTTPException(status_code=404, detail="会话不存在")
 
     return ApiResponse(
         data=ConversationDetailVO(
@@ -125,7 +125,9 @@ async def update_conversation_api(
     req: UpdateConversationReq,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[ConversationVO]:
+    user_id = require_user_id()
     try:
+        await require_conversation_for_user(db, conversation_id, user_id)
         conversation = await update_conversation_title(db, conversation_id, req.title)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
