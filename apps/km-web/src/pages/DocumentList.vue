@@ -10,7 +10,8 @@
 
     <!-- 上传区域 -->
     <el-collapse v-model="activeCollapse" class="upload-section">
-      <el-collapse-item title="上传文档" name="upload">
+      <el-collapse-item name="upload">
+        <template #title><div class="upload-title">上传文档</div></template>
         <DocUploader :kb-id="kbId" @success="onUploadSuccess" />
       </el-collapse-item>
     </el-collapse>
@@ -69,7 +70,7 @@
         <template #default="{ row }">
           <div class="filename-cell">
             <el-icon :size="18" class="file-icon"><Document /></el-icon>
-            <span>{{ row.filename }}</span>
+            <span>{{ row.fileName }}</span>
           </div>
         </template>
       </el-table-column>
@@ -80,16 +81,16 @@
       </el-table-column>
       <el-table-column prop="status" label="状态" width="120" align="center">
         <template #default="{ row }">
-          <DocStatusBadge :status="row.status" :error-msg="row.errorMsg" :show-tooltip="row.status === 'FAILED'" />
+          <DocStatusBadge :status="row.status" :error-msg="row.errorMessage" :show-tooltip="row.status === 'FAILED'" />
         </template>
       </el-table-column>
       <el-table-column prop="errorMsg" label="失败原因" width="160" show-overflow-tooltip>
         <template #default="{ row }">
-          <span v-if="row.status === 'FAILED' && row.errorMsg" class="error-text">
-            <el-tooltip :content="row.errorMsg" placement="top">
+          <span v-if="row.status === 'FAILED' && row.errorMessage" class="error-text">
+            <el-tooltip :content="row.errorMessage" placement="top">
               <el-icon :size="14" color="#f56c6c"><WarningFilled /></el-icon>
             </el-tooltip>
-            <span class="error-msg">{{ row.errorMsg.length > 15 ? row.errorMsg.slice(0, 15) + '...' : row.errorMsg }}</span>
+            <span class="error-msg">{{ row.errorMessage.length > 15 ? row.errorMessage.slice(0, 15) + '...' : row.errorMessage }}</span>
           </span>
           <span v-else class="no-error">--</span>
         </template>
@@ -229,6 +230,8 @@ onUnmounted(() => {
 function startPolling() {
   stopPolling()
   pollTimer = setInterval(async () => {
+    // Don't poll if user has selected items (would clear checkbox selection)
+    if (selectedIds.value.length > 0) return
     // Only poll if there are documents in non-terminal status
     const hasProcessing = documents.value.some(d =>
       ['UPLOADED', 'PARSING', 'CHUNKING', 'EMBEDDING'].includes(d.status)
@@ -255,7 +258,7 @@ async function fetchDocuments(silent = false) {
       status: filters.status || undefined,
       keyword: filters.keyword || undefined,
     })
-    documents.value = res.data.data.list || []
+    documents.value = (res.data.data.records || res.data.data.list || []).map(d => ({ ...d, tags: typeof d.tags === 'object' && !Array.isArray(d.tags) ? d.tags : {} }))
     total.value = res.data.data.total || 0
   } catch (e: any) {
     if (!silent) ElMessage.error('获取文档列表失败：' + (e?.response?.data?.message || e.message))
@@ -310,8 +313,10 @@ async function handleBatchDelete() {
     ElMessage.success(`成功删除 ${res.data.data.deletedIds.length} 个文档`)
     selectedIds.value = []
     fetchDocuments()
-  } catch {
-    // cancelled
+  } catch (e: any) {
+    if (e?.message !== 'cancel') {
+      ElMessage.error('批量删除失败：' + (e?.response?.data?.message || e?.message || '未知错误'))
+    }
   }
 }
 
@@ -322,7 +327,7 @@ async function handleRetry(row: DocType) {
     await retryProcessDocument(kbId.value, row.id)
     ElMessage.success('已重新加入处理队列')
     row.status = 'PARSING'
-    row.errorMsg = undefined
+    row.errorMessage = ''
   } catch (e: any) {
     ElMessage.error('重试失败：' + (e?.response?.data?.message || e.message))
   } finally {
@@ -343,8 +348,8 @@ async function onTagsUpdate(row: DocType, tags: Record<string, string>) {
 
 // Chunks
 function viewChunks(row: DocType) {
-  currentDocId.value = row.id
-  currentDocFilename.value = row.filename
+  currentDocId.value = String(row.id)
+  currentDocFilename.value = row.fileName || row.filename || ''
   chunkDrawerVisible.value = true
 }
 
@@ -430,4 +435,32 @@ function formatTime(iso: string): string {
   margin-top: 16px;
   padding: 12px 0;
 }
+.upload-title { text-align: center; width: 100%; font-weight: 600; font-size: 15px; }
+
+/* 深色模式表格样式 */
+
+
+[data-theme='dark'] .el-table {
+  --el-table-bg-color: var(--bg-container);
+  --el-table-tr-bg-color: var(--bg-container);
+  --el-table-header-bg-color: var(--bg-hover);
+  --el-table-row-hover-bg-color: var(--bg-hover);
+  --el-table-border-color: var(--border-color);
+  --el-table-text-color: var(--text-primary);
+  --el-table-header-text-color: var(--text-secondary);
+}
+[data-theme='dark'] .el-table--striped .el-table__body tr.el-table__row--striped td {
+  background: var(--bg-hover);
+}
+[data-theme='dark'] .el-card {
+  background: var(--bg-container);
+  border-color: var(--border-color);
+}
+[data-theme='dark'] .document-page {
+  color: var(--text-primary);
+}
+[data-theme='dark'] .doc-uploader {
+  background: var(--bg-hover);
+}
+
 </style>
