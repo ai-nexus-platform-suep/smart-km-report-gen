@@ -31,6 +31,12 @@ const moduleRoutes: RouteRecordRaw[] = [
     meta: { title: "正文工作台" }
   },
   {
+    path: "/reports/:id/view",
+    name: "ReportView",
+    component: () => import("../pages/reports/ReportViewPage.vue"),
+    meta: { title: "报告正文查看" }
+  },
+  {
     path: "/reports/:id/export",
     name: "ReportExport",
     component: () => import("../pages/reports/ExportPage.vue"),

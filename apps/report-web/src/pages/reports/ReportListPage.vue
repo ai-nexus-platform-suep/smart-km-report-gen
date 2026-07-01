@@ -118,7 +118,7 @@ function applyFilters() {
 
 function goNext(report: Report) {
   if (report.status === 'DRAFT' || report.status === 'OUTLINE_READY') router.push(`/reports/${report.id}/outline`)
-  else if (report.status === 'EXPORTED') router.push(`/reports/${report.id}/export`)
+  else if (report.status === 'CONTENT_READY' || report.status === 'EXPORTED') router.push(`/reports/${report.id}/view`)
   else router.push(`/reports/${report.id}/workspace`)
 }
 
