@@ -44,21 +44,28 @@ public class UserService {
     private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
 
     @Transactional
-    public boolean register(String username, String password) {
+    public UserVO register(String username, String password, String email, String phone) {
         if (findByUsername(username).isPresent()) {
-            log.info("注册跳过，用户名已存在: {}", username);
-            return false;
+            throw new BusinessException(ApiCode.USER_ALREADY_EXISTS, "用户已存在");
+        }
+        if (email != null) {
+            validateUniqueEmail(null, email);
+        }
+        if (phone != null) {
+            validateUniquePhone(null, phone);
         }
         SysUserEntity user = new SysUserEntity();
         user.setUsername(username);
         user.setPassword(passwordEncoder.encode(password));
         user.setNickname(username);
+        user.setEmail(email);
+        user.setPhone(phone);
         user.setEnabled(true);
         user.setDeleted(false);
         sysUserMapper.insert(user);
         bindRoles(user.getId(), List.of(AuthConstants.ROLE_USER), null);
         log.info("用户注册成功: username={}", username);
-        return true;
+        return toUserVO(user);
     }
 
     public LoginResult login(String username, String rawPassword, String clientIp) {

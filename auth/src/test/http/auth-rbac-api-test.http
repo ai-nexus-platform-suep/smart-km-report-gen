@@ -44,12 +44,35 @@ Content-Type: application/json
 
 {
   "username": "rest_test_user",
+  "password": "123456",
+  "email": "test@example.com",
+  "phone": "13800138001"
+}
+
+> {%
+    client.test("注册 201，返回用户信息", function() {
+        client.assert(response.status === 201, "status=" + response.status);
+        client.assert(response.body.code === 200, "code=" + response.body.code);
+        client.assert(response.body.data.id != null, "missing id");
+        client.assert(response.body.data.username === "rest_test_user", "username mismatch");
+        client.assert(response.body.data.roles.indexOf("ROLE_USER") >= 0, "missing ROLE_USER");
+    });
+%}
+
+### 1b. 注册不含可选字段（向后兼容）
+# @name register_minimal
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "rest_test_user2",
   "password": "123456"
 }
 
 > {%
-    client.test("注册 201", function() {
-        client.assert(response.status === 201 || response.body.code === 1002, "status/code");
+    client.test("最小字段注册 201", function() {
+        client.assert(response.status === 201, "status=" + response.status);
+        client.assert(response.body.data.username === "rest_test_user2", "username mismatch");
     });
 %}
 

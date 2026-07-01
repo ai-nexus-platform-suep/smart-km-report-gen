@@ -43,13 +43,12 @@ public class AuthController {
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponse<Void> register(@Valid @RequestBody RegisterRequest req) {
-        boolean success = userService.register(req.getUsername().trim(), req.getPassword().trim());
-        if (!success) {
-            throw new BusinessException(ApiCode.USER_ALREADY_EXISTS, "用户已存在");
-        }
-        log.info("User registered: {}", req.getUsername());
-        return ApiResponse.success("注册成功", null);
+    public ApiResponse<UserVO> register(@Valid @RequestBody RegisterRequest req) {
+        String email = req.getEmail() != null ? req.getEmail().trim() : null;
+        String phone = req.getPhone() != null ? req.getPhone().trim() : null;
+        UserVO user = userService.register(req.getUsername().trim(), req.getPassword().trim(), email, phone);
+        log.info("User registered: {} (id={})", user.getUsername(), user.getId());
+        return ApiResponse.success("注册成功", user);
     }
 
     @PostMapping("/login")
