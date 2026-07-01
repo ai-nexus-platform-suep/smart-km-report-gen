@@ -1,2 +1,0 @@
-{"file":".trellis/tasks/06-30-fix-maven-flyway-cache/research.md","reason":"Task-specific evidence distinguishing the Flyway cache repair from Lombok-generated-symbol diagnostics before implementation."}
-{"file":".trellis/spec/guides/code-reuse-thinking-guide.md","reason":"If scope expands to source changes, prefer the existing Lombok pattern over one-off hand-written accessors or logger fields."}

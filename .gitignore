@@ -4,6 +4,10 @@
 .vscode/
 *.swp
 
+# Local AI tooling
+.opencode/
+.trellis/
+
 # Java
 target/
 *.class

@@ -1,6 +1,0 @@
-{"file":".trellis/tasks/06-30-high-concurrency-document-processing-architecture/prd.md","reason":"Check implementation against requirements, acceptance criteria, and out-of-scope boundaries."}
-{"file":".trellis/tasks/06-30-high-concurrency-document-processing-architecture/design.md","reason":"Verify architecture compliance for Java/Python boundary, queue semantics, status flow, concurrency limits, and idempotency."}
-{"file":".trellis/tasks/06-30-high-concurrency-document-processing-architecture/implement.md","reason":"Verify ordered checklist, validation commands, risky files, and rollback points were addressed."}
-{"file":".trellis/spec/backend/quality-guidelines.md","reason":"Backend quality expectations and existing ingest/MinerU validation conventions."}
-{"file":"docs/ai-service-contract.yaml","reason":"Check internal contract compatibility for process document, status callback, embedding, rerank, and search APIs."}
-{"file":"docs/知识管理组-中间件与服务方案.md","reason":"Check resulting implementation stays aligned with documented service and middleware responsibilities."}

@@ -1,8 +1,0 @@
-{"file":".trellis/tasks/06-30-high-concurrency-document-processing-architecture/prd.md","reason":"Task requirements, scope boundaries, and acceptance criteria for high-concurrency document processing."}
-{"file":".trellis/tasks/06-30-high-concurrency-document-processing-architecture/design.md","reason":"Architecture boundary, queue contract, status flow, concurrency, idempotency, and migration decisions to implement."}
-{"file":".trellis/tasks/06-30-high-concurrency-document-processing-architecture/implement.md","reason":"Ordered implementation checklist, validation commands, risky files, and rollback points."}
-{"file":"docs/知识管理组-中间件与服务方案.md","reason":"Existing project architecture establishes Java public API, Python AI service, RabbitMQ, MinIO, Milvus, and document-processing flow."}
-{"file":"docs/ai-service-contract.yaml","reason":"Internal Java-to-Python contract for async document processing, callbacks, embedding, rerank, and vector search."}
-{"file":"km-ingest-service/app/pipeline.py","reason":"Prototype ingest orchestration to port or retire when implementing Python worker processing."}
-{"file":"km-ingest-service/app/mineru_runner.py","reason":"Current MinerU CLI execution and environment setup behavior to preserve in worker form."}
-{"file":"km-backend/src/main/java/com/km/service/impl/DocumentServiceImpl.java","reason":"Current Java upload, storage, metadata, and status handling entry point for queue publication integration."}

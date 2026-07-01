@@ -1,3 +1,0 @@
-{"file":".trellis/tasks/06-30-mineru-rag-storage/research.md","reason":"Task-specific source inspection and confirmed current backend gaps for MinerU/RAG storage."}
-{"file":".trellis/spec/backend/database-guidelines.md","reason":"Schema migration and DB mapping changes are central to this task."}
-{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"Feature spans upload API, parser adapter, object storage, DB metadata, vector service, and frontend citation contracts."}
