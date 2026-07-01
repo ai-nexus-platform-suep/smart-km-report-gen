@@ -1,9 +1,9 @@
 <template>
-  <div class="page">
+  <div class="page workspace-page">
     <PageHeader
       eyebrow="AI GENERATION TERMINAL"
       title="报告生成工作台"
-      description="按章节流式生成正文，实时查看进度，生成后可在线编辑 Markdown 正文。"
+      description="按叶子章节流式生成正文，目录级标题只作为结构导航。生成后可直接在线编辑 Markdown，并预览表格排版。"
     >
       <el-button @click="$router.push(`/reports/${reportId}/outline`)">返回大纲</el-button>
       <el-button type="primary" :loading="store.streaming" @click="startGenerate">启动正文生成</el-button>
@@ -28,53 +28,83 @@
       </div>
     </section>
 
-    <div v-if="report" class="three-column">
-      <section class="surface">
+    <div v-if="report" class="workspace-layout">
+      <section class="surface section-tree-surface">
         <div class="surface-title">
           <div>
             <span class="eyebrow">SECTION TREE</span>
             <h2>章节目录</h2>
           </div>
         </div>
-        <OutlineTree
-          :nodes="report.outline"
-          :sections="report.sections"
-          :selected-id="selectedOutlineId"
-          @select="selectOutline"
-        />
+        <div class="tree-scroll">
+          <OutlineTree
+            :nodes="report.outline"
+            :sections="report.sections"
+            :selected-id="selectedOutlineId"
+            :table-items="tableDisplayMap"
+            collapsible
+            @select="selectOutline"
+          />
+        </div>
       </section>
 
       <section class="surface editor-surface">
-        <div class="surface-title">
+        <div class="surface-title editor-title">
           <div>
             <span class="eyebrow">CONTENT EDITOR</span>
-            <h2>{{ selectedSection?.number }} {{ selectedSection?.title }}</h2>
+            <h2>{{ selectedOutlineNode?.number }} {{ selectedOutlineNode?.title }}</h2>
           </div>
           <div class="action-row">
             <StatusBadge v-if="selectedSection" :status="selectedSection.status" type="section" />
+            <el-radio-group v-model="mode" class="mode-switch">
+              <el-radio-button label="edit">编辑</el-radio-button>
+              <el-radio-button label="preview">预览</el-radio-button>
+            </el-radio-group>
             <el-button size="small" :disabled="!dirty || selectedSection?.status === 'GENERATING'" @click="save">
               保存章节
             </el-button>
           </div>
         </div>
 
-        <div v-if="selectedSection" class="editor-grid">
+        <div v-if="selectedSection" class="single-editor">
           <el-input
+            v-show="mode === 'edit'"
             v-model="draft"
+            class="markdown-textarea"
             type="textarea"
             :disabled="selectedSection.status === 'GENERATING'"
-            :autosize="{ minRows: 12, maxRows: 12 }"
-            placeholder="章节正文将随生成流写入，也可以在生成完成后编辑。"
+            :autosize="false"
+            placeholder="这里编辑当前章节 Markdown 正文。表格请使用 Markdown 表格语法，预览模式会自动识别。"
             @input="dirty = true"
           />
-          <div class="preview">
-            <span class="terminal-label">PREVIEW</span>
-            <pre>{{ preview }}</pre>
+
+          <article v-show="mode === 'preview'" class="markdown-reader" v-html="previewHtml" />
+
+          <div v-if="tableColumns.length" class="table-inspector">
+            <div class="surface-title mini-title">
+              <div>
+                <span class="eyebrow">TABLE DATA</span>
+                <h3>识别到的结构化表格</h3>
+              </div>
+            </div>
+            <el-table :data="tableRows" size="small">
+              <el-table-column v-for="column in tableColumns" :key="column" :prop="column" :label="column" />
+            </el-table>
+          </div>
+        </div>
+
+        <div v-else class="empty-section-note">
+          <strong>{{ selectedOutlineNode?.number }} {{ selectedOutlineNode?.title }}</strong>
+          <p>该节点是目录级标题，不直接生成正文。请选择它下面的子章节进行正文生成、编辑或预览。</p>
+          <div v-if="childContentNodes.length" class="child-jump-list">
+            <el-button v-for="node in childContentNodes" :key="node.id" size="small" @click="selectOutline(node.id)">
+              {{ node.number }} {{ node.title }}
+            </el-button>
           </div>
         </div>
       </section>
 
-      <section class="surface right-rail">
+      <section class="surface right-rail sticky-rail">
         <div class="surface-title">
           <div>
             <span class="eyebrow">CONTROL PANEL</span>
@@ -87,14 +117,23 @@
             <strong>{{ store.streaming ? 'CONNECTED' : 'IDLE' }}</strong>
           </div>
           <div class="data-line">
-            <span>当前章节</span>
-            <strong>{{ selectedSection?.number || '-' }}</strong>
+            <span>当前节点</span>
+            <strong>{{ selectedOutlineNode?.number || '-' }}</strong>
+          </div>
+          <div class="data-line">
+            <span>正文章节</span>
+            <strong>{{ selectedSection ? 'YES' : 'NO' }}</strong>
           </div>
           <div class="data-line">
             <span>内容版本</span>
             <strong>v{{ selectedSection?.version || 0 }}</strong>
           </div>
-          <el-alert v-if="dirty" type="warning" :closable="false" title="当前章节有未保存修改，离开前请保存。" />
+          <div v-if="store.streaming && streamSection" class="data-line">
+            <span>正在生成</span>
+            <strong>{{ streamSection ? `${streamSection.number} ${streamSection.title}` : '-' }}</strong>
+          </div>
+          <el-alert v-if="dirty" type="warning" :closable="false" title="当前章节有未保存修改，切换前请保存。" />
+          <el-button v-if="store.streaming && streamSection" @click="locateStreamSection">定位正在生成章节</el-button>
           <el-button :disabled="!selectedSection" @click="confirmRegenerate">重新生成本节</el-button>
           <el-button type="primary" :disabled="!canExport" @click="$router.push(`/reports/${reportId}/export`)">
             进入导出检查
@@ -113,8 +152,9 @@ import PageHeader from '@/components/PageHeader.vue'
 import OutlineTree from '@/components/OutlineTree.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { useReportStore } from '@/stores/reports'
-import type { EntityId } from '@/types/domain'
-import { sanitizeMarkdown } from '@/utils/markdown'
+import type { EntityId, OutlineNode, ReportSection } from '@/types/domain'
+import { contentOutlineNodes, isContentOutlineNode } from '@/utils/outline'
+import { renderMarkdownHtml } from '@/utils/markdown'
 
 const route = useRoute()
 const store = useReportStore()
@@ -123,17 +163,34 @@ const selectedOutlineId = ref<EntityId>()
 const sameId = (a?: EntityId, b?: EntityId) => String(a) === String(b)
 const draft = ref('')
 const dirty = ref(false)
+const mode = ref<'edit' | 'preview'>('edit')
+const streamSectionId = ref<EntityId>()
 
 const report = computed(() => store.current)
-const selectedSection = computed(() =>
-  report.value?.sections.find((section) => sameId(section.outlineNodeId, selectedOutlineId.value)),
-)
-const preview = computed(() => sanitizeMarkdown(draft.value))
+const contentNodes = computed(() => (report.value ? contentOutlineNodes(report.value.outline) : []))
+const selectedOutlineNode = computed(() => report.value?.outline.find((node) => sameId(node.id, selectedOutlineId.value)))
+const selectedSection = computed(() => {
+  if (!report.value || !selectedOutlineNode.value || !isContentOutlineNode(report.value.outline, selectedOutlineNode.value)) return undefined
+  return report.value.sections.find((section) => sameId(section.outlineNodeId, selectedOutlineId.value))
+})
+const streamSection = computed(() => report.value?.sections.find((section) => sameId(section.id, streamSectionId.value)))
+const previewHtml = computed(() => renderMarkdownHtml(draft.value || ''))
 const canExport = computed(() => report.value?.status === 'CONTENT_READY' || report.value?.status === 'EXPORTED')
+const tableColumns = computed(() => selectedSection.value?.tableJson?.columns ?? [])
+const tableRows = computed(() =>
+  (selectedSection.value?.tableJson?.rows ?? []).map((row, index) =>
+    Object.fromEntries([['__id', index], ...tableColumns.value.map((column, columnIndex) => [column, row[columnIndex] || ''])]),
+  ),
+)
+const tableDisplayMap = computed(() => buildTableDisplayMap())
+const childContentNodes = computed(() => {
+  if (!report.value || !selectedOutlineNode.value) return []
+  return contentNodes.value.filter((node) => isDescendantOf(node, selectedOutlineNode.value!.id))
+})
 
 onMounted(async () => {
   const detail = await store.fetchDetail(reportId)
-  selectedOutlineId.value = detail.outline[0]?.id
+  selectedOutlineId.value = contentOutlineNodes(detail.outline)[0]?.id ?? detail.outline[0]?.id
   draft.value = selectedSection.value?.contentMarkdown ?? ''
 })
 
@@ -158,7 +215,7 @@ watch(
   () => store.lastEvent,
   (event) => {
     if (!event || (event.type !== 'section_started' && event.type !== 'content_delta')) return
-    selectSectionBySectionId(event.sectionId)
+    streamSectionId.value = event.sectionId
   },
 )
 
@@ -166,9 +223,73 @@ function selectOutline(id: EntityId) {
   selectedOutlineId.value = id
 }
 
+function isDescendantOf(node: OutlineNode, ancestorId: EntityId) {
+  let parentId = node.parentId
+  while (parentId) {
+    if (sameId(parentId, ancestorId)) return true
+    parentId = report.value?.outline.find((item) => sameId(item.id, parentId))?.parentId
+  }
+  return false
+}
+
+function rawTableNames(node: OutlineNode) {
+  return (node.promptHint || '')
+    .split(/\r?\n/)
+    .map((line) => /^表格[:：]\s*(.+)$/.exec(line.trim())?.[1]?.trim())
+    .filter(Boolean) as string[]
+}
+
+function markdownTableNames(markdown = '') {
+  const lines = markdown.split(/\r?\n/)
+  const tables: string[] = []
+
+  lines.forEach((line, index) => {
+    if (!line.trim().startsWith('|') || !/^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(lines[index + 1] || '')) return
+    const previous = [...lines.slice(0, index)].reverse().find((item) => item.trim())
+    const title = /^表[：:]\s*(.+)$/.exec(previous?.trim() || '')?.[1]?.trim()
+    tables.push(title || 'Markdown 表格')
+  })
+
+  return tables
+}
+
+function sectionTableNames(node: OutlineNode, section?: ReportSection) {
+  const names = new Set<string>()
+  rawTableNames(node).forEach((name) => names.add(name))
+  markdownTableNames(section?.contentMarkdown).forEach((name) => names.add(name))
+  if (section?.tableJson && !names.size) names.add(`${section.title || node.title}数据表`)
+  return Array.from(names)
+}
+
+function buildTableDisplayMap() {
+  const current = report.value
+  const result: Record<string, string[]> = {}
+  if (!current) return result
+
+  let tableIndex = 0
+  current.outline.forEach((node) => {
+    const section = current.sections.find((item) => sameId(item.outlineNodeId, node.id))
+    const tables = sectionTableNames(node, section)
+    if (!tables.length) return
+
+    result[String(node.id)] = tables.map((name) => {
+      tableIndex += 1
+      return `表${tableIndex} ${name}`
+    })
+  })
+
+  return result
+}
+
+function locateStreamSection() {
+  if (!streamSectionId.value) return
+  selectSectionBySectionId(streamSectionId.value)
+}
+
 function selectSectionBySectionId(sectionId: EntityId) {
   const section = report.value?.sections.find((item) => sameId(item.id, sectionId))
-  if (section && !sameId(section.outlineNodeId, selectedOutlineId.value)) {
+  const node = report.value?.outline.find((item) => sameId(item.id, section?.outlineNodeId))
+  if (section && node && isContentOutlineNode(report.value!.outline, node) && !sameId(section.outlineNodeId, selectedOutlineId.value)) {
     selectedOutlineId.value = section.outlineNodeId
   }
 }
@@ -201,6 +322,10 @@ async function confirmRegenerate() {
 </script>
 
 <style scoped>
+.workspace-page {
+  min-height: 100%;
+}
+
 .workspace-band {
   display: grid;
   grid-template-columns: minmax(240px, 1fr) 220px 320px;
@@ -226,36 +351,170 @@ async function confirmRegenerate() {
   color: rgba(248, 251, 255, 0.72);
 }
 
-.editor-surface {
-  min-height: 0;
-}
-
-.editor-grid {
+.workspace-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 0.8fr);
-  gap: 12px;
+  grid-template-columns: 310px minmax(0, 1fr) 300px;
+  align-items: start;
+  gap: 16px;
+}
+
+.section-tree-surface,
+.sticky-rail {
+  position: sticky;
+  top: 12px;
+  align-self: start;
+}
+
+.tree-scroll {
+  max-height: calc(100vh - 280px);
+  overflow: auto;
+  padding-bottom: 8px;
+}
+
+.editor-surface {
+  min-height: calc(100vh - 230px);
+}
+
+.editor-title {
+  align-items: flex-start;
+}
+
+.mode-switch {
+  overflow: hidden;
+  border: 1px solid rgba(30, 107, 255, 0.24);
+  border-radius: 999px;
+  box-shadow: 0 10px 22px rgba(30, 107, 255, 0.08);
+}
+
+.mode-switch :deep(.el-radio-button__inner) {
+  min-width: 74px;
+  height: 36px;
+  border: 0;
+  padding: 0 18px;
+  font-size: 15px;
+  font-weight: 800;
+  line-height: 36px;
+}
+
+.single-editor {
+  display: grid;
+  gap: 14px;
   padding: 14px;
 }
 
-.preview {
-  min-height: 300px;
-  padding: 14px;
+.markdown-textarea {
+  min-height: calc(100vh - 355px);
+}
+
+.markdown-textarea :deep(.el-textarea__inner) {
+  min-height: calc(100vh - 355px) !important;
+  padding: 16px;
+  font-family: "Cascadia Mono", "Microsoft YaHei UI", monospace;
+  font-size: 15px;
+  line-height: 1.75;
+}
+
+.markdown-reader {
+  min-height: calc(100vh - 355px);
+  padding: 18px;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  background: #fbfcfe;
+  background: rgba(255, 255, 255, 0.74);
+  color: var(--text-primary);
+  line-height: 1.8;
 }
 
-.preview pre {
-  margin: 12px 0 0;
+.markdown-reader :deep(h1),
+.markdown-reader :deep(h2),
+.markdown-reader :deep(h3),
+.markdown-reader :deep(h4) {
+  margin: 0 0 12px;
   color: var(--text-primary);
-  font-family: var(--font-body);
-  line-height: 1.7;
-  white-space: pre-wrap;
+  font-weight: 800;
+}
+
+.markdown-reader :deep(p) {
+  margin: 0 0 14px;
+}
+
+.markdown-reader :deep(table) {
+  width: 100%;
+  margin: 14px 0;
+  border-collapse: collapse;
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+.markdown-reader :deep(th),
+.markdown-reader :deep(td) {
+  padding: 10px 12px;
+  border: 1px solid var(--border-default);
+  text-align: left;
+}
+
+.markdown-reader :deep(th) {
+  background: #edf5ff;
+  font-weight: 800;
+}
+
+.markdown-reader :deep(code) {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bg-subtle);
+}
+
+.table-inspector {
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+.mini-title {
+  min-height: 48px;
+  padding: 12px 14px 8px;
+}
+
+.empty-section-note {
+  display: grid;
+  gap: 14px;
+  min-height: 340px;
+  align-content: center;
+  padding: 28px;
+  color: var(--text-secondary);
+}
+
+.empty-section-note strong {
+  color: var(--text-primary);
+  font-size: 22px;
+}
+
+.empty-section-note p {
+  max-width: 560px;
+  margin: 0;
+  line-height: 1.8;
+}
+
+.child-jump-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .control-panel {
   display: grid;
   gap: 14px;
   padding: 16px;
+}
+
+@media (max-width: 1366px) {
+  .workspace-layout {
+    grid-template-columns: 290px minmax(0, 1fr);
+  }
+
+  .sticky-rail {
+    position: static;
+    grid-column: 1 / -1;
+  }
 }
 </style>
