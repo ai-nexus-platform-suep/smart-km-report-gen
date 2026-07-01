@@ -158,7 +158,7 @@ async function submit() {
   try {
     const report = await store.create({ ...form })
     ElMessage.success('已按模板生成大纲，请确认章节结构')
-    router.push(`/reports/${report.id}/outline`)
+    router.push({ path: `/reports/${report.id}/outline`, query: { draft: '1' } })
   } finally {
     submitting.value = false
   }

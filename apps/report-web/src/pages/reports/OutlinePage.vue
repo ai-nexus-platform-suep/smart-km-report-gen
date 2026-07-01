@@ -17,7 +17,7 @@
         <span class="terminal-label">REPORT / {{ report.id }}</span>
         <strong>{{ report.name }}</strong>
       </div>
-      <StatusBadge :status="report.status" />
+      <StatusBadge :status="displayStatus" />
       <span>{{ report.subject }}</span>
     </div>
 
@@ -114,7 +114,8 @@ import PageHeader from '@/components/PageHeader.vue'
 import OutlineTree from '@/components/OutlineTree.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { useReportStore } from '@/stores/reports'
-import type { EntityId, OutlineNode } from '@/types/domain'
+import * as reportApi from '@/api/reports'
+import type { EntityId, OutlineNode, ReportDetail } from '@/types/domain'
 import { moveOutlineNodeToTarget, renumberOutline } from '@/utils/outline'
 
 const route = useRoute()
@@ -127,6 +128,9 @@ const numberingMode = ref<'global' | 'section'>('global')
 const sameId = (a?: EntityId, b?: EntityId) => String(a) === String(b)
 
 const report = computed(() => store.current)
+const isDraftFlow = computed(() => route.query.draft === '1')
+const needsOutlineConfirm = computed(() => isDraftFlow.value || Boolean(report.value?.tempId && report.value.status === 'DRAFT'))
+const displayStatus = computed(() => (needsOutlineConfirm.value ? 'DRAFT' : report.value?.status || 'DRAFT'))
 const selectedNode = computed(() => outline.value.find((node) => sameId(node.id, selectedId.value)))
 const canAttachTable = computed(() => Boolean(selectedNode.value && selectedNode.value.level > 1))
 const tableDisplayMap = computed(() => buildTableDisplayMap())
@@ -144,6 +148,11 @@ onMounted(async () => {
   setOutline(detail.outline)
   if (!outline.value.length) {
     await generate(true)
+  } else if (isDraftFlow.value && detail.status !== 'DRAFT') {
+    const saved = await saveDraftOutline()
+    if (saved?.outline) {
+      outline.value = normalizeOutline(saved.outline.map((node) => ({ ...node })))
+    }
   }
 })
 
@@ -237,23 +246,43 @@ async function removeNode() {
 }
 
 async function save() {
+  try {
+    const saved = await saveDraftOutline()
+    if (saved?.outline) {
+      outline.value = normalizeOutline(saved.outline.map((node) => ({ ...node })))
+    }
+    ElMessage.success('大纲草稿已保存')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '大纲草稿保存失败')
+  }
+}
+
+async function saveDraftOutline() {
+  const action = (store as { saveOutlineDraft?: (id: EntityId, outline: OutlineNode[]) => Promise<ReportDetail | undefined> })
+    .saveOutlineDraft
+  const saved = action ? await action(reportId.value, outline.value) : await reportApi.saveOutlineDraft(reportId.value, outline.value)
+  if (!action && saved) {
+    ;(store as unknown as { current?: ReportDetail }).current = saved
+  }
+  return saved
+}
+
+async function startContent() {
+  if (needsOutlineConfirm.value) {
+    await confirmOutline()
+    ElMessage.success('大纲已确认，进入正文生成')
+  }
+  router.push(`/reports/${reportId.value}/workspace`)
+}
+
+async function confirmOutline() {
   const saved = await store.saveOutline(reportId.value, outline.value)
   if (saved?.id) {
     reportId.value = String(saved.id)
     outline.value = normalizeOutline(saved.outline.map((node) => ({ ...node })))
     if (String(route.params.id) !== reportId.value) router.replace(`/reports/${reportId.value}/outline`)
   }
-  ElMessage.success('大纲已确认保存')
-}
-
-async function startContent() {
-  const saved = await store.saveOutline(reportId.value, outline.value)
-  if (saved?.id) {
-    reportId.value = String(saved.id)
-    outline.value = normalizeOutline(saved.outline.map((node) => ({ ...node })))
-  }
-  ElMessage.success('大纲已保存')
-  router.push(`/reports/${reportId.value}/workspace`)
+  return saved
 }
 
 function normalizeOutline(nodes: OutlineNode[]) {

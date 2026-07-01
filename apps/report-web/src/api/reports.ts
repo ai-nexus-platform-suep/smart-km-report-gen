@@ -105,7 +105,8 @@ function draftKey(id: EntityId) {
 function readDraft(id: EntityId): ReportDetail | undefined {
   const raw = sessionStorage.getItem(draftKey(id));
   if (!raw) return undefined;
-  return JSON.parse(raw) as ReportDetail;
+  const draft = JSON.parse(raw) as ReportDetail;
+  return { ...draft, status: "DRAFT" };
 }
 
 function writeDraft(report: ReportDetail) {
@@ -229,7 +230,7 @@ function makeDraft(payload: CreateReportPayload, result: GenerateOutlineResponse
     specialty: payload.specialty,
     powerPlant: payload.powerPlant,
     reportYear: payload.reportYear,
-    status: "OUTLINE_READY",
+    status: "DRAFT",
     ownerId: 0,
     totalSections: countContentOutlineNodes(outline),
     completedSections: 0,
@@ -309,7 +310,15 @@ export async function saveOutline(id: EntityId, outline: OutlineNode[]) {
   if (enableMock) return mockSaveOutline(id, outline);
 
   const draft = readDraft(id);
-  if (!draft) throw new Error("当前报告不是可确认的大纲临时态");
+  if (!draft) {
+    const detail = await getReport(id);
+    return {
+      ...detail,
+      outline: renumberOutline(outline),
+      totalSections: countContentOutlineNodes(outline),
+      updatedAt: new Date().toISOString()
+    };
+  }
   const result = await apiRequest<ConfirmOutlineResponse>("/api/reports/outline/confirm", {
     method: "POST",
     body: JSON.stringify({
@@ -329,11 +338,31 @@ export async function saveOutline(id: EntityId, outline: OutlineNode[]) {
   return {
     ...draft,
     id: result.reportId,
+    tempId: undefined,
+    outlineSource: undefined,
+    outlineExpireSeconds: undefined,
     status: result.status,
     outline: confirmedOutline,
     totalSections: countContentOutlineNodes(confirmedOutline),
     updatedAt: new Date().toISOString()
   };
+}
+
+export async function saveOutlineDraft(id: EntityId, outline: OutlineNode[]) {
+  if (enableMock) return mockSaveOutlineDraft(id, outline);
+
+  const draft = readDraft(id) || await getReport(id);
+  const nextOutline = renumberOutline(outline);
+  const nextDraft: ReportDetail = {
+    ...draft,
+    tempId: draft.tempId || String(draft.id),
+    status: "DRAFT",
+    outline: nextOutline,
+    totalSections: countContentOutlineNodes(nextOutline),
+    updatedAt: new Date().toISOString()
+  };
+  writeDraft(nextDraft);
+  return nextDraft;
 }
 
 export async function startGenerate(id: EntityId) {
@@ -613,9 +642,10 @@ async function mockGenerateOutline(id: EntityId) {
   if (!report) throw new Error("报告不存在");
   await wait(550);
   const baseId = mockDb.nextId(db) + 100;
+  report.tempId = String(report.id);
   report.outline = mockDb.seedOutline(report.id, baseId, report.type);
   report.sections = mockDb.outlineToSections(report.outline);
-  report.status = "OUTLINE_READY";
+  report.status = "DRAFT";
   report.totalSections = report.sections.length;
   report.completedSections = 0;
   report.updatedAt = new Date().toISOString();
@@ -632,7 +662,24 @@ async function mockSaveOutline(id: EntityId, outline: OutlineNode[]) {
   report.sections = mockDb.outlineToSections(report.outline);
   report.totalSections = report.sections.length;
   report.completedSections = 0;
+  report.tempId = undefined;
   report.status = "OUTLINE_READY";
+  report.updatedAt = new Date().toISOString();
+  mockDb.save(db);
+  return report;
+}
+
+async function mockSaveOutlineDraft(id: EntityId, outline: OutlineNode[]) {
+  const db = mockDb.data;
+  const report = db.reports.find((item) => sameId(item.id, id));
+  if (!report) throw new Error("报告不存在");
+  await wait();
+  report.outline = renumberOutline(outline);
+  report.sections = mockDb.outlineToSections(report.outline);
+  report.totalSections = report.sections.length;
+  report.completedSections = 0;
+  report.tempId = String(report.id);
+  report.status = "DRAFT";
   report.updatedAt = new Date().toISOString();
   mockDb.save(db);
   return report;

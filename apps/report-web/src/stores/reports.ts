@@ -77,6 +77,11 @@ export const useReportStore = defineStore("reports", () => {
     return current.value;
   }
 
+  async function saveOutlineDraft(id: EntityId, outline: OutlineNode[]) {
+    current.value = await reportApi.saveOutlineDraft(id, outline);
+    return current.value;
+  }
+
   async function startGenerate(id: EntityId) {
     stopStream();
     await reportApi.startGenerate(id);
@@ -160,6 +165,7 @@ export const useReportStore = defineStore("reports", () => {
     remove,
     generateOutline,
     saveOutline,
+    saveOutlineDraft,
     startGenerate,
     stopStream,
     saveSection,
