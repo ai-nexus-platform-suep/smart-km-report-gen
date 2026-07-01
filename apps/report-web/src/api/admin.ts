@@ -172,6 +172,15 @@ interface TemplateConfigPayload {
   configJson: string;
 }
 
+export interface TemplateVisualOutlineNode {
+  id?: string;
+  number: string;
+  title: string;
+  level: number;
+  promptHint?: string;
+  children?: TemplateVisualOutlineNode[];
+}
+
 export interface TemplateVisualConfig {
   fonts?: {
     titleFont?: string;
@@ -195,7 +204,7 @@ export interface TemplateVisualConfig {
     figureNumberingMode?: "GLOBAL" | "SECTION";
     tableNumberingMode?: "GLOBAL" | "SECTION";
   };
-  outline?: unknown[];
+  outline?: TemplateVisualOutlineNode[];
   header?: string;
   footer?: string;
 }
@@ -239,6 +248,38 @@ interface LlmConfigDto {
 const distributionColors = ["#1e6bff", "#00b8d9", "#16a34a", "#f59e0b", "#dc2626", "#8b5cf6"];
 const defaultTemplateConfig: TemplateStyleConfig = { titleSize: 18, bodySize: 12, lineHeight: 1.5, header: "示范电厂" };
 
+const defaultTemplateOutline: TemplateVisualOutlineNode[] = [
+  {
+    number: "1",
+    title: "报告正文",
+    level: 1,
+    promptHint: "",
+    children: [
+      {
+        number: "1.1",
+        title: "正文内容",
+        level: 2,
+        promptHint: "",
+        children: []
+      }
+    ]
+  }
+];
+
+function cloneTemplateOutline(outline: TemplateVisualOutlineNode[]) {
+  return outline.map((node) => ({
+    ...node,
+    children: cloneTemplateOutline(node.children || [])
+  }));
+}
+
+function ensureTemplateVisualConfig(config: TemplateVisualConfig = {}): TemplateVisualConfig {
+  return {
+    ...config,
+    outline: Array.isArray(config.outline) && config.outline.length ? config.outline : cloneTemplateOutline(defaultTemplateOutline)
+  };
+}
+
 function visualToTemplateStyle(config: TemplateVisualConfig = {}): TemplateStyleConfig {
   return {
     titleSize: config.fonts?.titleSize || config.fonts?.heading1Size || defaultTemplateConfig.titleSize,
@@ -249,24 +290,27 @@ function visualToTemplateStyle(config: TemplateVisualConfig = {}): TemplateStyle
   };
 }
 
-function templateStyleToVisual(config: TemplateStyleConfig): TemplateVisualConfig {
-  return {
+function templateStyleToVisual(config: TemplateStyleConfig, base: TemplateVisualConfig = {}): TemplateVisualConfig {
+  return ensureTemplateVisualConfig({
+    ...base,
     fonts: {
+      ...base.fonts,
       titleSize: config.titleSize,
       heading1Size: config.titleSize,
       bodySize: config.bodySize
     },
     paragraph: {
+      ...base.paragraph,
       lineSpacing: config.lineHeight,
-      firstLineIndentChars: 2
+      firstLineIndentChars: base.paragraph?.firstLineIndentChars ?? 2
     },
     caption: {
-      figureNumberingMode: "GLOBAL",
-      tableNumberingMode: "GLOBAL"
+      figureNumberingMode: base.caption?.figureNumberingMode || "GLOBAL",
+      tableNumberingMode: base.caption?.tableNumberingMode || "GLOBAL"
     },
     header: config.header,
     footer: config.footer
-  };
+  });
 }
 
 function parseTemplateConfig(rawConfig: unknown): TemplateStyleConfig {
@@ -710,7 +754,8 @@ export async function updateTemplateConfig(id: EntityId, config: TemplateStyleCo
     await wait();
     return config;
   }
-  await updateTemplateVisualConfig(id, templateStyleToVisual(config));
+  const currentConfig = await getTemplateVisualConfig(id);
+  await updateTemplateVisualConfig(id, templateStyleToVisual(config, currentConfig));
   return config;
 }
 
@@ -734,22 +779,23 @@ export async function getTemplateVisualConfig(id: EntityId) {
   if (enableMock) {
     await wait();
     const template = mockDb.data.templates.find((item) => sameId(item.id, id));
-    return templateStyleToVisual(parseTemplateConfig(template?.configJson));
+    return ensureTemplateVisualConfig(templateStyleToVisual(parseTemplateConfig(template?.configJson)));
   }
-  return apiRequest<TemplateVisualConfig>(`/api/admin/templates/${id}/visual-config`);
+  return ensureTemplateVisualConfig(await apiRequest<TemplateVisualConfig>(`/api/admin/templates/${id}/visual-config`));
 }
 
 export async function updateTemplateVisualConfig(id: EntityId, config: TemplateVisualConfig) {
+  const nextConfig = ensureTemplateVisualConfig(config);
   if (enableMock) {
     await wait();
     const template = mockDb.data.templates.find((item) => sameId(item.id, id));
-    if (template) template.configJson = JSON.stringify(config);
+    if (template) template.configJson = JSON.stringify(nextConfig);
     mockDb.save(mockDb.data);
-    return config;
+    return nextConfig;
   }
   return apiRequest<TemplateVisualConfig>(`/api/admin/templates/${id}/visual-config`, {
     method: "PUT",
-    body: JSON.stringify(config)
+    body: JSON.stringify(nextConfig)
   });
 }
 

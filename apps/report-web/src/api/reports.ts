@@ -133,6 +133,40 @@ function readDraft(id: EntityId): ReportDetail | undefined {
   return { ...draft, status: "DRAFT" };
 }
 
+function readLocalDrafts() {
+  const drafts: ReportDetail[] = [];
+  for (let index = 0; index < sessionStorage.length; index += 1) {
+    const key = sessionStorage.key(index);
+    if (!key?.startsWith(DRAFT_PREFIX)) continue;
+    try {
+      const raw = sessionStorage.getItem(key);
+      if (!raw) continue;
+      drafts.push({ ...(JSON.parse(raw) as ReportDetail), status: "DRAFT" });
+    } catch {
+      // Ignore broken local drafts; the backend history remains authoritative.
+    }
+  }
+  return drafts;
+}
+
+function filterLocalDrafts(query: ReportQuery) {
+  const keyword = (query.subject || query.keyword || "").trim().toLowerCase();
+  return readLocalDrafts()
+    .filter((draft) => {
+      if (query.status && query.status !== "DRAFT") return false;
+      if (query.type && draft.type !== query.type) return false;
+      if (query.specialty && !draft.specialty.toLowerCase().includes(query.specialty.toLowerCase())) return false;
+      if (query.powerPlant && !draft.powerPlant.toLowerCase().includes(query.powerPlant.toLowerCase())) return false;
+      if ((query.reportYear || query.year) && draft.reportYear !== (query.reportYear || query.year)) return false;
+      if (keyword) {
+        const haystack = [draft.name, draft.subject, draft.specialty, draft.powerPlant].join(" ").toLowerCase();
+        if (!haystack.includes(keyword)) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+}
+
 function writeDraft(report: ReportDetail) {
   sessionStorage.setItem(draftKey(report.id), JSON.stringify(report));
 }
@@ -282,9 +316,12 @@ export async function listReports(query: ReportQuery): Promise<PageResult<Report
   if (query.reportYear || query.year) params.set("reportYear", String(query.reportYear || query.year));
 
   const page = await apiRequest<BackendPage<BackendReportRecord>>(`/api/reports/history?${params.toString()}`);
+  const localDrafts = query.page === 1 ? filterLocalDrafts(query) : [];
+  const backendItems = page.records.map(mapReport);
+  const localItems = localDrafts.filter((draft) => !backendItems.some((item) => sameId(item.id, draft.id)));
   return {
-    items: page.records.map(mapReport),
-    total: page.total,
+    items: [...localItems, ...backendItems].slice(0, query.pageSize),
+    total: page.total + localItems.length,
     page: page.page,
     pageSize: page.size
   };
@@ -346,7 +383,9 @@ export async function getReport(id: EntityId) {
   if (draft) return draft;
 
   const detail = await apiRequest<BackendReportRecord>(`/api/reports/history/${id}`);
-  return mapDetail(detail);
+  const report = mapDetail(detail);
+  if (report.status === "DRAFT") writeDraft(report);
+  return report;
 }
 
 export async function deleteReport(id: EntityId) {
@@ -413,7 +452,8 @@ export async function saveOutline(id: EntityId, outline: OutlineNode[]) {
 export async function saveOutlineDraft(id: EntityId, outline: OutlineNode[]) {
   if (enableMock) return mockSaveOutlineDraft(id, outline);
 
-  const draft = readDraft(id) || await getReport(id);
+  const draft = readDraft(id);
+  if (!draft) throw new Error("本地大纲草稿不存在，请重新生成大纲后再保存");
   if (draft.status !== "DRAFT") throw new Error("只有草稿状态的大纲可以保存");
   const nextOutline = renumberOutline(outline);
   const nextDraft: ReportDetail = {
