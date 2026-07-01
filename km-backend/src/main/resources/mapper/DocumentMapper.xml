@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="UTF-8" ?>
+<?xml version="1.0" encoding="UTF-8" ?>
 <!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
 <mapper namespace="com.km.repository.DocumentMapper">
 
@@ -118,6 +118,14 @@
             #{kbId}
         </foreach>
         AND status = '\''READY'\''
+    </select>
+
+
+    <!-- 查询全部 READY 状态文档 ID，BM25 全库降级搜索 -->
+    <select id="listAllReadyDocIds" resultType="string">
+        SELECT id
+        FROM document
+        WHERE status = 'READY'
     </select>
 
 </mapper>

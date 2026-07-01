@@ -6,7 +6,7 @@ import org.apache.ibatis.annotations.Param;
 import java.util.List;
 
 /**
- * 文档 Mapper 接口
+ * 鏂囨。 Mapper 鎺ュ彛
  */
 public interface DocumentMapper {
 
@@ -17,7 +17,7 @@ public interface DocumentMapper {
     int deleteById(@Param("id") String id);
 
     /**
-     * 仅更新文档标签（独立 Mapper，不与 updateStatus 混用）。
+     * 浠呮洿鏂版枃妗ｆ爣绛撅紙鐙珛 Mapper锛屼笉涓?updateStatus 娣风敤锛夈€?
      */
     int updateTags(@Param("id") String id,
                    @Param("tagsJson") String tagsJson);
@@ -41,13 +41,19 @@ public interface DocumentMapper {
                      @Param("errorMsg") String errorMsg);
 
     /**
-     * 批量查询文档（用于检索结果回填文档名）
+     * 鎵归噺鏌ヨ鏂囨。锛堢敤浜庢绱㈢粨鏋滃洖濉枃妗ｅ悕锛?
      */
     List<Document> listByIds(@Param("ids") List<String> ids);
 
     /**
-     * 查询指定知识库下状态为 READY 的文档 ID 列表
-     * 用于 EPIC-05 BM25 降级搜索
+     * 鏌ヨ鎸囧畾鐭ヨ瘑搴撲笅鐘舵€佷负 READY 鐨勬枃妗?ID 鍒楄〃
+     * 鐢ㄤ簬 EPIC-05 BM25 闄嶇骇鎼滅储
      */
     List<String> listReadyDocIdsByKbIds(@Param("kbIds") List<String> kbIds);
+
+    /**
+     * 查询全部 READY 状态文档 ID（未指定知识库时全库搜索）
+     * 用于 EPIC-05 BM25 降级搜索
+     */
+    List<String> listAllReadyDocIds();
 }
