@@ -58,6 +58,7 @@ export function setStoredUser(user: Record<string, unknown>): void {
 }
 
 export function normalizeRole(roles: BackendRole[] = []): Role {
+  if (roles.some((role) => role === 'ROLE_SUPER_ADMIN' || role === 'SUPER_ADMIN')) return 'SUPER_ADMIN'
   return roles.some((role) => role === 'ROLE_ADMIN' || role === 'ADMIN') ? 'ADMIN' : 'USER'
 }
 

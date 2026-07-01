@@ -4,7 +4,7 @@
       <p class="platform-eyebrow">Knowledge Management / Document Flow</p>
       <h1>文档管理</h1>
       <p>
-        文档页先沉淀统一上传、解析、索引状态的页面骨架。A 组后续可以把原来的文档列表、批量上传、解析任务直接迁移到这些区域里。
+        文档页先沉淀统一上传、解析、索引状态的页面骨架，后续可以把文档列表、批量上传、解析任务直接迁移到这些区域里。
       </p>
       <div class="platform-actions">
         <el-button type="primary">上传文档</el-button>

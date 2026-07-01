@@ -1,28 +1,28 @@
 <script setup lang="ts">
 const summaryCards = [
   { label: '平台用户', value: '36', delta: '+4 本周', tone: 'blue' },
-  { label: '管理员', value: '6', delta: '2 个值班', tone: 'cyan' },
-  { label: '角色组', value: '4', delta: '权限已收口', tone: 'green' },
-  { label: '受控菜单', value: '21', delta: '3 个模块', tone: 'orange' },
+  { label: '超级管理员', value: '1', delta: '最高权限', tone: 'cyan' },
+  { label: '管理员', value: '5', delta: '模块配置', tone: 'green' },
+  { label: '受控模块', value: '3', delta: '知识 / 问答 / 报告', tone: 'orange' },
 ] as const
 
 const moduleCards = [
-  { name: '知识管理', owner: 'A 组', status: '已接入', users: 18, permission: '普通用户可访问，模型配置管理员可见' },
-  { name: '智能问答', owner: 'B 组', status: '已接入', users: 24, permission: '对话开放，检索测试和配置管理员可见' },
-  { name: '报告生成', owner: 'C 组', status: '已接入', users: 20, permission: '报告记录开放，模板和素材映射管理员可见' },
+  { name: '知识管理', scope: '知识库 / 文档 / 检索', status: '已启用', permission: '普通用户可检索与查看，管理员维护知识库与模型配置' },
+  { name: '智能问答', scope: '对话 / 会话 / 配置', status: '已启用', permission: '普通用户可发起问答，管理员维护问答配置与检索测试' },
+  { name: '报告生成', scope: '记录 / 新建 / 模板', status: '已启用', permission: '普通用户可新建和查看报告，管理员维护模板与素材映射' },
 ] as const
 
 const securityItems = [
   { label: '统一登录', value: '已启用', tone: 'success' },
-  { label: '路由守卫', value: 'ADMIN / USER', tone: 'success' },
+  { label: '路由守卫', value: 'SUPER_ADMIN / ADMIN / USER', tone: 'success' },
   { label: '菜单隐藏', value: '按角色过滤', tone: 'success' },
   { label: '接口鉴权', value: '第三次合并', tone: 'warning' },
 ] as const
 
 const recentEvents = [
-  { time: '今天 11:30', title: '统一入口完成系统管理页优化', detail: '总览、用户、角色三个页面替换为平台专用骨架。' },
-  { time: '今天 10:40', title: '报告模块接入 reports/* 页面', detail: '报告记录、新建报告、模板管理已聚合。' },
-  { time: '昨天 18:20', title: '问答与知识管理路由收口', detail: '保留原模块路径兼容，统一走平台 Layout。' },
+  { time: '今天 11:30', title: '系统管理按角色模型调整', detail: '用户、管理员、超级管理员统一收口到平台权限体系。' },
+  { time: '今天 10:40', title: '三大业务模块已进入统一入口', detail: '知识管理、智能问答、报告生成都在同一套导航与权限下展示。' },
+  { time: '昨天 18:20', title: '平台路由与菜单权限收口', detail: '管理员入口由路由守卫和侧边栏过滤共同控制。' },
 ] as const
 </script>
 
@@ -32,7 +32,7 @@ const recentEvents = [
       <div>
         <span class="eyebrow">SYSTEM CONTROL</span>
         <h1>系统管理总览</h1>
-        <p>这里聚合用户、角色、菜单权限和三个业务模块的接入状态，作为管理员进入平台后的第一张系统视图。</p>
+        <p>这里聚合用户、角色、菜单权限和三大业务模块的接入状态，按普通用户、管理员、超级管理员来管理平台权限。</p>
       </div>
       <div class="admin-hero-actions">
         <RouterLink to="/admin/users" class="admin-link primary">管理用户</RouterLink>
@@ -64,8 +64,8 @@ const recentEvents = [
               <strong>{{ item.name }}</strong>
               <p>{{ item.permission }}</p>
             </div>
-            <span>{{ item.owner }}</span>
-            <em>{{ item.users }} 人</em>
+            <span>{{ item.scope }}</span>
+            <em>三类角色</em>
             <b>{{ item.status }}</b>
           </article>
         </div>
@@ -228,7 +228,7 @@ const recentEvents = [
 
 .module-access-card {
   display: grid;
-  grid-template-columns: 52px minmax(0, 1fr) 80px 70px 74px;
+  grid-template-columns: 52px minmax(0, 1fr) 170px 86px 74px;
   gap: 14px;
   align-items: center;
   padding: 16px;
@@ -265,6 +265,7 @@ const recentEvents = [
 .module-access-card em {
   color: var(--platform-text-muted);
   font-style: normal;
+  line-height: 1.5;
 }
 
 .module-access-card b {

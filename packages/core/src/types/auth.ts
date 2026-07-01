@@ -1,5 +1,5 @@
 // === 角色 ===
-export type Role = 'USER' | 'ADMIN'
+export type Role = 'USER' | 'ADMIN' | 'SUPER_ADMIN'
 export type BackendRole = 'ROLE_USER' | 'ROLE_ADMIN' | string
 
 // === 用户 ===

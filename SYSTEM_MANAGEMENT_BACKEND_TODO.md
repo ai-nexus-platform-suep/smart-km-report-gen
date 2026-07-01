@@ -47,7 +47,7 @@
 
 ```ts
 type UserStatus = "ACTIVE" | "PENDING" | "DISABLED" | "LOCKED"
-type RoleCode = "ADMIN" | "USER" | string
+type RoleCode = "SUPER_ADMIN" | "ADMIN" | "USER" | string
 type PermissionAction = "view" | "edit" | "config" | "delete" | "approve" | "export"
 ```
 
@@ -59,7 +59,7 @@ type PermissionAction = "view" | "edit" | "config" | "delete" | "approve" | "exp
 
 - 平台用户数量
 - 管理员数量
-- 角色组数量
+- 角色类型数量
 - 受控菜单数量
 
 建议接口：
@@ -84,7 +84,7 @@ GET /api/admin/overview/summary
 
 当前前端静态展示：
 
-- 知识管理、智能问答、报告生成三个模块的负责人、状态、可访问人数、权限说明。
+- 知识管理、智能问答、报告生成三个模块的功能范围、状态、适用角色、权限说明。
 
 建议接口：
 
@@ -99,9 +99,9 @@ GET /api/admin/overview/modules
   {
     "moduleCode": "KM",
     "moduleName": "知识管理",
-    "owner": "A 组",
+    "scope": "知识库 / 文档 / 检索",
     "status": "ENABLED",
-    "enabledUserCount": 18,
+    "roleScope": ["SUPER_ADMIN", "ADMIN", "USER"],
     "permissionSummary": "普通用户可访问，模型配置管理员可见"
   }
 ]
@@ -161,11 +161,11 @@ GET /api/admin/audit-logs?module=SYSTEM&page=1&pageSize=5
 
 当前前端需要：
 
-- 关键词搜索：姓名、账号、部门
+- 关键词搜索：姓名、账号
 - 角色筛选
 - 状态筛选
 - 分页
-- 表格字段：用户、账号、部门、角色、状态、最近活跃
+- 表格字段：用户、账号、角色、可访问模块、状态、最近活跃
 
 建议接口：
 
@@ -182,10 +182,8 @@ GET /api/admin/users?keyword=&role=&status=&page=1&pageSize=10
       "id": "u-001",
       "username": "admin",
       "nickname": "系统管理员",
-      "department": "平台运维组",
       "email": "admin@example.com",
       "phone": "13800000000",
-      "avatar": "",
       "roles": [
         { "id": "r-admin", "code": "ADMIN", "name": "管理员" }
       ],
@@ -223,7 +221,6 @@ GET /api/admin/users/{userId}
   "id": "u-001",
   "username": "admin",
   "nickname": "系统管理员",
-  "department": "平台运维组",
   "email": "admin@example.com",
   "phone": "13800000000",
   "roles": [
@@ -253,11 +250,10 @@ PUT /api/admin/users/{userId}
 
 ```json
 {
-  "username": "report-review",
-  "nickname": "报告审核员",
+  "username": "report-user",
+  "nickname": "报告生成用户",
   "password": "InitialPassword123",
-  "department": "生产技术部",
-  "email": "review@example.com",
+  "email": "report@example.com",
   "phone": "13800000001",
   "roleIds": ["r-user"],
   "status": "PENDING"
@@ -268,9 +264,8 @@ PUT /api/admin/users/{userId}
 
 ```json
 {
-  "nickname": "报告审核员",
-  "department": "生产技术部",
-  "email": "review@example.com",
+  "nickname": "报告生成用户",
+  "email": "report@example.com",
   "phone": "13800000001",
   "status": "ACTIVE"
 }
@@ -363,9 +358,9 @@ GET /api/admin/users/summary
 
 当前前端静态角色：
 
+- 超级管理员
 - 管理员
 - 普通用户
-- 报告审核员
 
 建议接口：
 
@@ -518,7 +513,7 @@ GET /api/admin/permissions/tree
 
 ### 5.1 P0：当前登录用户接口增强
 
-当前前端 `UserInfo` 只有基础字段和 `role: ADMIN | USER`，后续需要后端返回权限集合。
+当前前端后续需要支持 `role: SUPER_ADMIN | ADMIN | USER`，并由后端返回权限集合。
 
 建议接口：
 
@@ -535,7 +530,6 @@ GET /api/auth/me
   "nickname": "系统管理员",
   "email": "admin@example.com",
   "phone": "13800000000",
-  "avatar": "",
   "role": "ADMIN",
   "roles": ["ROLE_ADMIN"],
   "status": "ACTIVE",
@@ -627,7 +621,7 @@ GET /api/admin/audit-logs?operator=&action=&targetType=&startTime=&endTime=&page
   "targetType": "USER",
   "targetId": "u-002",
   "targetName": "技术监督专责",
-  "detail": "分配角色：普通用户、报告审核员",
+  "detail": "分配角色：普通用户、管理员",
   "ip": "192.168.1.10",
   "result": "SUCCESS",
   "createdAt": "2026-07-01T11:30:00+08:00"
@@ -679,4 +673,3 @@ GET /api/admin/audit-logs?operator=&action=&targetType=&startTime=&endTime=&page
 - 非管理员访问 `/admin/overview`、`/admin/users`、`/admin/roles` 被前后端同时拦截。
 - 后端返回 `401` 时前端跳转登录页，返回 `403` 时前端显示无权限提示。
 - 管理动作进入审计日志，至少能查到操作者、动作、目标对象、时间和结果。
-

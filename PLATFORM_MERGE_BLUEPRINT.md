@@ -18,7 +18,7 @@
 
 - 用户只访问一个前端入口
 - 登录、权限、菜单、主题、管理后台统一
-- 三个小组仍保留清晰模块边界
+- 三个业务模块仍保留清晰模块边界
 - 后续新增功能不再复制 `main.ts / App.vue / router / layout / auth`
 
 ---
@@ -44,6 +44,25 @@
 结论：
 
 不要继续保留三个正式前端站点，应改为“一个平台站点 + 三个功能包”。
+
+---
+
+## 2.1 当前过渡期路由边界
+
+在三个业务模块页面尚未完全迁入 `packages/features-*` 前，`apps/platform-web` 不再直接引用其他 app 的内部页面路径。
+
+当前约定：
+
+- `apps/km-web/src/platform-routes.ts` 只负责导出知识管理在统一入口中的路由。
+- `apps/qa-web/src/platform-routes.ts` 只负责导出智能问答在统一入口中的路由。
+- `apps/report-web/src/platform-routes.ts` 只负责导出报告生成在统一入口中的路由。
+- `apps/platform-web/src/router/index.ts` 只聚合这些公开路由出口，以及平台自己拥有的首页、系统管理、占位页。
+
+这样做的目的：
+
+- 各模块维护者后续调整自己页面文件名、内部依赖、页面路径时，优先只改本 app 的 `platform-routes.ts`。
+- 统一入口不再散落 `../../../qa-web/src/pages/...` 这类跨 app 内部路径。
+- 后续迁移到 `packages/features-km`、`packages/features-qa`、`packages/features-report` 时，可以直接把 `platform-routes.ts` 的内容迁移为功能包的 `routes.ts`。
 
 ---
 
@@ -675,7 +694,7 @@ export function isSuperAdmin(user: UserInfo): boolean
 
 ## 10. 团队拆活建议
 
-### A 组：平台基座组
+### 平台基座
 
 负责：
 
@@ -684,19 +703,19 @@ export function isSuperAdmin(user: UserInfo): boolean
 - `packages/core`
 - 统一菜单、主题、权限
 
-### B 组：知识管理组
+### 知识管理模块
 
 负责：
 
 - `packages/features-km`
 
-### C 组：智能问答组
+### 智能问答模块
 
 负责：
 
 - `packages/features-qa`
 
-### D 组：报告生成组
+### 报告生成模块
 
 负责：
 
@@ -705,7 +724,7 @@ export function isSuperAdmin(user: UserInfo): boolean
 ### 合并规则
 
 1. 共享层变更先合到平台基座分支
-2. 业务组从统一基座分支拉取
+2. 业务模块维护者从统一基座分支拉取
 3. 功能包不直接改共享壳，避免互相踩样式
 
 ---
@@ -820,7 +839,7 @@ export function isSuperAdmin(user: UserInfo): boolean
 你们现在不该做的是：
 
 - 继续让三个 app 长期并存
-- 每个小组继续各改各的布局和样式
+- 每个模块继续各改各的布局和样式
 - 在每个模块里重复维护 `/admin`
 
 你们应该做的是：

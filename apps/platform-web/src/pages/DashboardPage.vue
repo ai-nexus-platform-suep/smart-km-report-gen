@@ -9,7 +9,7 @@ const moduleHealth = [
 
 const focusTasks = [
   '把空白模块补成静态页面骨架，先保证演示完整度',
-  '保留各组原接口路径，第三次集成再统一 request 封装',
+  '保留各模块原接口路径，第三次集成再统一 request 封装',
   '逐步抽公共表格、筛选栏、状态标签，减少重复代码',
 ] as const
 </script>
