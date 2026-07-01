@@ -1,7 +1,9 @@
 package com.km.storage;
 
 import com.km.config.MinioConfig;
+import io.minio.BucketExistsArgs;
 import io.minio.GetObjectArgs;
+import io.minio.MakeBucketArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
@@ -29,13 +31,20 @@ public class MinioFileStorageService implements FileStorageService {
 
     @PostConstruct
     public void init() {
-        log.info("MinIO file storage initialized, endpoint={}, bucket={}",
-                minioConfig.getEndpoint(), minioConfig.getBucket());
+        try {
+            ensureBucket();
+            log.info("MinIO file storage initialized, endpoint={}, bucket={}",
+                    minioConfig.getEndpoint(), minioConfig.getBucket());
+        } catch (RuntimeException e) {
+            log.warn("MinIO bucket initialization skipped, endpoint={}, bucket={}. Uploads will fail until MinIO is available.",
+                    minioConfig.getEndpoint(), minioConfig.getBucket(), e);
+        }
     }
 
     @Override
     public void store(String objectName, InputStream stream, long size, String contentType) {
         try {
+            ensureBucket();
             minioClient.putObject(PutObjectArgs.builder()
                     .bucket(minioConfig.getBucket())
                     .object(objectName)
@@ -74,5 +83,20 @@ public class MinioFileStorageService implements FileStorageService {
     @Override
     public boolean isAvailable() {
         return true;
+    }
+
+    private void ensureBucket() {
+        try {
+            boolean exists = minioClient.bucketExists(BucketExistsArgs.builder()
+                    .bucket(minioConfig.getBucket())
+                    .build());
+            if (!exists) {
+                minioClient.makeBucket(MakeBucketArgs.builder()
+                        .bucket(minioConfig.getBucket())
+                        .build());
+            }
+        } catch (Exception e) {
+            throw new RuntimeException("MinIO bucket initialization failed: " + minioConfig.getBucket(), e);
+        }
     }
 }

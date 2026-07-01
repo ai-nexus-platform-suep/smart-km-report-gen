@@ -58,10 +58,17 @@
 
     <!-- AI 服务降级时使用的关键词模糊匹配 -->
     <select id="searchByKeyword" resultMap="BaseResultMap">
-        SELECT <include refid="BaseColumns"/>
-        FROM chunk
-        WHERE content LIKE CONCAT('%', #{keyword}, '%')
-        ORDER BY chunk_index ASC
+        SELECT c.id, c.doc_id, c.content, c.chapter_path, c.chunk_index, c.chunk_type, c.vector_id, c.created_at
+        FROM chunk c
+        INNER JOIN document d ON d.id = c.doc_id
+        WHERE c.content LIKE CONCAT('%', #{keyword}, '%')
+        <if test="kbIds != null and kbIds.size() &gt; 0">
+            AND d.kb_id IN
+            <foreach collection="kbIds" item="kbId" open="(" separator="," close=")">
+                #{kbId}
+            </foreach>
+        </if>
+        ORDER BY c.chunk_index ASC
         LIMIT #{limit}
     </select>
 

@@ -41,3 +41,7 @@ __pycache__/
 *.pyo
 .venv/
 venv/
+km-ai-service/.cache/
+km-ai-service/.work/
+km-ai-service/.tmp/
+km-ai-service/.mineru/

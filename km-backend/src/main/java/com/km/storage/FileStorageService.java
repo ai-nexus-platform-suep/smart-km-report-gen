@@ -9,7 +9,7 @@ public interface FileStorageService {
 
     /**
      * 存储文件
-     * @param objectName  存储路径，格式 {kbId}/{docId}/{filename}
+     * @param objectName  存储路径，格式 raw/kb-{kbName}--{shortKbId}/{filename}--doc-{docId}.{ext}
      * @param stream      文件输入流
      * @param size        文件大小
      * @param contentType 媒体类型

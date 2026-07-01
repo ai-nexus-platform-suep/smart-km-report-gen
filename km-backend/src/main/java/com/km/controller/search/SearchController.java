@@ -1,12 +1,11 @@
 package com.km.controller.search;
 
 import com.km.common.dto.ApiResponse;
+import com.km.controller.support.RequestUserResolver;
 import com.km.dto.request.SearchRequest;
 import com.km.dto.response.SearchResultVO;
 import com.km.service.SearchService;
 import org.springframework.web.bind.annotation.*;
-
-import javax.servlet.http.HttpServletRequest;
 
 /**
  * 对外检索 API 控制器。
@@ -18,23 +17,21 @@ import javax.servlet.http.HttpServletRequest;
 public class SearchController {
 
     private final SearchService searchService;
+    private final RequestUserResolver requestUserResolver;
 
-    public SearchController(SearchService searchService) {
+    public SearchController(SearchService searchService, RequestUserResolver requestUserResolver) {
         this.searchService = searchService;
+        this.requestUserResolver = requestUserResolver;
     }
 
     /**
      * 执行知识检索。支持 vector / vector_rerank 两种模式。
-     * MVP 阶段 JWT 暂未启用，userId 默认 0 或从 X-User-Id 头取。
+     * MVP 阶段 JWT 暂未启用，userId 从 userid 头取。
      */
     @PostMapping("/search")
     public ApiResponse<SearchResultVO> search(@RequestBody SearchRequest request,
-                                              HttpServletRequest httpRequest) {
-        Long userId = 0L;
-        String userIdHeader = httpRequest.getHeader("X-User-Id");
-        if (userIdHeader != null) {
-            try { userId = Long.parseLong(userIdHeader); } catch (NumberFormatException ignored) {}
-        }
+                                               @RequestHeader(value = "userid", required = false) String userIdHeader) {
+        Long userId = requestUserResolver.requireUserId(userIdHeader);
         SearchResultVO result = searchService.search(request, userId);
         return ApiResponse.ok(result);
     }

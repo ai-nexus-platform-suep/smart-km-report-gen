@@ -42,6 +42,9 @@ public class SearchServiceImpl implements SearchService {
 
     @Override
     public SearchResultVO search(SearchRequest request, Long userId) {
+        if (request == null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Search request cannot be empty");
+        }
         String query = request.getQuery();
         if (query == null || query.trim().isEmpty()) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "检索关键词不能为空");
@@ -49,7 +52,13 @@ public class SearchServiceImpl implements SearchService {
         query = query.trim();
 
         int topK = request.getTopK() != null ? request.getTopK() : 10;
+        if (topK < 1 || topK > 50) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "topK must be between 1 and 50");
+        }
         String searchMode = request.getSearchMode() != null ? request.getSearchMode() : "vector_rerank";
+        if (!"vector".equals(searchMode) && !"vector_rerank".equals(searchMode)) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Unsupported searchMode: " + searchMode);
+        }
         float rerankThreshold = request.getRerankThreshold() != null ? request.getRerankThreshold() : 0.5f;
 
         List<String> kbIds = request.getKnowledgeBaseIds();
@@ -71,7 +80,7 @@ public class SearchServiceImpl implements SearchService {
         if (hits == null || hits.isEmpty()) {
             if (!aiAvailable) {
                 // AI 不可用，走 MySQL LIKE 降级
-                items = performBasicSearch(query, topK);
+                items = performBasicSearch(query, kbIds, topK);
             } else {
                 items = Collections.emptyList();
             }
@@ -125,6 +134,8 @@ public class SearchServiceImpl implements SearchService {
 
             // 过滤低于阈值的，按 rerankScore 降序，截断到 topK
             List<SearchResultItemVO> items = rerankResp.getItems().stream()
+                    .filter(item -> item.getIndex() != null && item.getIndex() >= 0 && item.getIndex() < hits.size())
+                    .filter(item -> item.getScore() != null)
                     .filter(item -> item.getScore() >= rerankThreshold)
                     .sorted((a, b) -> Float.compare(b.getScore(), a.getScore()))
                     .limit(topK)
@@ -196,9 +207,9 @@ public class SearchServiceImpl implements SearchService {
 
     // ========== 降级方案：MySQL LIKE 关键词匹配 ==========
 
-    private List<SearchResultItemVO> performBasicSearch(String query, int topK) {
+    private List<SearchResultItemVO> performBasicSearch(String query, List<String> kbIds, int topK) {
         log.info("Fallback to MySQL LIKE search: query={}", query);
-        List<Chunk> chunks = chunkMapper.searchByKeyword(query, topK);
+        List<Chunk> chunks = chunkMapper.searchByKeyword(query, kbIds, topK);
         if (chunks == null || chunks.isEmpty()) return Collections.emptyList();
 
         List<SearchResultItemVO> items = new ArrayList<>(chunks.size());

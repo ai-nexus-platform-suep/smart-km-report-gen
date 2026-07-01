@@ -26,5 +26,6 @@ public interface ChunkMapper {
 
     /** AI 服务降级时使用的关键词模糊匹配 */
     List<Chunk> searchByKeyword(@Param("keyword") String keyword,
+                                @Param("kbIds") List<String> kbIds,
                                 @Param("limit") int limit);
 }
