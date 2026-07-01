@@ -55,6 +55,12 @@ const moduleRoutes: RouteRecordRaw[] = [
     meta: { title: "模板管理", admin: true }
   },
   {
+    path: "/admin/assets",
+    name: "AssetAdmin",
+    component: () => import("../pages/admin/AssetAdminPage.vue"),
+    meta: { title: "素材管理", admin: true }
+  },
+  {
     path: "/admin/llm-configs",
     name: "LlmConfig",
     component: () => import("../pages/admin/LlmConfigPage.vue"),

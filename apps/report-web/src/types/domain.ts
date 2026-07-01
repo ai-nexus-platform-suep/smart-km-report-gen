@@ -2,6 +2,8 @@ export type ReportType = "SUMMER_PEAK_CHECK" | "COAL_INVENTORY_AUDIT";
 
 export type EntityId = string | number;
 
+export type AssetCategory = "STANDARD_DOC" | "REPORT_DATA" | "OTHER";
+
 export type ReportStatus =
   | "DRAFT"
   | "OUTLINE_READY"
@@ -117,9 +119,60 @@ export interface TemplateRecord {
   name: string;
   reportType: ReportType;
   version: string;
+  storageType?: string;
+  filePath?: string;
+  bucketName?: string;
+  objectName?: string;
+  originalFileName?: string;
+  contentType?: string;
+  fileSize?: number;
+  configJson?: string;
   enabled: boolean;
   createdBy: string;
   createdAt: string;
+  updatedAt?: string;
+}
+
+export interface AssetCategoryOption {
+  value: AssetCategory;
+  label: string;
+}
+
+export interface AssetRecord {
+  id: EntityId;
+  name: string;
+  category: AssetCategory;
+  categoryLabel?: string;
+  fileType: string;
+  storageType?: string;
+  filePath?: string;
+  bucketName?: string;
+  objectName?: string;
+  originalFileName: string;
+  contentType?: string;
+  fileSize: number;
+  sha256?: string;
+  description?: string;
+  tags?: string;
+  enabled: boolean;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface AssetQuery {
+  page: number;
+  size: number;
+  category?: AssetCategory | null;
+  enabled?: boolean | null;
+  keyword?: string;
+}
+
+export interface AssetImportResult {
+  scanned: number;
+  imported: number;
+  skipped: number;
+  errors: string[];
 }
 
 export interface LlmConfig {

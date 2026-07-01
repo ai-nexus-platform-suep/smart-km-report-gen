@@ -5,7 +5,7 @@
       title="报告生成工作台"
       description="按叶子章节流式生成正文，目录级标题只作为结构导航。生成后可直接在线编辑 Markdown，并预览表格排版。"
     >
-      <el-button @click="$router.push(`/reports/${reportId}/outline`)">返回大纲</el-button>
+      <el-button @click="backToOutline">返回大纲</el-button>
       <el-button type="primary" :loading="store.streaming" @click="startGenerate">启动正文生成</el-button>
       <el-button :disabled="!canExport" @click="$router.push(`/reports/${reportId}/export`)">导出 DOCX</el-button>
     </PageHeader>
@@ -147,7 +147,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
 import OutlineTree from '@/components/OutlineTree.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
@@ -157,6 +157,7 @@ import { contentOutlineNodes, isContentOutlineNode } from '@/utils/outline'
 import { renderMarkdownHtml } from '@/utils/markdown'
 
 const route = useRoute()
+const router = useRouter()
 const store = useReportStore()
 const reportId = String(route.params.id)
 const selectedOutlineId = ref<EntityId>()
@@ -299,6 +300,10 @@ async function startGenerate() {
   ElMessage.info('正文生成任务已启动')
 }
 
+function backToOutline() {
+  router.push(`/reports/${reportId}/outline`)
+}
+
 async function save() {
   if (!selectedSection.value) return
   await store.saveSection(reportId, selectedSection.value.id, draft.value)
@@ -317,7 +322,7 @@ async function confirmRegenerate() {
   await store.regenerateSection(reportId, sectionId)
   dirty.value = false
   draft.value = selectedSection.value?.contentMarkdown ?? ''
-  ElMessage.success('章节已重新生成')
+  ElMessage.success('章节重新生成任务已启动')
 }
 </script>
 

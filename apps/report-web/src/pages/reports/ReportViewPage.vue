@@ -6,7 +6,7 @@
       description="用于历史报告浏览和复核。正文已生成后优先进入该页面，避免把查看场景和生成工作台混在一起。"
     >
       <el-button @click="$router.push('/reports')">返回记录</el-button>
-      <el-button @click="$router.push(`/reports/${reportId}/workspace`)">编辑正文</el-button>
+      <el-button @click="editContent">编辑正文</el-button>
       <el-button type="primary" :disabled="!canExport" @click="$router.push(`/reports/${reportId}/export`)">导出 DOCX</el-button>
     </PageHeader>
 
@@ -94,7 +94,7 @@
             <span>更新时间</span>
             <strong>{{ new Date(report.updatedAt).toLocaleString() }}</strong>
           </div>
-          <el-button @click="$router.push(`/reports/${reportId}/workspace`)">进入编辑工作台</el-button>
+          <el-button @click="editContent">进入编辑工作台</el-button>
           <el-button type="primary" :disabled="!canExport" @click="$router.push(`/reports/${reportId}/export`)">
             导出检查
           </el-button>
@@ -106,7 +106,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
 import OutlineTree from '@/components/OutlineTree.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
@@ -117,6 +117,7 @@ import { reportTypeLabels } from '@/utils/labels'
 import { renderMarkdownHtml } from '@/utils/markdown'
 
 const route = useRoute()
+const router = useRouter()
 const store = useReportStore()
 const reportId = String(route.params.id)
 const selectedOutlineId = ref<EntityId>()
@@ -140,6 +141,10 @@ onMounted(async () => {
   const detail = await store.fetchDetail(reportId)
   selectedOutlineId.value = contentOutlineNodes(detail.outline)[0]?.id ?? detail.outline[0]?.id
 })
+
+function editContent() {
+  router.push(`/reports/${reportId}/workspace`)
+}
 
 function isDescendantOf(node: OutlineNode, ancestorId: EntityId) {
   let parentId = node.parentId

@@ -24,7 +24,7 @@
           <span class="status-dot pulse"></span>
           SYSTEM ONLINE
         </div>
-        <p>当前为 C 组报告生成模块，支持报告记录、新建报告、趋势监控、模板管理和模型配置。</p>
+        <p>当前为 C 组报告生成模块，支持报告记录、新建报告、趋势监控、模板管理、素材管理和模型配置。</p>
       </div>
     </aside>
 
@@ -60,7 +60,8 @@ const nav = [
   { path: '/reports/new', label: '新建报告', subLabel: 'CREATE', code: '02', role: 'USER' },
   { path: '/admin/dashboard', label: '趋势监控', subLabel: 'MONITOR', code: '03', role: 'ADMIN' },
   { path: '/admin/templates', label: '模板管理', subLabel: 'TEMPLATE', code: '04', role: 'ADMIN' },
-  { path: '/admin/llm-configs', label: '模型配置', subLabel: 'MODEL', code: '05', role: 'ADMIN' },
+  { path: '/admin/assets', label: '素材管理', subLabel: 'ASSETS', code: '05', role: 'ADMIN' },
+  { path: '/admin/llm-configs', label: '模型配置', subLabel: 'MODEL', code: '06', role: 'ADMIN' },
 ] as const
 
 const visibleNav = computed(() => nav.filter((item) => item.role === 'USER' || isAdmin.value))

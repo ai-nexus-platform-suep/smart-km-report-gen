@@ -72,11 +72,12 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
+import { listReportStatusOptions, listReportTypeOptions } from '@/api/reports'
 import { useReportStore } from '@/stores/reports'
 import type { Report, ReportStatus, ReportType } from '@/types/domain'
 import { reportStatusLabels, reportTypeLabels } from '@/utils/labels'
@@ -100,12 +101,24 @@ const filters = reactive<{
   year: null,
 })
 
-const typeOptions = Object.entries(reportTypeLabels).map(([value, label]) => ({ value, label }))
-const statusOptions = Object.entries(reportStatusLabels)
-  .filter(([value]) => value !== 'DELETED')
-  .map(([value, label]) => ({ value, label }))
+const typeOptions = ref(Object.entries(reportTypeLabels).map(([value, label]) => ({ value: value as ReportType, label })))
+const statusOptions = ref(
+  Object.entries(reportStatusLabels)
+    .filter(([value]) => value !== 'DELETED')
+    .map(([value, label]) => ({ value: value as ReportStatus, label })),
+)
 
-onMounted(() => store.fetchList())
+onMounted(async () => {
+  await Promise.all([loadFilterOptions(), store.fetchList()])
+})
+
+async function loadFilterOptions() {
+  const [types, statuses] = await Promise.all([listReportTypeOptions(), listReportStatusOptions()])
+  typeOptions.value = types.map((item) => ({ value: item.code, label: item.label || reportTypeLabels[item.code] }))
+  statusOptions.value = statuses
+    .filter((item) => item.code !== 'DELETED')
+    .map((item) => ({ value: item.code, label: item.label || reportStatusLabels[item.code] }))
+}
 
 function progress(report: Report) {
   if (!report.totalSections) return 0
@@ -118,7 +131,7 @@ function applyFilters() {
 
 function goNext(report: Report) {
   if (report.status === 'DRAFT' || report.status === 'OUTLINE_READY') router.push(`/reports/${report.id}/outline`)
-  else if (report.status === 'CONTENT_READY' || report.status === 'EXPORTED') router.push(`/reports/${report.id}/view`)
+  else if (report.status === 'EXPORTED') router.push(`/reports/${report.id}/view`)
   else router.push(`/reports/${report.id}/workspace`)
 }
 

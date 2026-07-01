@@ -3,7 +3,7 @@
     <PageHeader
       eyebrow="CREATE REPORT"
       title="新建报告"
-      description="先选择已启用模板，再填写报告主题、专业、电厂与年份。大纲将按所选模板结构生成。"
+      description="先选择已启用模板，再填写报告主题、专业、电厂与年份。大纲生成接口按后端契约提交报告类型和基础信息。"
     />
 
     <div class="split-grid create-layout">
@@ -92,13 +92,15 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
-import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
+import type { FormInstance, FormRules } from 'element-plus'
 import { useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
 import { listTemplates } from '@/api/admin'
 import { useReportStore } from '@/stores/reports'
 import type { CreateReportPayload, EntityId, ReportType, TemplateRecord } from '@/types/domain'
 import { reportTypeLabels } from '@/utils/labels'
+
+type CreateReportForm = CreateReportPayload & { templateId?: EntityId }
 
 const store = useReportStore()
 const router = useRouter()
@@ -108,7 +110,7 @@ const templateLoading = ref(false)
 const templates = ref<TemplateRecord[]>([])
 const sameId = (a?: EntityId, b?: EntityId) => String(a) === String(b)
 
-const form = reactive<CreateReportPayload>({
+const form = reactive<CreateReportForm>({
   templateId: undefined,
   name: '',
   type: 'SUMMER_PEAK_CHECK',
@@ -157,7 +159,6 @@ async function submit() {
   submitting.value = true
   try {
     const report = await store.create({ ...form })
-    ElMessage.success('已按模板生成大纲，请确认章节结构')
     router.push({ path: `/reports/${report.id}/outline`, query: { draft: '1' } })
   } finally {
     submitting.value = false

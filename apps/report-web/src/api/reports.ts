@@ -22,6 +22,11 @@ interface BackendPage<T> {
   size: number;
 }
 
+export interface CodeLabelOption<T extends string = string> {
+  code: T;
+  label: string;
+}
+
 interface BackendOutlineNode {
   id?: string;
   number: string;
@@ -47,6 +52,7 @@ interface ConfirmOutlineResponse {
 
 interface BackendReportRecord {
   reportId: string;
+  tempId?: string;
   name: string;
   type: Report["type"];
   subject: string;
@@ -77,6 +83,16 @@ interface BackendSection {
   updatedAt: string;
 }
 
+interface SectionTaskResponse {
+  taskId: string;
+  reportId: string;
+  sectionId: string | null;
+  status: string;
+  totalSections: number | null;
+  completedSections: number | null;
+  message: string;
+}
+
 interface ExportDocxResponse {
   fileId: string;
   reportId: string;
@@ -84,6 +100,14 @@ interface ExportDocxResponse {
   fileSize: number;
   sha256: string;
   downloadUrl?: string;
+}
+
+export interface ExportDocxOptions {
+  templateId?: EntityId;
+  useTemplate?: boolean;
+  figureNumberingMode?: "GLOBAL" | "SECTION";
+  tableNumberingMode?: "GLOBAL" | "SECTION";
+  includeEmptySections?: boolean;
 }
 
 const DRAFT_PREFIX = "report-web:outline-draft:";
@@ -163,6 +187,7 @@ function buildOutlineTree(nodes: OutlineNode[], parentId?: EntityId): BackendOut
 function mapReport(record: BackendReportRecord): Report {
   return {
     id: record.reportId,
+    tempId: record.tempId,
     name: record.name,
     type: record.type,
     subject: record.subject,
@@ -265,6 +290,31 @@ export async function listReports(query: ReportQuery): Promise<PageResult<Report
   };
 }
 
+export async function listReportStatusOptions() {
+  if (enableMock) {
+    return [
+      { code: "DRAFT", label: "草稿" },
+      { code: "OUTLINE_READY", label: "大纲就绪" },
+      { code: "CONTENT_GENERATING", label: "正文生成中" },
+      { code: "CONTENT_INCOMPLETE", label: "正文待补全" },
+      { code: "CONTENT_READY", label: "正文就绪" },
+      { code: "EXPORTED", label: "已导出" },
+      { code: "FAILED", label: "生成失败" }
+    ] satisfies CodeLabelOption<Report["status"]>[];
+  }
+  return apiRequest<Array<CodeLabelOption<Report["status"]>>>("/api/reports/history/status-options");
+}
+
+export async function listReportTypeOptions() {
+  if (enableMock) {
+    return [
+      { code: "SUMMER_PEAK_CHECK", label: "迎峰度夏检查报告" },
+      { code: "COAL_INVENTORY_AUDIT", label: "煤库存审计报告" }
+    ] satisfies CodeLabelOption<Report["type"]>[];
+  }
+  return apiRequest<Array<CodeLabelOption<Report["type"]>>>("/api/reports/history/report-type-options");
+}
+
 export async function createReport(payload: CreateReportPayload) {
   if (enableMock) return mockCreateReport(payload);
 
@@ -275,6 +325,18 @@ export async function createReport(payload: CreateReportPayload) {
   const draft = makeDraft(payload, result);
   writeDraft(draft);
   return draft;
+}
+
+export async function generateFixedOutline(reportType: Report["type"]) {
+  if (enableMock) {
+    const id = `fixed-${Date.now()}`;
+    return flattenOutline(mockDb.seedOutline(id, Date.now(), reportType), id);
+  }
+  const outline = await apiRequest<BackendOutlineNode[]>("/api/reports/outline", {
+    method: "POST",
+    body: JSON.stringify({ reportType })
+  });
+  return flattenOutline(outline, "fixed-outline");
 }
 
 export async function getReport(id: EntityId) {
@@ -295,8 +357,8 @@ export async function deleteReport(id: EntityId) {
 export async function generateOutline(id: EntityId) {
   if (enableMock) return mockGenerateOutline(id);
 
-  const draft = readDraft(id);
-  if (!draft) throw new Error("只能在新建报告临时态重新生成大纲");
+  const draft = readDraft(id) || await getReport(id);
+  if (draft.status !== "DRAFT") throw new Error("只有草稿状态可以重新生成大纲");
   const result = await apiRequest<GenerateOutlineResponse>("/api/reports/outline/generate", {
     method: "POST",
     body: JSON.stringify(reportPayload(draft))
@@ -309,15 +371,15 @@ export async function generateOutline(id: EntityId) {
 export async function saveOutline(id: EntityId, outline: OutlineNode[]) {
   if (enableMock) return mockSaveOutline(id, outline);
 
-  const draft = readDraft(id);
-  if (!draft) {
-    const detail = await getReport(id);
-    return {
-      ...detail,
-      outline: renumberOutline(outline),
-      totalSections: countContentOutlineNodes(outline),
-      updatedAt: new Date().toISOString()
-    };
+  let draft = readDraft(id) || await getReport(id);
+  if (draft.status !== "DRAFT") throw new Error("只有草稿状态的大纲可以确认保存");
+  if (!draft.tempId) {
+    const generated = await apiRequest<GenerateOutlineResponse>("/api/reports/outline/generate", {
+      method: "POST",
+      body: JSON.stringify(reportPayload(draft))
+    });
+    draft = makeDraft(draft, generated, id);
+    writeDraft(draft);
   }
   const result = await apiRequest<ConfirmOutlineResponse>("/api/reports/outline/confirm", {
     method: "POST",
@@ -352,10 +414,10 @@ export async function saveOutlineDraft(id: EntityId, outline: OutlineNode[]) {
   if (enableMock) return mockSaveOutlineDraft(id, outline);
 
   const draft = readDraft(id) || await getReport(id);
+  if (draft.status !== "DRAFT") throw new Error("只有草稿状态的大纲可以保存");
   const nextOutline = renumberOutline(outline);
   const nextDraft: ReportDetail = {
     ...draft,
-    tempId: draft.tempId || String(draft.id),
     status: "DRAFT",
     outline: nextOutline,
     totalSections: countContentOutlineNodes(nextOutline),
@@ -496,27 +558,44 @@ export async function saveSection(reportId: EntityId, sectionId: EntityId, conte
   return mapSection(section);
 }
 
+export async function listSections(reportId: EntityId) {
+  if (enableMock) {
+    const detail = await mockGetReport(reportId);
+    return detail.sections;
+  }
+  const sections = await apiRequest<BackendSection[]>(`/api/reports/${reportId}/sections`);
+  return sections.map(mapSection);
+}
+
+export async function getSection(reportId: EntityId, sectionId: EntityId) {
+  if (enableMock) {
+    const sections = await listSections(reportId);
+    const section = sections.find((item) => sameId(item.id, sectionId));
+    if (!section) throw new Error("章节不存在");
+    return section;
+  }
+  const section = await apiRequest<BackendSection>(`/api/reports/${reportId}/sections/${sectionId}`);
+  return mapSection(section);
+}
+
 export async function regenerateSection(reportId: EntityId, sectionId: EntityId, hint = "") {
   if (enableMock) return mockRegenerateSection(reportId, sectionId);
-  const regenerated = await apiRequest<BackendSection | undefined>(`/api/reports/${reportId}/sections/${sectionId}/regenerate`, {
+  return apiRequest<SectionTaskResponse>(`/api/reports/${reportId}/sections/${sectionId}/regenerate`, {
     method: "POST",
     body: JSON.stringify({ hint })
   });
-  if (regenerated?.sectionId) return mapSection(regenerated);
-  const detail = await getReport(reportId);
-  const section = detail.sections.find((item) => sameId(item.id, sectionId));
-  if (!section) throw new Error("章节已重新生成，但未能获取最新章节内容");
-  return section;
 }
 
-export async function exportDocx(reportId: EntityId) {
+export async function exportDocx(reportId: EntityId, options: ExportDocxOptions = {}) {
   if (enableMock) return mockExportDocx(reportId);
   const file = await apiRequest<ExportDocxResponse>(`/api/reports/${reportId}/export/docx`, {
     method: "POST",
     body: JSON.stringify({
-      figureNumberingMode: "GLOBAL",
-      tableNumberingMode: "SECTION",
-      includeEmptySections: true
+      templateId: options.templateId,
+      useTemplate: options.useTemplate ?? true,
+      figureNumberingMode: options.figureNumberingMode || "GLOBAL",
+      tableNumberingMode: options.tableNumberingMode || "SECTION",
+      includeEmptySections: options.includeEmptySections ?? true
     })
   });
   return mapFile(file);

@@ -6,7 +6,9 @@
       description="大纲按模板生成，支持章、节、子节等多级结构。表格属于章节内容，不作为独立章节节点。"
     >
       <el-button class="header-action" :loading="store.loading" @click="generate">重新生成大纲</el-button>
-      <el-button class="header-action" :disabled="outline.length === 0" @click="save">保存大纲</el-button>
+      <el-button class="header-action" :disabled="outline.length === 0" @click="save">
+        保存大纲
+      </el-button>
       <el-button class="header-action" type="primary" :disabled="outline.length === 0" @click="startContent">
         进入正文生成
       </el-button>
@@ -28,7 +30,7 @@
             <span class="eyebrow">OUTLINE PREVIEW</span>
             <h2>大纲预览</h2>
           </div>
-          <el-button class="outline-action" @click="addChapter">新增章</el-button>
+            <el-button class="outline-action" :disabled="!canEditOutline" @click="addChapter">新增章</el-button>
         </div>
 
         <div class="outline-tools">
@@ -45,7 +47,7 @@
             :selected-id="selectedId"
             :table-items="tableDisplayMap"
             collapsible
-            draggable
+            :draggable="canEditOutline"
             @select="selectedId = $event"
             @move="handleMove"
           />
@@ -59,9 +61,9 @@
             <h2>节点编辑</h2>
           </div>
           <div class="action-row outline-actions">
-            <el-button class="outline-action" :disabled="!selectedNode" @click="addChild">新增子节</el-button>
-            <el-button class="outline-action" :disabled="!canAttachTable" @click="addTableToNode">添加表格</el-button>
-            <el-button class="delete-node-button" :disabled="!selectedNode" @click="removeNode">删除</el-button>
+            <el-button class="outline-action" :disabled="!canEditOutline || !selectedNode" @click="addChild">新增子节</el-button>
+            <el-button class="outline-action" :disabled="!canEditOutline || !canAttachTable" @click="addTableToNode">添加表格</el-button>
+            <el-button class="delete-node-button" :disabled="!canEditOutline || !selectedNode" @click="removeNode">删除</el-button>
           </div>
         </div>
 
@@ -78,10 +80,10 @@
               <el-input :model-value="selectedNode.number" readonly />
             </el-form-item>
             <el-form-item label="章节标题">
-              <el-input v-model="selectedNode.title" @input="renumber" />
+              <el-input v-model="selectedNode.title" :disabled="!canEditOutline" @input="renumber" />
             </el-form-item>
             <el-form-item label="生成提示">
-              <el-input v-model="selectedNode.promptHint" type="textarea" :autosize="{ minRows: 6 }" />
+              <el-input v-model="selectedNode.promptHint" :disabled="!canEditOutline" type="textarea" :autosize="{ minRows: 6 }" />
             </el-form-item>
           </el-form>
 
@@ -114,8 +116,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import OutlineTree from '@/components/OutlineTree.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { useReportStore } from '@/stores/reports'
-import * as reportApi from '@/api/reports'
-import type { EntityId, OutlineNode, ReportDetail } from '@/types/domain'
+import type { EntityId, OutlineNode } from '@/types/domain'
 import { moveOutlineNodeToTarget, renumberOutline } from '@/utils/outline'
 
 const route = useRoute()
@@ -128,9 +129,9 @@ const numberingMode = ref<'global' | 'section'>('global')
 const sameId = (a?: EntityId, b?: EntityId) => String(a) === String(b)
 
 const report = computed(() => store.current)
-const isDraftFlow = computed(() => route.query.draft === '1')
-const needsOutlineConfirm = computed(() => isDraftFlow.value || Boolean(report.value?.tempId && report.value.status === 'DRAFT'))
-const displayStatus = computed(() => (needsOutlineConfirm.value ? 'DRAFT' : report.value?.status || 'DRAFT'))
+const needsOutlineConfirm = computed(() => report.value?.status === 'DRAFT')
+const canEditOutline = computed(() => needsOutlineConfirm.value)
+const displayStatus = computed(() => report.value?.status || 'DRAFT')
 const selectedNode = computed(() => outline.value.find((node) => sameId(node.id, selectedId.value)))
 const canAttachTable = computed(() => Boolean(selectedNode.value && selectedNode.value.level > 1))
 const tableDisplayMap = computed(() => buildTableDisplayMap())
@@ -146,13 +147,8 @@ const selectedTableRows = computed(() =>
 onMounted(async () => {
   const detail = await store.fetchDetail(reportId.value)
   setOutline(detail.outline)
-  if (!outline.value.length) {
+  if (!outline.value.length && needsOutlineConfirm.value) {
     await generate(true)
-  } else if (isDraftFlow.value && detail.status !== 'DRAFT') {
-    const saved = await saveDraftOutline()
-    if (saved?.outline) {
-      outline.value = normalizeOutline(saved.outline.map((node) => ({ ...node })))
-    }
   }
 })
 
@@ -162,6 +158,10 @@ function setOutline(nodes: OutlineNode[]) {
 }
 
 async function generate(auto = false) {
+  if (!needsOutlineConfirm.value) {
+    ElMessage.warning('只有草稿状态可以重新生成大纲')
+    return
+  }
   const detail = await store.generateOutline(reportId.value)
   setOutline(detail.outline)
   ElMessage.success(auto ? '大纲已按模板自动生成' : '大纲已按模板重新生成')
@@ -176,6 +176,7 @@ function nextId() {
 }
 
 function addChapter() {
+  if (!canEditOutline.value) return
   outline.value.push({
     id: nextId(),
     reportId: reportId.value,
@@ -190,6 +191,7 @@ function addChapter() {
 }
 
 function addChild() {
+  if (!canEditOutline.value) return
   if (!selectedNode.value) return
   const parent = selectedNode.value
   outline.value.push({
@@ -207,6 +209,7 @@ function addChild() {
 }
 
 function addTableToNode() {
+  if (!canEditOutline.value) return
   if (!selectedNode.value) return
   if (selectedNode.value.level <= 1) {
     ElMessage.warning('表格应添加到具体节或子节下，不能直接挂在章标题下')
@@ -217,11 +220,13 @@ function addTableToNode() {
 }
 
 function handleMove(payload: { dragId: EntityId; targetId: EntityId }) {
+  if (!canEditOutline.value) return
   outline.value = moveOutlineNodeToTarget(outline.value, payload.dragId, payload.targetId)
   selectedId.value = payload.dragId
 }
 
 async function removeNode() {
+  if (!canEditOutline.value) return
   if (!selectedNode.value) return
   const node = selectedNode.value
   const childCount = outline.value.filter((item) => sameId(item.parentId, node.id)).length
@@ -246,25 +251,19 @@ async function removeNode() {
 }
 
 async function save() {
+  if (!needsOutlineConfirm.value) {
+    ElMessage.warning('只有草稿状态的大纲可以保存')
+    return
+  }
   try {
-    const saved = await saveDraftOutline()
+    const saved = await store.saveOutlineDraft(reportId.value, outline.value)
     if (saved?.outline) {
       outline.value = normalizeOutline(saved.outline.map((node) => ({ ...node })))
     }
     ElMessage.success('大纲草稿已保存')
   } catch (error) {
-    ElMessage.error(error instanceof Error ? error.message : '大纲草稿保存失败')
+    ElMessage.error(error instanceof Error ? error.message : '大纲保存失败')
   }
-}
-
-async function saveDraftOutline() {
-  const action = (store as { saveOutlineDraft?: (id: EntityId, outline: OutlineNode[]) => Promise<ReportDetail | undefined> })
-    .saveOutlineDraft
-  const saved = action ? await action(reportId.value, outline.value) : await reportApi.saveOutlineDraft(reportId.value, outline.value)
-  if (!action && saved) {
-    ;(store as unknown as { current?: ReportDetail }).current = saved
-  }
-  return saved
 }
 
 async function startContent() {

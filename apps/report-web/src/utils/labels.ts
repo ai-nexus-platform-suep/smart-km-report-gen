@@ -1,4 +1,4 @@
-import type { ReportStatus, ReportType, SectionStatus } from "@/types/domain";
+import type { AssetCategory, ReportStatus, ReportType, SectionStatus } from "@/types/domain";
 
 export const reportTypeLabels: Record<ReportType, string> = {
   SUMMER_PEAK_CHECK: "迎峰度夏检查报告",
@@ -22,6 +22,12 @@ export const sectionStatusLabels: Record<SectionStatus, string> = {
   GENERATED: "AI 已生成",
   USER_EDITED: "用户已编辑",
   FAILED: "生成失败"
+};
+
+export const assetCategoryLabels: Record<AssetCategory, string> = {
+  STANDARD_DOC: "标准文档",
+  REPORT_DATA: "报告数据",
+  OTHER: "其他"
 };
 
 export function statusTone(status: ReportStatus | SectionStatus) {
