@@ -20,6 +20,12 @@ export const reportPlatformRoutes: RouteRecordRaw[] = [
     meta: { title: '新建报告' },
   },
   {
+    path: '/reports/dashboard',
+    name: 'ReportDashboard',
+    component: () => import('./pages/admin/AdminDashboardPage.vue'),
+    meta: { title: '趋势统计', admin: true },
+  },
+  {
     path: '/reports/:id/outline',
     name: 'ReportOutline',
     component: () => import('./pages/reports/OutlinePage.vue'),
@@ -65,6 +71,6 @@ export const reportPlatformRoutes: RouteRecordRaw[] = [
     path: '/admin/dashboard',
     name: 'ReportAdminDashboardCompat',
     component: () => import('./pages/admin/AdminDashboardPage.vue'),
-    meta: { title: '趋势监控', admin: true },
+    meta: { title: '趋势统计', admin: true },
   },
 ]

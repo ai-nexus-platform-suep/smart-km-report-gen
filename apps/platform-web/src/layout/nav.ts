@@ -52,6 +52,7 @@ export const platformNavItems: NavItem[] = [
     children: [
       { path: '/reports', title: '报告记录' },
       { path: '/reports/new', title: '新建报告' },
+      { path: '/reports/dashboard', title: '趋势统计', admin: true },
       { path: '/reports/templates', title: '模板管理', admin: true },
       { path: '/reports/materials', title: '素材映射', admin: true },
     ],
@@ -92,11 +93,12 @@ export const quickAccessCards = [
   },
   {
     title: '报告生成',
-    description: '已接入报告记录、新建、大纲、工作台、导出和模板管理页面。',
+    description: '已接入报告记录、新建、大纲、工作台、导出、趋势统计和模板管理页面。',
     icon: Files,
     links: [
       { label: '报告记录', to: '/reports' },
       { label: '新建报告', to: '/reports/new' },
+      { label: '趋势统计', to: '/reports/dashboard' },
     ],
   },
 ] as const
@@ -111,7 +113,7 @@ export const mergePhases = [
   {
     title: '第 2 次',
     subtitle: '页面骨架合并',
-    items: ['知识管理：知识库列表、文档列表、知识检索', '智能问答：问答页、会话列表、模型配置', '报告生成：新建报告、报告工作台、历史记录'],
+    items: ['知识管理：知识库列表、文档列表、知识检索', '智能问答：问答页、会话列表、模型配置', '报告生成：新建报告、报告工作台、趋势统计'],
     icon: DocumentAdd,
   },
   {
