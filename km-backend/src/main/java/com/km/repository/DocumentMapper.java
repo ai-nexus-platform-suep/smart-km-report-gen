@@ -33,6 +33,11 @@ public interface DocumentMapper {
                               @Param("offset") int offset,
                               @Param("limit") int limit);
 
+    /**
+     * 查询指定知识库下的所有文档（不分页，用于级联删除）。
+     */
+    List<Document> listAllByKbId(@Param("kbId") String kbId);
+
     long countByKbId(@Param("kbId") String kbId,
                      @Param("status") String status);
 

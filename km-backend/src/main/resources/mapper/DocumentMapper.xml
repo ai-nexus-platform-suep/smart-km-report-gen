@@ -81,6 +81,13 @@
         LIMIT #{limit} OFFSET #{offset}
     </select>
 
+    <select id="listAllByKbId" resultMap="BaseResultMap">
+        SELECT <include refid="BaseColumns"/>
+        FROM document
+        WHERE kb_id = #{kbId}
+        ORDER BY created_at DESC
+    </select>
+
     <select id="countByKbId" resultType="long">
         SELECT COUNT(*)
         FROM document

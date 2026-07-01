@@ -4,6 +4,9 @@ import com.km.common.dto.PageResult;
 import com.km.common.exception.BusinessException;
 import com.km.common.exception.ErrorCode;
 import com.km.common.util.JsonUtils;
+import com.km.entity.Document;
+import com.km.repository.DocumentMapper;
+import com.km.storage.FileStorageService;
 import com.km.dto.request.CreateKnowledgeBaseRequest;
 import com.km.dto.request.UpdateKnowledgeBaseRequest;
 import com.km.dto.response.KnowledgeBaseVO;
@@ -11,6 +14,7 @@ import com.km.entity.KnowledgeBase;
 import com.km.repository.KnowledgeBaseMapper;
 import com.km.service.KnowledgeBaseService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +26,7 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
@@ -29,6 +34,8 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
     private static final List<String> ALLOWED_SEARCH_STRATEGIES = Arrays.asList("vector", "vector_rerank");
 
     private final KnowledgeBaseMapper knowledgeBaseMapper;
+    private final DocumentMapper documentMapper;
+    private final FileStorageService fileStorageService;
 
     @Override
     public PageResult<KnowledgeBaseVO> list(String docType, String keyword, int page, int pageSize) {
@@ -101,6 +108,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         if (existing == null) {
             throw new BusinessException(ErrorCode.KM_KB_001);
         }
+        deleteAssociatedFiles(id);
         knowledgeBaseMapper.deleteById(id);
     }
 
@@ -113,6 +121,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
             if (existing == null) {
                 throw new BusinessException(ErrorCode.KM_KB_001);
             }
+            deleteAssociatedFiles(id);
         }
         knowledgeBaseMapper.batchDelete(uniqueIds);
     }
@@ -212,6 +221,20 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
         int intValue = ((Number) value).intValue();
         if (intValue < min || intValue > max) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, field + " must be between " + min + " and " + max);
+        }
+    }
+
+    private void deleteAssociatedFiles(String kbId) {
+        List<Document> docs = documentMapper.listAllByKbId(kbId);
+        for (Document doc : docs) {
+            if (doc.getFilePath() != null && !doc.getFilePath().isEmpty()) {
+                try {
+                    fileStorageService.delete(doc.getFilePath());
+                    log.info("Deleted file for doc {}: {}", doc.getId(), doc.getFilePath());
+                } catch (Exception e) {
+                    log.warn("Failed to delete file for doc {}: {}", doc.getId(), e.getMessage());
+                }
+            }
         }
     }
 }
