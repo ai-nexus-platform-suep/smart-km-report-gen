@@ -12,7 +12,10 @@
           </svg>
         </div>
         <transition name="fade">
-          <span v-show="!collapsed" class="logo-text">技术监督平台</span>
+          <span v-show="!collapsed" class="logo-text">
+            <strong>技术监督平台</strong>
+            <small>AI Nexus</small>
+          </span>
         </transition>
       </div>
 
@@ -32,7 +35,10 @@
                     stroke-width="1.8" stroke-linecap="round" fill="none"/>
             </svg>
           </button>
-          <span class="header-title">{{ pageTitle }}</span>
+          <span class="header-title-group">
+            <small>Unified Platform</small>
+            <strong class="header-title">{{ pageTitle }}</strong>
+          </span>
         </div>
         <HeaderBar />
       </el-header>
@@ -62,24 +68,44 @@ const pageTitle = computed(() => (route.meta.title as string) || '技术监督�
 .layout {
   height: 100vh;
   overflow: hidden;
+  background: var(--sidebar-bg);
 }
 
 /* ======= 深色侧边栏 ======= */
 .sidebar {
-  background: var(--sidebar-bg);
+  position: relative;
+  z-index: 3;
+  background:
+    radial-gradient(circle at 18% 8%, rgba(21, 94, 239, 0.3), transparent 34%),
+    linear-gradient(180deg, #101828 0%, #17191f 46%, #10131a 100%);
   transition: width var(--transition-slow);
   overflow: hidden;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 18px 0 48px rgba(15, 23, 42, 0.14);
+}
+
+.sidebar::after {
+  position: absolute;
+  inset: auto 18px 16px 18px;
+  height: 120px;
+  border-radius: 999px;
+  background: rgba(21, 94, 239, 0.13);
+  filter: blur(42px);
+  content: "";
+  pointer-events: none;
 }
 
 .sidebar-logo {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
-  gap: var(--gap-sm);
-  height: 56px;
-  padding: 0 var(--gap-md);
+  gap: 12px;
+  height: 72px;
+  padding: 0 18px;
   border-bottom: 1px solid var(--sidebar-logo-border);
   flex-shrink: 0;
   cursor: pointer;
@@ -93,24 +119,41 @@ const pageTitle = computed(() => (route.meta.title as string) || '技术监督�
 
 .logo-icon-wrap {
   flex-shrink: 0;
-  width: 32px;
-  height: 32px;
+  width: 38px;
+  height: 38px;
   display: flex;
   align-items: center;
   justify-content: center;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 24px rgba(21, 94, 239, 0.22);
 }
 
 .logo-svg {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
 }
 
 .logo-text {
+  display: grid;
+  gap: 2px;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.logo-text strong {
   font-size: var(--font-lg);
   font-weight: 700;
   color: #ffffff;
-  white-space: nowrap;
   letter-spacing: 0.3px;
+}
+
+.logo-text small {
+  color: rgba(255, 255, 255, 0.42);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
 .fade-enter-active,
@@ -125,54 +168,135 @@ const pageTitle = computed(() => (route.meta.title as string) || '技术监督�
 
 /* ======= 主内容区 ======= */
 .main-area {
+  position: relative;
   flex: 1;
   overflow: hidden;
+  background:
+    radial-gradient(circle at 18% -8%, rgba(21, 94, 239, 0.13), transparent 28%),
+    radial-gradient(circle at 90% 10%, rgba(0, 184, 217, 0.12), transparent 30%),
+    linear-gradient(180deg, #f8fbff 0%, var(--bg-page) 42%, #eef3f8 100%);
+}
+
+.main-area::before {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(15, 23, 42, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(15, 23, 42, 0.035) 1px, transparent 1px);
+  background-size: 28px 28px;
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.55), transparent 58%);
+  content: "";
+  pointer-events: none;
 }
 
 .header {
+  position: relative;
+  z-index: 2;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--bg-container);
-  border-bottom: 1px solid var(--border-color);
-  padding: 0 var(--gap-lg);
-  height: 56px;
+  background: rgba(255, 255, 255, 0.72);
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  padding: 0 26px;
+  height: 68px;
   flex-shrink: 0;
+  backdrop-filter: blur(18px);
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: var(--gap-md);
+  gap: 14px;
+  min-width: 0;
 }
 
 .collapse-btn {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--border-radius-sm);
+  width: 38px;
+  height: 38px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 12px;
   color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.72);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .collapse-btn:hover {
-  background: var(--bg-hover);
+  background: #ffffff;
   color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.header-title-group {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.header-title-group small {
+  color: var(--text-tertiary);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  text-transform: uppercase;
 }
 
 .header-title {
-  font-size: var(--font-lg);
-  font-weight: 600;
   color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 800;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .main-content {
-  background: var(--bg-page);
-  padding: var(--gap-lg);
+  position: relative;
+  z-index: 1;
+  background: transparent;
+  padding: 24px;
   overflow-y: auto;
   flex: 1;
+}
+
+.main-content :deep(.page) {
+  max-width: 1480px;
+  margin: 0 auto;
+}
+
+[data-theme='dark'] .main-area {
+  background:
+    radial-gradient(circle at 18% -8%, rgba(80, 132, 255, 0.16), transparent 30%),
+    radial-gradient(circle at 90% 10%, rgba(34, 211, 238, 0.1), transparent 30%),
+    linear-gradient(180deg, #111827 0%, var(--bg-page) 54%, #0b1020 100%);
+}
+
+[data-theme='dark'] .header {
+  background: rgba(17, 24, 39, 0.72);
+  border-bottom-color: rgba(148, 163, 184, 0.16);
+}
+
+[data-theme='dark'] .collapse-btn {
+  background: rgba(15, 23, 42, 0.72);
+}
+
+@media (max-width: 760px) {
+  .header {
+    height: 62px;
+    padding: 0 14px;
+  }
+
+  .header-title-group small {
+    display: none;
+  }
+
+  .main-content {
+    padding: 14px;
+  }
 }
 </style>

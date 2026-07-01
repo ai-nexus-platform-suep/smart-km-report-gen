@@ -1,0 +1,19 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["../report-web/src/*"],
+      "@report/*": ["../report-web/src/*"],
+      "@km/*": ["../km-web/src/*"],
+      "@qa/*": ["../qa-web/src/*"],
+      "@platform/core": ["../../packages/core/src"],
+      "@platform/core/*": ["../../packages/core/src/*"],
+      "@platform/ui": ["../../packages/ui/src"],
+      "@platform/ui/*": ["../../packages/ui/src/*"],
+      "@platform/mock": ["../../packages/mock/src"],
+      "@platform/mock/*": ["../../packages/mock/src/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "src/**/*.vue"]
+}

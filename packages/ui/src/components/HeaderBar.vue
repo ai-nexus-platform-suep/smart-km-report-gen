@@ -1,5 +1,10 @@
 <template>
   <div class="header-right">
+    <div class="integration-chip" title="统一入口当前聚合知识管理、智能问答、报告生成三个模块">
+      <span class="chip-dot"></span>
+      三模块已聚合
+    </div>
+
     <!-- 搜索按钮（预留） -->
     <button class="icon-btn" title="搜索">
       <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.6"
@@ -80,7 +85,30 @@ function handleLogout() {
 .header-right {
   display: flex;
   align-items: center;
-  gap: var(--gap-xs);
+  gap: 8px;
+}
+
+.integration-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid rgba(21, 94, 239, 0.14);
+  border-radius: 999px;
+  color: var(--accent-blue);
+  background: rgba(232, 240, 255, 0.78);
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+}
+
+.chip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 999px;
+  background: var(--state-success);
+  box-shadow: 0 0 0 5px rgba(22, 163, 74, 0.12);
 }
 
 /* 图标按钮 */
@@ -90,15 +118,18 @@ function handleLogout() {
   justify-content: center;
   width: 34px;
   height: 34px;
-  border-radius: var(--border-radius-sm);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  border-radius: 12px;
   color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.62);
   cursor: pointer;
   transition: all var(--transition-fast);
 }
 
 .icon-btn:hover {
-  background: var(--bg-hover);
+  background: #ffffff;
   color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
 }
 
 /* 用户触发区 */
@@ -106,15 +137,21 @@ function handleLogout() {
   display: flex;
   align-items: center;
   gap: var(--gap-sm);
-  padding: 4px 8px 4px 4px;
-  border-radius: var(--border-radius-sm);
+  min-height: 36px;
+  padding: 4px 10px 4px 5px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.62);
   cursor: pointer;
-  transition: background var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    box-shadow var(--transition-fast);
   margin-left: var(--gap-xs);
 }
 
 .user-trigger:hover {
-  background: var(--bg-hover);
+  background: #ffffff;
+  box-shadow: var(--shadow-sm);
 }
 
 .user-avatar {
@@ -133,6 +170,34 @@ function handleLogout() {
 .chevron {
   color: var(--text-tertiary);
   flex-shrink: 0;
+}
+
+[data-theme='dark'] .integration-chip {
+  border-color: rgba(110, 168, 255, 0.24);
+  color: var(--platform-accent);
+  background: rgba(37, 99, 235, 0.14);
+}
+
+[data-theme='dark'] .icon-btn,
+[data-theme='dark'] .user-trigger {
+  background: rgba(15, 23, 42, 0.68);
+}
+
+@media (max-width: 860px) {
+  .integration-chip {
+    display: none;
+  }
+}
+
+@media (max-width: 620px) {
+  .user-name,
+  .chevron {
+    display: none;
+  }
+
+  .user-trigger {
+    padding-right: 5px;
+  }
 }
 </style>
 

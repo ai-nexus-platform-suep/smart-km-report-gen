@@ -21,7 +21,16 @@ const user = computed(() => getStoredUser<UserInfo>())
 const isAdmin = computed(() => user.value?.role === 'ADMIN')
 
 const visibleItems = computed(() =>
-  props.items.filter((item) => !item.admin || isAdmin.value),
+  props.items
+    .map((item) => ({
+      ...item,
+      children: item.children?.filter((child) => !child.admin || isAdmin.value),
+    }))
+    .filter((item) => {
+      if (item.admin && !isAdmin.value) return false
+      if (item.children) return item.children.length > 0
+      return true
+    }),
 )
 
 const activeMenu = computed(() => {

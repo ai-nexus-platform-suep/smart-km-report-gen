@@ -3,10 +3,12 @@
   "private": true,
   "scripts": {
     "dev": "turbo dev",
+    "dev:platform": "pnpm --filter @app/platform-web dev",
     "dev:qa": "pnpm --filter @app/qa-web dev",
     "dev:km": "pnpm --filter @app/km-web dev",
     "dev:report": "pnpm --filter @app/report-web dev",
     "build": "turbo build",
+    "build:platform": "pnpm --filter @app/platform-web build",
     "build:qa": "pnpm --filter @app/qa-web build",
     "build:km": "pnpm --filter @app/km-web build",
     "build:report": "pnpm --filter @app/report-web build",
@@ -24,6 +26,7 @@
   },
   "msw": {
     "workerDirectory": [
+      "apps\\platform-web\\public",
       "apps\\qa-web\\public",
       "apps\\km-web\\public",
       "apps\\report-web\\public"
