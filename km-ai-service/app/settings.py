@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 import os
 from pathlib import Path
-import sys
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
@@ -28,6 +27,18 @@ def _int_env(name: str, default: int) -> int:
         return max(1, int(value))
     except ValueError:
         return default
+
+
+def _str_env(name: str, default: str) -> str:
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        return default
+    return value.strip()
+
+
+def _choice_env(name: str, default: str, choices: set[str]) -> str:
+    value = _str_env(name, default).lower()
+    return value if value in choices else default
 
 
 def _normalize_minio_endpoint(value: str) -> tuple[str, bool]:
@@ -61,18 +72,20 @@ class Settings:
     minio_bucket: str
     minio_secure: bool
     work_dir: Path
-    mineru_backend: str
-    mineru_command: str
+    mineru_method: str
+    mineru_lang: str
+    mineru_agent_api_base_url: str
     mineru_timeout_seconds: int
+    mineru_poll_interval_seconds: int
     mineru_enable_formula: bool
     mineru_enable_table: bool
-    mineru_enable_image_analysis: bool
     skip_mineru: bool
 
     @classmethod
     def from_env(cls) -> "Settings":
-        default_mineru = Path(sys.executable).with_name("mineru.exe" if os.name == "nt" else "mineru")
         endpoint, secure_from_endpoint = _normalize_minio_endpoint(os.getenv("MINIO_ENDPOINT", "localhost:9000"))
+        minio_secure = _bool_env("MINIO_SECURE", secure_from_endpoint)
+        mineru_timeout_seconds = _int_env("MINERU_TIMEOUT_SECONDS", 600)
         return cls(
             rabbitmq_host=os.getenv("RABBITMQ_HOST", "localhost"),
             rabbitmq_port=_int_env("RABBITMQ_PORT", 5672),
@@ -92,13 +105,14 @@ class Settings:
             minio_access_key=os.getenv("MINIO_ACCESS_KEY", "minioadmin"),
             minio_secret_key=os.getenv("MINIO_SECRET_KEY", "minioadmin"),
             minio_bucket=os.getenv("MINIO_BUCKET", "km-documents"),
-            minio_secure=_bool_env("MINIO_SECURE", secure_from_endpoint),
+            minio_secure=minio_secure,
             work_dir=Path(os.getenv("KM_AI_SERVICE_WORK_DIR", str(SERVICE_ROOT / ".work"))),
-            mineru_backend=os.getenv("MINERU_BACKEND", "pipeline"),
-            mineru_command=os.getenv("MINERU_COMMAND", str(default_mineru) if default_mineru.exists() else "mineru"),
-            mineru_timeout_seconds=_int_env("MINERU_TIMEOUT_SECONDS", 600),
+            mineru_method=_choice_env("MINERU_METHOD", "auto", {"auto", "txt", "ocr"}),
+            mineru_lang=_str_env("MINERU_LANG", "ch"),
+            mineru_agent_api_base_url=_str_env("MINERU_AGENT_API_BASE_URL", "https://mineru.net/api/v1/agent"),
+            mineru_timeout_seconds=mineru_timeout_seconds,
+            mineru_poll_interval_seconds=_int_env("MINERU_POLL_INTERVAL_SECONDS", 2),
             mineru_enable_formula=_bool_env("MINERU_ENABLE_FORMULA", False),
             mineru_enable_table=_bool_env("MINERU_ENABLE_TABLE", True),
-            mineru_enable_image_analysis=_bool_env("MINERU_ENABLE_IMAGE_ANALYSIS", False),
             skip_mineru=_bool_env("KM_AI_SKIP_MINERU", False),
         )

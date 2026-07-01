@@ -14,6 +14,7 @@ class ParsedArtifacts:
     markdown: Path | None
     middle_json: Path | None
     layout_json: Path | None
+    metadata_json: Path | None = None
 
 
 def collect_artifacts(output_dir: Path, normalized_dir: Path) -> ParsedArtifacts:

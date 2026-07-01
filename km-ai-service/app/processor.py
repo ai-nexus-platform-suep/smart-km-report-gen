@@ -1,13 +1,15 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
+from datetime import datetime, timezone
 from pathlib import Path
+import json
 import logging
 import re
 import shutil
 
-from .artifacts import collect_artifacts
-from .mineru_runner import run_mineru
+from .artifacts import ParsedArtifacts, collect_artifacts
+from .mineru_agent_client import MineruAgentClient, MineruAgentParseResult
 from .minio_store import MinioStore
 from .settings import Settings
 from .status_client import StatusClient
@@ -52,6 +54,7 @@ class DocumentProcessor:
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._store = MinioStore(settings)
+        self._mineru_agent = MineruAgentClient(settings)
         self._status_client = StatusClient(settings)
 
     def process(self, job: DocumentProcessJob) -> None:
@@ -72,12 +75,20 @@ class DocumentProcessor:
         normalized_dir = work_dir / "normalized"
 
         try:
-            self._store.download_file(job.raw_object, input_path)
             if self._settings.skip_mineru:
+                self._store.download_file(job.raw_object, input_path)
                 logger.info("MinerU skipped by configuration, docId=%s", job.document_id)
             else:
-                run_mineru(input_path, mineru_output_dir, self._settings)
+                self._store.download_file(job.raw_object, input_path)
+                parse_result = self._mineru_agent.parse_file(
+                    source_path=input_path,
+                    file_name=job.filename,
+                    output_dir=mineru_output_dir,
+                )
                 artifacts = collect_artifacts(mineru_output_dir, normalized_dir)
+                if artifacts.markdown is None:
+                    raise RuntimeError("MinerU Agent parse completed but normalized content.md was not created")
+                artifacts = replace(artifacts, metadata_json=self._write_metadata(job, normalized_dir, parse_result))
                 self._upload_artifacts(job, artifacts)
 
             self._status_client.update(
@@ -101,7 +112,7 @@ class DocumentProcessor:
             )
             raise
 
-    def _upload_artifacts(self, job: DocumentProcessJob, artifacts) -> None:
+    def _upload_artifacts(self, job: DocumentProcessJob, artifacts: ParsedArtifacts) -> None:
         artifact_prefix = _artifact_prefix(job)
         if artifacts.markdown is not None:
             self._store.upload_file(f"{artifact_prefix}/content.md", artifacts.markdown)
@@ -109,6 +120,38 @@ class DocumentProcessor:
             self._store.upload_file(f"{artifact_prefix}/middle.json", artifacts.middle_json)
         if artifacts.layout_json is not None:
             self._store.upload_file(f"{artifact_prefix}/layout.json", artifacts.layout_json)
+        if artifacts.metadata_json is not None:
+            self._store.upload_file(f"{artifact_prefix}/metadata.json", artifacts.metadata_json)
+
+    def _write_metadata(self, job: DocumentProcessJob, normalized_dir: Path, parse_result: MineruAgentParseResult) -> Path:
+        artifact_prefix = _artifact_prefix(job)
+        content_object = f"{artifact_prefix}/content.md"
+        metadata_object = f"{artifact_prefix}/metadata.json"
+        metadata_path = normalized_dir / "metadata.json"
+        metadata_path.parent.mkdir(parents=True, exist_ok=True)
+        metadata = {
+            "documentId": job.document_id,
+            "jobId": job.job_id,
+            "kbId": job.kb_id,
+            "kbName": job.kb_name,
+            "filename": job.filename,
+            "mimeType": job.mime_type,
+            "rawObject": job.raw_object,
+            "contentObject": content_object,
+            "metadataObject": metadata_object,
+            "parserBackend": "mineru-agent-file",
+            "chunkStrategy": job.chunk_strategy,
+            "artifactPrefix": artifact_prefix,
+            "mineruAgent": {
+                "taskId": parse_result.task_id,
+                "state": parse_result.state,
+                "apiBaseUrl": self._settings.mineru_agent_api_base_url,
+            },
+            "parseOptions": self._mineru_agent.parse_options,
+            "createdAt": datetime.now(timezone.utc).isoformat(),
+        }
+        metadata_path.write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        return metadata_path
 
 
 def _source_name(job: DocumentProcessJob) -> str:
