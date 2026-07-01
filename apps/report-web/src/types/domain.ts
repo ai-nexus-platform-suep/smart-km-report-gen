@@ -19,6 +19,7 @@ export type SectionStatus = "PENDING" | "GENERATING" | "GENERATED" | "USER_EDITE
 export interface Report {
   id: EntityId;
   tempId?: string;
+  templateId?: EntityId;
   outlineSource?: "AI" | "LOCAL_TEMPLATE";
   outlineExpireSeconds?: number;
   name: string;

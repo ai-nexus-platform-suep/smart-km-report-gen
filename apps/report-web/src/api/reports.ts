@@ -43,6 +43,19 @@ interface GenerateOutlineResponse {
   outline: BackendOutlineNode[];
 }
 
+interface TemplateOutlineNode {
+  id?: string;
+  number?: string;
+  title?: string;
+  level?: number;
+  promptHint?: string;
+  children?: TemplateOutlineNode[];
+}
+
+interface TemplateVisualOutlineConfig {
+  outline?: TemplateOutlineNode[];
+}
+
 interface ConfirmOutlineResponse {
   reportId: string;
   status: Report["status"];
@@ -50,11 +63,27 @@ interface ConfirmOutlineResponse {
   outline: BackendOutlineNode[];
 }
 
+interface OutlineDraftResponse {
+  reportId: string;
+  templateId?: EntityId;
+  status: Report["status"];
+  name: string;
+  reportType: Report["type"];
+  subject: string;
+  specialty: string;
+  powerPlant: string;
+  reportYear: number;
+  outlineCount: number;
+  outline: BackendOutlineNode[];
+}
+
 interface BackendReportRecord {
   reportId: string;
   tempId?: string;
+  templateId?: EntityId;
   name: string;
-  type: Report["type"];
+  type?: Report["type"];
+  reportType?: Report["type"];
   subject: string;
   specialty: string;
   powerPlant: string;
@@ -110,7 +139,6 @@ export interface ExportDocxOptions {
   includeEmptySections?: boolean;
 }
 
-const DRAFT_PREFIX = "report-web:outline-draft:";
 const sameId = (a?: EntityId, b?: EntityId) => String(a) === String(b);
 const wait = (ms = 300) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
@@ -120,59 +148,6 @@ function parseSseJson<T>(data: string): T | undefined {
   } catch {
     return undefined;
   }
-}
-
-function draftKey(id: EntityId) {
-  return `${DRAFT_PREFIX}${id}`;
-}
-
-function readDraft(id: EntityId): ReportDetail | undefined {
-  const raw = sessionStorage.getItem(draftKey(id));
-  if (!raw) return undefined;
-  const draft = JSON.parse(raw) as ReportDetail;
-  return { ...draft, status: "DRAFT" };
-}
-
-function readLocalDrafts() {
-  const drafts: ReportDetail[] = [];
-  for (let index = 0; index < sessionStorage.length; index += 1) {
-    const key = sessionStorage.key(index);
-    if (!key?.startsWith(DRAFT_PREFIX)) continue;
-    try {
-      const raw = sessionStorage.getItem(key);
-      if (!raw) continue;
-      drafts.push({ ...(JSON.parse(raw) as ReportDetail), status: "DRAFT" });
-    } catch {
-      // Ignore broken local drafts; the backend history remains authoritative.
-    }
-  }
-  return drafts;
-}
-
-function filterLocalDrafts(query: ReportQuery) {
-  const keyword = (query.subject || query.keyword || "").trim().toLowerCase();
-  return readLocalDrafts()
-    .filter((draft) => {
-      if (query.status && query.status !== "DRAFT") return false;
-      if (query.type && draft.type !== query.type) return false;
-      if (query.specialty && !draft.specialty.toLowerCase().includes(query.specialty.toLowerCase())) return false;
-      if (query.powerPlant && !draft.powerPlant.toLowerCase().includes(query.powerPlant.toLowerCase())) return false;
-      if ((query.reportYear || query.year) && draft.reportYear !== (query.reportYear || query.year)) return false;
-      if (keyword) {
-        const haystack = [draft.name, draft.subject, draft.specialty, draft.powerPlant].join(" ").toLowerCase();
-        if (!haystack.includes(keyword)) return false;
-      }
-      return true;
-    })
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-}
-
-function writeDraft(report: ReportDetail) {
-  sessionStorage.setItem(draftKey(report.id), JSON.stringify(report));
-}
-
-function removeDraft(id: EntityId) {
-  sessionStorage.removeItem(draftKey(id));
 }
 
 function reportPayload(payload: CreateReportPayload) {
@@ -185,6 +160,54 @@ function reportPayload(payload: CreateReportPayload) {
     powerPlant: payload.powerPlant,
     reportYear: payload.reportYear
   };
+}
+
+function outlinePersistPayload(
+  report: Pick<Report, "name" | "type" | "subject" | "specialty" | "powerPlant" | "reportYear" | "tempId">,
+  outline: BackendOutlineNode[],
+  tempId = report.tempId
+) {
+  return {
+    tempId,
+    name: report.name,
+    reportType: report.type,
+    subject: report.subject,
+    specialty: report.specialty,
+    powerPlant: report.powerPlant,
+    reportYear: report.reportYear,
+    outline
+  };
+}
+
+function reportTypeOf(record: Pick<BackendReportRecord, "type" | "reportType">) {
+  return record.type || record.reportType || "SUMMER_PEAK_CHECK";
+}
+
+function normalizeTemplateOutline(nodes: TemplateOutlineNode[] = [], parentNumber = "", parentLevel = 0): BackendOutlineNode[] {
+  return nodes
+    .map((node, index) => {
+      const title = (node.title || "").trim();
+      if (!title) return undefined;
+      const number = node.number || (parentNumber ? `${parentNumber}.${index + 1}` : String(index + 1));
+      const level = node.level || parentLevel + 1 || 1;
+      return {
+        number,
+        title,
+        level,
+        promptHint: node.promptHint || "",
+        children: normalizeTemplateOutline(node.children || [], number, level)
+      };
+    })
+    .filter(Boolean) as BackendOutlineNode[];
+}
+
+async function loadTemplateOutline(templateId: EntityId) {
+  const config = await apiRequest<TemplateVisualOutlineConfig>(`/api/admin/templates/${templateId}/visual-config`);
+  const outlineTree = normalizeTemplateOutline(config.outline || []);
+  if (!outlineTree.length) {
+    throw new Error("当前模板未配置大纲结构，请先在模板管理中配置模板大纲");
+  }
+  return outlineTree;
 }
 
 function flattenOutline(nodes: BackendOutlineNode[] = [], reportId: EntityId, parentId?: EntityId): OutlineNode[] {
@@ -222,8 +245,9 @@ function mapReport(record: BackendReportRecord): Report {
   return {
     id: record.reportId,
     tempId: record.tempId,
+    templateId: record.templateId,
     name: record.name,
-    type: record.type,
+    type: reportTypeOf(record),
     subject: record.subject,
     specialty: record.specialty,
     powerPlant: record.powerPlant,
@@ -263,6 +287,33 @@ function mapDetail(record: BackendReportRecord): ReportDetail {
   };
 }
 
+function mapOutlineDraft(record: OutlineDraftResponse, base?: Partial<ReportDetail>): ReportDetail {
+  const outline = flattenOutline(record.outline || [], record.reportId);
+  const now = new Date().toISOString();
+  return {
+    id: record.reportId,
+    tempId: base?.tempId,
+    templateId: record.templateId ?? base?.templateId,
+    outlineSource: base?.outlineSource,
+    outlineExpireSeconds: base?.outlineExpireSeconds,
+    name: record.name || base?.name || "",
+    type: record.reportType || base?.type || "SUMMER_PEAK_CHECK",
+    subject: record.subject || base?.subject || "",
+    specialty: record.specialty || base?.specialty || "",
+    powerPlant: record.powerPlant || base?.powerPlant || "",
+    reportYear: record.reportYear || base?.reportYear || new Date().getFullYear(),
+    status: record.status,
+    ownerId: base?.ownerId || 0,
+    totalSections: countContentOutlineNodes(outline),
+    completedSections: base?.completedSections || 0,
+    createdAt: base?.createdAt || now,
+    updatedAt: now,
+    outline,
+    sections: base?.sections || [],
+    files: base?.files || []
+  };
+}
+
 function mapFile(file: ExportDocxResponse): ReportFile {
   return {
     id: file.fileId,
@@ -281,8 +332,34 @@ function makeDraft(payload: CreateReportPayload, result: GenerateOutlineResponse
   return {
     id,
     tempId: result.tempId,
+    templateId: payload.templateId,
     outlineSource: result.source,
     outlineExpireSeconds: result.expireSeconds,
+    name: payload.name,
+    type: payload.type,
+    subject: payload.subject,
+    specialty: payload.specialty,
+    powerPlant: payload.powerPlant,
+    reportYear: payload.reportYear,
+    status: "DRAFT",
+    ownerId: 0,
+    totalSections: countContentOutlineNodes(outline),
+    completedSections: 0,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+    outline,
+    sections: [],
+    files: []
+  };
+}
+
+function makeDraftFromOutline(payload: CreateReportPayload, outlineTree: BackendOutlineNode[]): ReportDetail {
+  const id = `template-${Date.now()}`;
+  const outline = flattenOutline(outlineTree, id);
+  return {
+    id,
+    templateId: payload.templateId,
+    outlineSource: "LOCAL_TEMPLATE",
     name: payload.name,
     type: payload.type,
     subject: payload.subject,
@@ -316,12 +393,9 @@ export async function listReports(query: ReportQuery): Promise<PageResult<Report
   if (query.reportYear || query.year) params.set("reportYear", String(query.reportYear || query.year));
 
   const page = await apiRequest<BackendPage<BackendReportRecord>>(`/api/reports/history?${params.toString()}`);
-  const localDrafts = query.page === 1 ? filterLocalDrafts(query) : [];
-  const backendItems = page.records.map(mapReport);
-  const localItems = localDrafts.filter((draft) => !backendItems.some((item) => sameId(item.id, draft.id)));
   return {
-    items: [...localItems, ...backendItems].slice(0, query.pageSize),
-    total: page.total + localItems.length,
+    items: page.records.map(mapReport),
+    total: page.total,
     page: page.page,
     pageSize: page.size
   };
@@ -355,13 +429,39 @@ export async function listReportTypeOptions() {
 export async function createReport(payload: CreateReportPayload) {
   if (enableMock) return mockCreateReport(payload);
 
+  if (payload.templateId) {
+    const outlineTree = await loadTemplateOutline(payload.templateId);
+    const templateDraft = makeDraftFromOutline(payload, outlineTree);
+    const savedDraft = await apiRequest<OutlineDraftResponse>("/api/reports/outline/draft", {
+      method: "POST",
+      body: JSON.stringify(outlinePersistPayload(templateDraft, outlineTree))
+    });
+    return mapOutlineDraft(savedDraft, templateDraft);
+  }
+
+  if (draft.templateId) {
+    const outlineTree = await loadTemplateOutline(draft.templateId);
+    const savedDraft = await apiRequest<OutlineDraftResponse>(`/api/reports/${id}/outline/draft`, {
+      method: "PUT",
+      body: JSON.stringify(outlinePersistPayload(draft, outlineTree))
+    });
+    return mapOutlineDraft(savedDraft, {
+      ...draft,
+      outlineSource: "LOCAL_TEMPLATE",
+      outlineExpireSeconds: undefined
+    });
+  }
+
   const result = await apiRequest<GenerateOutlineResponse>("/api/reports/outline/generate", {
     method: "POST",
     body: JSON.stringify(reportPayload(payload))
   });
-  const draft = makeDraft(payload, result);
-  writeDraft(draft);
-  return draft;
+  const transientDraft = makeDraft(payload, result);
+  const savedDraft = await apiRequest<OutlineDraftResponse>("/api/reports/outline/draft", {
+    method: "POST",
+    body: JSON.stringify(outlinePersistPayload(transientDraft, result.outline || [], result.tempId))
+  });
+  return mapOutlineDraft(savedDraft, transientDraft);
 }
 
 export async function generateFixedOutline(reportType: Report["type"]) {
@@ -379,13 +479,21 @@ export async function generateFixedOutline(reportType: Report["type"]) {
 export async function getReport(id: EntityId) {
   if (enableMock) return mockGetReport(id);
 
-  const draft = readDraft(id);
-  if (draft) return draft;
-
   const detail = await apiRequest<BackendReportRecord>(`/api/reports/history/${id}`);
   const report = mapDetail(detail);
-  if (report.status === "DRAFT") writeDraft(report);
+  if (report.status === "DRAFT" || !report.outline.length) {
+    try {
+      return await getSavedOutlineReport(id, report);
+    } catch (error) {
+      if (report.status === "DRAFT") throw error;
+    }
+  }
   return report;
+}
+
+async function getSavedOutlineReport(id: EntityId, base?: Partial<ReportDetail>) {
+  const saved = await apiRequest<OutlineDraftResponse>(`/api/reports/${id}/outline`);
+  return mapOutlineDraft(saved, base);
 }
 
 export async function deleteReport(id: EntityId) {
@@ -396,33 +504,33 @@ export async function deleteReport(id: EntityId) {
 export async function generateOutline(id: EntityId) {
   if (enableMock) return mockGenerateOutline(id);
 
-  const draft = readDraft(id) || await getReport(id);
+  const draft = await getReport(id);
   if (draft.status !== "DRAFT") throw new Error("只有草稿状态可以重新生成大纲");
   const result = await apiRequest<GenerateOutlineResponse>("/api/reports/outline/generate", {
     method: "POST",
     body: JSON.stringify(reportPayload(draft))
   });
-  const nextDraft = makeDraft(draft, result, id);
-  writeDraft(nextDraft);
-  return nextDraft;
+  const savedDraft = await apiRequest<OutlineDraftResponse>(`/api/reports/${id}/outline/draft`, {
+    method: "PUT",
+    body: JSON.stringify(outlinePersistPayload(draft, result.outline || [], result.tempId))
+  });
+  return mapOutlineDraft(savedDraft, {
+    ...draft,
+    tempId: result.tempId,
+    outlineSource: result.source,
+    outlineExpireSeconds: result.expireSeconds
+  });
 }
 
 export async function saveOutline(id: EntityId, outline: OutlineNode[]) {
   if (enableMock) return mockSaveOutline(id, outline);
 
-  let draft = readDraft(id) || await getReport(id);
+  const draft = await getReport(id);
   if (draft.status !== "DRAFT") throw new Error("只有草稿状态的大纲可以确认保存");
-  if (!draft.tempId) {
-    const generated = await apiRequest<GenerateOutlineResponse>("/api/reports/outline/generate", {
-      method: "POST",
-      body: JSON.stringify(reportPayload(draft))
-    });
-    draft = makeDraft(draft, generated, id);
-    writeDraft(draft);
-  }
   const result = await apiRequest<ConfirmOutlineResponse>("/api/reports/outline/confirm", {
     method: "POST",
     body: JSON.stringify({
+      reportId: draft.id,
       tempId: draft.tempId,
       name: draft.name,
       reportType: draft.type,
@@ -434,7 +542,6 @@ export async function saveOutline(id: EntityId, outline: OutlineNode[]) {
     })
   });
 
-  removeDraft(id);
   const confirmedOutline = flattenOutline(result.outline || buildOutlineTree(outline), result.reportId);
   return {
     ...draft,
@@ -452,19 +559,14 @@ export async function saveOutline(id: EntityId, outline: OutlineNode[]) {
 export async function saveOutlineDraft(id: EntityId, outline: OutlineNode[]) {
   if (enableMock) return mockSaveOutlineDraft(id, outline);
 
-  const draft = readDraft(id);
-  if (!draft) throw new Error("本地大纲草稿不存在，请重新生成大纲后再保存");
+  const draft = await getReport(id);
   if (draft.status !== "DRAFT") throw new Error("只有草稿状态的大纲可以保存");
   const nextOutline = renumberOutline(outline);
-  const nextDraft: ReportDetail = {
-    ...draft,
-    status: "DRAFT",
-    outline: nextOutline,
-    totalSections: countContentOutlineNodes(nextOutline),
-    updatedAt: new Date().toISOString()
-  };
-  writeDraft(nextDraft);
-  return nextDraft;
+  const savedDraft = await apiRequest<OutlineDraftResponse>(`/api/reports/${id}/outline/draft`, {
+    method: "PUT",
+    body: JSON.stringify(outlinePersistPayload(draft, buildOutlineTree(nextOutline), draft.tempId))
+  });
+  return mapOutlineDraft(savedDraft, { ...draft, outline: nextOutline });
 }
 
 export async function startGenerate(id: EntityId) {

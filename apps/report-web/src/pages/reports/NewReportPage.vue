@@ -18,6 +18,18 @@
 
         <div class="template-grid" v-loading="templateLoading">
           <button
+            class="template-card interactive-lift no-template-card"
+            :class="{ active: !form.templateId }"
+            type="button"
+            @click="clearTemplate"
+          >
+            <span class="mono">AI</span>
+            <strong>不使用模板</strong>
+            <p>按报告类型调用 AI 生成大纲</p>
+            <small>OPTIONAL</small>
+          </button>
+
+          <button
             v-for="template in enabledTemplates"
             :key="template.id"
             class="template-card interactive-lift"
@@ -45,7 +57,7 @@
 
         <el-form ref="formRef" :model="form" :rules="rules" label-position="top" class="report-form">
           <el-form-item label="报告模板" prop="templateId">
-            <el-select v-model="form.templateId" placeholder="请选择已启用模板" filterable @change="syncTypeByTemplate">
+            <el-select v-model="form.templateId" placeholder="可不选择模板" filterable clearable @clear="clearTemplate" @change="syncTypeByTemplate">
               <el-option
                 v-for="template in enabledTemplates"
                 :key="template.id"
@@ -56,7 +68,9 @@
           </el-form-item>
 
           <el-form-item label="报告类型" prop="type">
-            <el-input :model-value="reportTypeLabels[form.type]" readonly />
+            <el-select v-model="form.type" :disabled="Boolean(form.templateId)">
+              <el-option v-for="item in typeOptions" :key="item.value" :label="item.label" :value="item.value" />
+            </el-select>
           </el-form-item>
 
           <el-form-item label="报告名称" prop="name">
@@ -81,8 +95,8 @@
             </el-form-item>
           </div>
 
-          <el-button type="primary" :disabled="enabledTemplates.length === 0" :loading="submitting" @click="submit">
-            按模板生成大纲
+          <el-button type="primary" :loading="submitting" @click="submit">
+            {{ form.templateId ? '按模板生成大纲' : 'AI 生成大纲' }}
           </el-button>
         </el-form>
       </section>
@@ -121,10 +135,11 @@ const form = reactive<CreateReportForm>({
 })
 
 const enabledTemplates = computed(() => templates.value.filter((template) => template.enabled))
+const typeOptions = Object.entries(reportTypeLabels).map(([value, label]) => ({ value: value as ReportType, label }))
 const specialtyOptions = ['电气', '锅炉', '燃料', '审计', '安全']
 
 const rules: FormRules = {
-  templateId: [{ required: true, message: '请选择已启用模板', trigger: 'change' }],
+  type: [{ required: true, message: '请选择报告类型', trigger: 'change' }],
   name: [{ required: true, message: '请输入报告名称', trigger: 'blur' }],
   subject: [{ required: true, message: '请输入报告主题', trigger: 'blur' }],
   specialty: [{ required: true, message: '请选择专业', trigger: 'blur' }],
@@ -138,10 +153,13 @@ async function loadTemplates() {
   templateLoading.value = true
   try {
     templates.value = await listTemplates({ enabled: true })
-    if (!form.templateId && enabledTemplates.value[0]) selectTemplate(enabledTemplates.value[0])
   } finally {
     templateLoading.value = false
   }
+}
+
+function clearTemplate() {
+  form.templateId = undefined
 }
 
 function selectTemplate(template: TemplateRecord) {
@@ -150,6 +168,7 @@ function selectTemplate(template: TemplateRecord) {
 }
 
 function syncTypeByTemplate() {
+  if (!form.templateId) return
   const template = enabledTemplates.value.find((item) => sameId(item.id, form.templateId))
   if (template) form.type = template.reportType as ReportType
 }
