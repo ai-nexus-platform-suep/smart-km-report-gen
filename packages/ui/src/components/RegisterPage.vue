@@ -155,15 +155,26 @@ const validateConfirmPassword = (_rule: any, value: string, callback: any) => {
 }
 
 const rules = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+  username: [
+    { required: true, message: '请输入用户名', trigger: 'blur' },
+    { min: 3, max: 50, message: '用户名长度需在 3-50 个字符之间', trigger: 'blur' },
+  ],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, message: '密码至少6位', trigger: 'blur' },
+    { min: 6, max: 100, message: '密码长度需在 6-100 个字符之间', trigger: 'blur' },
   ],
   confirmPassword: [
     { required: true, message: '请再次输入密码', trigger: 'blur' },
     { validator: validateConfirmPassword, trigger: 'blur' },
   ],
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  if (typeof error === 'object' && error && 'response' in error) {
+    const response = (error as { response?: { data?: { message?: string } } }).response
+    return response?.data?.message || fallback
+  }
+  return fallback
 }
 
 async function handleRegister() {
@@ -182,8 +193,8 @@ async function handleRegister() {
     } else {
       ElMessage.error(res.data.message || '注册失败')
     }
-  } catch {
-    ElMessage.error('网络错误')
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, '注册失败，请稍后重试'))
   } finally {
     loading.value = false
   }

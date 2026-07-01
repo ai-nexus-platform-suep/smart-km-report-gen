@@ -63,7 +63,7 @@ async function loadPageData() {
   loading.value = true
   try {
     const [conversationResult, statsResult] = await Promise.all([
-      listConversations({ page: 1, size: 50, user_id: 1 }),
+      listConversations({ page: 1, size: 50 }),
       getQaStats(),
     ])
     rows.value = conversationResult.items

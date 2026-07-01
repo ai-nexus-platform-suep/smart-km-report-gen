@@ -122,9 +122,16 @@ import { useRouter } from 'vue-router'
 import type { FormInstance } from 'element-plus'
 import { ElMessage } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
-import { apiPost, buildUserFromAuthResponse, setAuthTokens, setStoredUser } from '@platform/core'
+import {
+  apiGet,
+  apiPost,
+  buildUserFromAuthResponse,
+  buildUserFromCurrentUser,
+  setAuthTokens,
+  setStoredUser,
+} from '@platform/core'
 import { API_QA } from '@platform/core'
-import type { LoginRequest, LoginResponse, ApiResponse } from '@platform/core/types'
+import type { CurrentUserResponse, LoginRequest, LoginResponse, ApiResponse } from '@platform/core/types'
 
 const router = useRouter()
 const formRef = ref<FormInstance>()
@@ -137,6 +144,14 @@ const rules = {
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
 }
 
+function getErrorMessage(error: unknown, fallback: string) {
+  if (typeof error === 'object' && error && 'response' in error) {
+    const response = (error as { response?: { data?: { message?: string } } }).response
+    return response?.data?.message || fallback
+  }
+  return fallback
+}
+
 async function handleLogin() {
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
@@ -145,15 +160,23 @@ async function handleLogin() {
   try {
     const res = await apiPost<ApiResponse<LoginResponse>>(API_QA.AUTH.LOGIN, form)
     if (res.data.code === 200 && res.data.data) {
-      setAuthTokens(res.data.data)
-      setStoredUser(buildUserFromAuthResponse(res.data.data))
+      const auth = res.data.data
+      setAuthTokens(auth)
+
+      try {
+        const profile = await apiGet<ApiResponse<CurrentUserResponse>>(API_QA.AUTH.ME)
+        setStoredUser(buildUserFromCurrentUser(profile.data.data))
+      } catch {
+        setStoredUser(buildUserFromAuthResponse(auth))
+      }
+
       ElMessage.success('登录成功')
       router.push('/')
     } else {
       ElMessage.error(res.data.message || '登录失败')
     }
-  } catch {
-    ElMessage.error('网络错误，请稍后重试')
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, '登录失败，请检查用户名或密码'))
   } finally {
     loading.value = false
   }

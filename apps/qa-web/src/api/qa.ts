@@ -32,7 +32,6 @@ import {
 type ListConversationParams = {
   page?: number
   size?: number
-  user_id?: number
 }
 
 type QaStatsOverview = {
@@ -291,17 +290,12 @@ export async function listConversations(params: ListConversationParams = {}) {
   const res = await apiGet<ApiResponse<ConversationListResult>>(API_QA.CHAT.LIST, {
     page: params.page ?? 1,
     size: params.size ?? 20,
-    user_id: params.user_id,
   })
   return normalizeConversationList(unwrapApiData(res.data))
 }
 
-export async function createConversation(title = '新对话', userId = 1) {
-  const res = await apiPost<ApiResponse<ConversationSchema>>(
-    API_QA.CHAT.CREATE,
-    { title },
-    { params: { user_id: userId } },
-  )
+export async function createConversation(title = '新对话') {
+  const res = await apiPost<ApiResponse<ConversationSchema>>(API_QA.CHAT.CREATE, { title })
   return toConversation(unwrapApiData(res.data))
 }
 

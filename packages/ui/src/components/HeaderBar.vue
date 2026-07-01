@@ -58,7 +58,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { clearToken, getStoredUser } from '@platform/core'
+import { API_QA, apiPost, clearToken, getStoredUser } from '@platform/core'
 import type { UserInfo } from '@platform/core/types'
 import { UserFilled } from '@element-plus/icons-vue'
 
@@ -79,7 +79,12 @@ function toggleTheme() {
   document.documentElement.setAttribute('data-theme', isDark.value ? 'dark' : '')
 }
 
-function handleLogout() {
+async function handleLogout() {
+  try {
+    await apiPost(API_QA.AUTH.LOGOUT)
+  } catch {
+    // 本地退出优先，后端 refresh token 失效由服务端过期策略兜底。
+  }
   clearToken()
   router.push('/login')
 }
