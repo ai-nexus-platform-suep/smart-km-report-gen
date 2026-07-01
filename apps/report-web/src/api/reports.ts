@@ -13,7 +13,7 @@ import type {
   ReportSection
 } from "@/types/domain";
 import { createReportDocxBlob, normalizeDocxFileName } from "@/utils/docx";
-import { renumberOutline } from "@/utils/outline";
+import { countContentOutlineNodes, isContentOutlineNode, renumberOutline } from "@/utils/outline";
 
 interface BackendPage<T> {
   records: T[];
@@ -118,6 +118,7 @@ function removeDraft(id: EntityId) {
 
 function reportPayload(payload: CreateReportPayload) {
   return {
+    templateId: payload.templateId,
     reportType: payload.type,
     subject: payload.subject,
     name: payload.name,
@@ -216,6 +217,7 @@ function mapFile(file: ExportDocxResponse): ReportFile {
 
 function makeDraft(payload: CreateReportPayload, result: GenerateOutlineResponse, idOverride?: EntityId): ReportDetail {
   const id = idOverride || result.tempId || `temp-${Date.now()}`;
+  const outline = flattenOutline(result.outline, id);
   return {
     id,
     tempId: result.tempId,
@@ -229,11 +231,11 @@ function makeDraft(payload: CreateReportPayload, result: GenerateOutlineResponse
     reportYear: payload.reportYear,
     status: "OUTLINE_READY",
     ownerId: 0,
-    totalSections: flattenOutline(result.outline, id).length,
+    totalSections: countContentOutlineNodes(outline),
     completedSections: 0,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    outline: flattenOutline(result.outline, id),
+    outline,
     sections: [],
     files: []
   };
@@ -323,12 +325,13 @@ export async function saveOutline(id: EntityId, outline: OutlineNode[]) {
   });
 
   removeDraft(id);
+  const confirmedOutline = flattenOutline(result.outline || buildOutlineTree(outline), result.reportId);
   return {
     ...draft,
     id: result.reportId,
     status: result.status,
-    outline: flattenOutline(result.outline || buildOutlineTree(outline), result.reportId),
-    totalSections: result.outlineCount,
+    outline: confirmedOutline,
+    totalSections: countContentOutlineNodes(confirmedOutline),
     updatedAt: new Date().toISOString()
   };
 }
@@ -500,6 +503,7 @@ export function applyStreamEvent(detail: ReportDetail, event: GenerateStreamEven
     let section = detail.sections.find((item) => sameId(item.id, event.sectionId));
     if (!section) {
       const outline = detail.outline.find((node) => node.number === event.number || node.title === event.title);
+      if (outline && !isContentOutlineNode(detail.outline, outline)) return;
       const now = new Date().toISOString();
       section = {
         id: event.sectionId,

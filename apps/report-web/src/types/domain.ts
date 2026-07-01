@@ -36,6 +36,7 @@ export interface Report {
 }
 
 export interface CreateReportPayload {
+  templateId?: EntityId;
   name: string;
   type: ReportType;
   subject: string;

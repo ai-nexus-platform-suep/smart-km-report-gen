@@ -9,6 +9,7 @@ import type {
   ReportType,
   TemplateRecord
 } from "@/types/domain";
+import { isContentOutlineNode } from "@/utils/outline";
 
 interface MockDb {
   reports: ReportDetail[];
@@ -86,7 +87,7 @@ function seedOutline(reportId: EntityId, baseId: number, type: ReportType): Outl
 }
 
 function outlineToSections(outline: OutlineNode[]): ReportSection[] {
-  return outline.map((node) => ({
+  return outline.filter((node) => isContentOutlineNode(outline, node)).map((node) => ({
     id: `${node.id}-section`,
     reportId: node.reportId,
     outlineNodeId: node.id,

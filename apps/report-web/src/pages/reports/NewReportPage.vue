@@ -3,30 +3,35 @@
     <PageHeader
       eyebrow="CREATE REPORT"
       title="新建报告"
-      description="选择固定报告类型并填写主题、专业、电厂、年份等核心输入，创建后进入大纲生成和编辑。"
+      description="先选择已启用模板，再填写报告主题、专业、电厂与年份。大纲将按所选模板结构生成。"
     />
 
-    <div class="split-grid">
+    <div class="split-grid create-layout">
       <section class="surface">
         <div class="surface-title">
           <div>
-            <span class="eyebrow">TYPE SELECT</span>
-            <h2>报告类型</h2>
+            <span class="eyebrow">TEMPLATE SELECT</span>
+            <h2>已启用模板</h2>
           </div>
+          <el-tag type="success" effect="plain">{{ enabledTemplates.length }} 个可用</el-tag>
         </div>
-        <div class="type-grid">
+
+        <div class="template-grid" v-loading="templateLoading">
           <button
-            v-for="item in typeCards"
-            :key="item.value"
-            class="type-card interactive-lift"
-            :class="{ active: form.type === item.value }"
+            v-for="template in enabledTemplates"
+            :key="template.id"
+            class="template-card interactive-lift"
+            :class="{ active: sameId(form.templateId, template.id) }"
             type="button"
-            @click="form.type = item.value"
+            @click="selectTemplate(template)"
           >
-            <span class="mono">{{ item.code }}</span>
-            <strong>{{ item.title }}</strong>
-            <p>{{ item.desc }}</p>
+            <span class="mono">{{ template.version }}</span>
+            <strong>{{ template.name }}</strong>
+            <p>{{ reportTypeLabels[template.reportType] }}</p>
+            <small>{{ template.enabled ? 'ENABLED' : 'DISABLED' }}</small>
           </button>
+
+          <el-empty v-if="!templateLoading && enabledTemplates.length === 0" description="暂无已启用模板，请先在模板管理中启用模板" />
         </div>
       </section>
 
@@ -37,13 +42,31 @@
             <h2>报告信息</h2>
           </div>
         </div>
+
         <el-form ref="formRef" :model="form" :rules="rules" label-position="top" class="report-form">
+          <el-form-item label="报告模板" prop="templateId">
+            <el-select v-model="form.templateId" placeholder="请选择已启用模板" filterable @change="syncTypeByTemplate">
+              <el-option
+                v-for="template in enabledTemplates"
+                :key="template.id"
+                :label="template.name"
+                :value="template.id"
+              />
+            </el-select>
+          </el-form-item>
+
+          <el-form-item label="报告类型" prop="type">
+            <el-input :model-value="reportTypeLabels[form.type]" readonly />
+          </el-form-item>
+
           <el-form-item label="报告名称" prop="name">
             <el-input v-model="form.name" placeholder="如：2026 年迎峰度夏检查报告" />
           </el-form-item>
+
           <el-form-item label="报告主题" prop="subject">
             <el-input v-model="form.subject" type="textarea" placeholder="描述本次报告生成的业务主题" />
           </el-form-item>
+
           <div class="field-grid">
             <el-form-item label="专业" prop="specialty">
               <el-select v-model="form.specialty" filterable allow-create default-first-option>
@@ -57,7 +80,10 @@
               <el-input-number v-model="form.reportYear" :controls="false" />
             </el-form-item>
           </div>
-          <el-button type="primary" :loading="submitting" @click="submit">创建并进入大纲</el-button>
+
+          <el-button type="primary" :disabled="enabledTemplates.length === 0" :loading="submitting" @click="submit">
+            按模板生成大纲
+          </el-button>
         </el-form>
       </section>
     </div>
@@ -65,19 +91,25 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, type FormInstance, type FormRules } from 'element-plus'
 import { useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
+import { listTemplates } from '@/api/admin'
 import { useReportStore } from '@/stores/reports'
-import type { CreateReportPayload, ReportType } from '@/types/domain'
+import type { CreateReportPayload, EntityId, ReportType, TemplateRecord } from '@/types/domain'
+import { reportTypeLabels } from '@/utils/labels'
 
 const store = useReportStore()
 const router = useRouter()
 const formRef = ref<FormInstance>()
 const submitting = ref(false)
+const templateLoading = ref(false)
+const templates = ref<TemplateRecord[]>([])
+const sameId = (a?: EntityId, b?: EntityId) => String(a) === String(b)
 
 const form = reactive<CreateReportPayload>({
+  templateId: undefined,
   name: '',
   type: 'SUMMER_PEAK_CHECK',
   subject: '',
@@ -86,24 +118,11 @@ const form = reactive<CreateReportPayload>({
   reportYear: new Date().getFullYear(),
 })
 
-const typeCards: Array<{ value: ReportType; code: string; title: string; desc: string }> = [
-  {
-    value: 'SUMMER_PEAK_CHECK',
-    code: 'TYPE 01',
-    title: '迎峰度夏检查报告',
-    desc: '面向高温负荷、设备运行、隐患整改和保障措施。',
-  },
-  {
-    value: 'COAL_INVENTORY_AUDIT',
-    code: 'TYPE 02',
-    title: '煤库存审计报告',
-    desc: '面向库存盘点、账实核对、采购消耗和审计建议。',
-  },
-]
-
+const enabledTemplates = computed(() => templates.value.filter((template) => template.enabled))
 const specialtyOptions = ['电气', '锅炉', '燃料', '审计', '安全']
 
 const rules: FormRules = {
+  templateId: [{ required: true, message: '请选择已启用模板', trigger: 'change' }],
   name: [{ required: true, message: '请输入报告名称', trigger: 'blur' }],
   subject: [{ required: true, message: '请输入报告主题', trigger: 'blur' }],
   specialty: [{ required: true, message: '请选择专业', trigger: 'blur' }],
@@ -111,12 +130,34 @@ const rules: FormRules = {
   reportYear: [{ required: true, type: 'number', message: '请输入年份', trigger: 'blur' }],
 }
 
+onMounted(loadTemplates)
+
+async function loadTemplates() {
+  templateLoading.value = true
+  try {
+    templates.value = await listTemplates({ enabled: true })
+    if (!form.templateId && enabledTemplates.value[0]) selectTemplate(enabledTemplates.value[0])
+  } finally {
+    templateLoading.value = false
+  }
+}
+
+function selectTemplate(template: TemplateRecord) {
+  form.templateId = template.id
+  form.type = template.reportType as ReportType
+}
+
+function syncTypeByTemplate() {
+  const template = enabledTemplates.value.find((item) => sameId(item.id, form.templateId))
+  if (template) form.type = template.reportType as ReportType
+}
+
 async function submit() {
   await formRef.value?.validate()
   submitting.value = true
   try {
-    const report = await store.create(form)
-    ElMessage.success('大纲已生成，请确认章节结构')
+    const report = await store.create({ ...form })
+    ElMessage.success('已按模板生成大纲，请确认章节结构')
     router.push(`/reports/${report.id}/outline`)
   } finally {
     submitting.value = false
@@ -125,19 +166,34 @@ async function submit() {
 </script>
 
 <style scoped>
-.type-grid {
-  display: grid;
-  gap: 16px;
-  padding: 22px;
+.create-layout {
+  grid-template-columns: minmax(420px, 0.85fr) minmax(520px, 1.15fr);
+  height: calc(100vh - 150px);
+  min-height: 0;
 }
 
-.type-card {
+.create-layout > .surface {
+  min-height: 0;
+}
+
+.template-grid {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  height: calc(100vh - 235px);
+  min-height: 0;
+  padding: 16px 18px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.template-card {
   position: relative;
   overflow: hidden;
   display: grid;
-  gap: 10px;
-  min-height: 158px;
-  padding: 22px;
+  gap: 8px;
+  min-height: 112px;
+  padding: 16px 18px;
   border: 1px solid rgba(132, 151, 176, 0.3);
   border-radius: 18px;
   text-align: left;
@@ -148,7 +204,7 @@ async function submit() {
   cursor: pointer;
 }
 
-.type-card::before {
+.template-card::before {
   position: absolute;
   top: 0;
   left: 20px;
@@ -159,41 +215,40 @@ async function submit() {
   content: "";
 }
 
-.type-card::after {
-  position: absolute;
-  right: -34px;
-  bottom: -34px;
-  width: 120px;
-  height: 120px;
-  border: 22px solid rgba(30, 107, 255, 0.055);
-  border-radius: 50%;
-  content: "";
-  pointer-events: none;
-}
-
-.type-card.active {
-  border-color: rgba(30, 107, 255, 0.48);
+.template-card.active {
+  border-color: rgba(30, 107, 255, 0.5);
   background:
-    radial-gradient(circle at 100% 0, rgba(0, 184, 217, 0.18), transparent 36%),
+    radial-gradient(circle at 100% 0, rgba(0, 184, 217, 0.2), transparent 36%),
     linear-gradient(135deg, #eef6ff, #ffffff);
   box-shadow: 0 18px 42px rgba(30, 107, 255, 0.14);
 }
 
-.type-card strong {
+.template-card strong {
   position: relative;
-  font-size: 19px;
+  font-size: 18px;
 }
 
-.type-card p {
+.template-card p,
+.template-card small {
   position: relative;
   margin: 0;
   color: var(--text-secondary);
-  line-height: 1.7;
+  line-height: 1.6;
+}
+
+.template-card small {
+  color: var(--state-success);
+  font-family: var(--font-display);
+  font-size: 15px;
+  font-weight: 800;
 }
 
 .report-form {
   display: grid;
   gap: 4px;
-  padding: 22px;
+  max-height: calc(100vh - 235px);
+  padding: 18px 22px;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
 }
 </style>
