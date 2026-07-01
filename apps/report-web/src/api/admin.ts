@@ -136,6 +136,10 @@ export interface TemplateStyleConfig {
   footer?: string;
 }
 
+interface TemplateConfigPayload {
+  configJson: string;
+}
+
 interface LlmConfigDto {
   apiUrl: string;
   apiKey?: string;
@@ -145,6 +149,23 @@ interface LlmConfigDto {
 
 const distributionColors = ["#1e6bff", "#00b8d9", "#16a34a", "#f59e0b", "#dc2626", "#8b5cf6"];
 const defaultTemplateConfig: TemplateStyleConfig = { titleSize: 18, bodySize: 12, lineHeight: 1.5, header: "示范电厂" };
+
+function parseTemplateConfig(rawConfig: unknown): TemplateStyleConfig {
+  if (!rawConfig) return { ...defaultTemplateConfig };
+
+  if (typeof rawConfig === "object") {
+    return { ...defaultTemplateConfig, ...(rawConfig as Partial<TemplateStyleConfig>) };
+  }
+
+  if (typeof rawConfig !== "string") return { ...defaultTemplateConfig };
+
+  try {
+    const parsed = JSON.parse(rawConfig) as Partial<TemplateStyleConfig>;
+    return { ...defaultTemplateConfig, ...parsed };
+  } catch {
+    return { ...defaultTemplateConfig };
+  }
+}
 
 export async function fetchDashboardData(days = 30): Promise<DashboardData> {
   if (enableMock) return buildMockDashboard(days, "mock");
@@ -243,7 +264,12 @@ function mapTemplate(template: TemplateDto): TemplateRecord {
 export async function listTemplates(params: { page?: number; size?: number; reportType?: ReportType | null; enabled?: boolean | null; keyword?: string } = {}) {
   if (enableMock) {
     await wait();
-    return mockDb.data.templates;
+    return mockDb.data.templates.filter((template) => {
+      if (params.reportType && template.reportType !== params.reportType) return false;
+      if (typeof params.enabled === "boolean" && template.enabled !== params.enabled) return false;
+      if (params.keyword && !template.name.toLowerCase().includes(params.keyword.toLowerCase())) return false;
+      return true;
+    });
   }
 
   const query = new URLSearchParams({
@@ -368,8 +394,8 @@ export async function getTemplateConfig(id: EntityId): Promise<TemplateStyleConf
     await wait();
     return { ...defaultTemplateConfig };
   }
-  const config = await apiRequest<Partial<TemplateStyleConfig>>(`/api/admin/templates/${id}/config`);
-  return { ...defaultTemplateConfig, ...config };
+  const configJson = await apiRequest<string>(`/api/admin/templates/${id}/config`);
+  return parseTemplateConfig(configJson);
 }
 
 export async function updateTemplateConfig(id: EntityId, config: TemplateStyleConfig) {
@@ -377,10 +403,13 @@ export async function updateTemplateConfig(id: EntityId, config: TemplateStyleCo
     await wait();
     return config;
   }
-  return apiRequest<TemplateStyleConfig>(`/api/admin/templates/${id}/config`, {
+  await apiRequest<unknown>(`/api/admin/templates/${id}/config`, {
     method: "PUT",
-    body: JSON.stringify(config)
+    body: JSON.stringify({
+      configJson: JSON.stringify(config)
+    } satisfies TemplateConfigPayload)
   });
+  return config;
 }
 
 export async function getLlmConfig(): Promise<LlmConfig> {
