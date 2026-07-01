@@ -5,6 +5,7 @@ import org.springframework.core.io.Resource;
 public record TemplateFileResource(
         String fileName,
         Resource resource,
-        long contentLength
+        long contentLength,
+        String contentType
 ) {
 }

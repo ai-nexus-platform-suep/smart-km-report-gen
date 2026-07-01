@@ -105,7 +105,13 @@ CREATE TABLE IF NOT EXISTS report_templates (
   name VARCHAR(200) NOT NULL COMMENT '模板名称',
   report_type VARCHAR(50) NOT NULL COMMENT '报告类型',
   version VARCHAR(50) NOT NULL DEFAULT '1.0.0' COMMENT '模板版本',
-  file_path VARCHAR(1000) NULL COMMENT 'DOCX 模板路径',
+  storage_type VARCHAR(20) NOT NULL DEFAULT 'MINIO' COMMENT '存储类型：LOCAL/MINIO',
+  file_path VARCHAR(1000) NULL COMMENT '兼容旧版本的本地模板路径',
+  bucket_name VARCHAR(100) NULL COMMENT 'MinIO bucket 名称',
+  object_name VARCHAR(500) NULL COMMENT 'MinIO objectName',
+  original_file_name VARCHAR(255) NULL COMMENT '原始文件名',
+  content_type VARCHAR(100) NULL COMMENT '文件 Content-Type',
+  file_size BIGINT NULL COMMENT '文件大小，单位 byte',
   config_json JSON NULL COMMENT '样式和结构配置',
   enabled TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否启用',
   created_by VARCHAR(100) NOT NULL DEFAULT 'local_user' COMMENT '上传人',
@@ -114,7 +120,8 @@ CREATE TABLE IF NOT EXISTS report_templates (
   PRIMARY KEY (id),
   KEY idx_templates_report_type (report_type),
   KEY idx_templates_enabled (enabled),
-  KEY idx_templates_type_enabled (report_type, enabled)
+  KEY idx_templates_type_enabled (report_type, enabled),
+  KEY idx_templates_storage_object (bucket_name, object_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='报告模板表';
 
 CREATE TABLE IF NOT EXISTS project_assets (

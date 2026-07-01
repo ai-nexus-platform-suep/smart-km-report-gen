@@ -137,13 +137,15 @@ public class ReportTemplateController {
     @GetMapping("/{templateId}/download")
     public ResponseEntity<Resource> download(@PathVariable String templateId) {
         TemplateFileResource file = templateService.loadFile(templateId);
-        return ResponseEntity.ok()
-                .contentType(MediaType.APPLICATION_OCTET_STREAM)
-                .contentLength(file.contentLength())
+        ResponseEntity.BodyBuilder response = ResponseEntity.ok()
+                .contentType(MediaType.parseMediaType(file.contentType()))
                 .header(HttpHeaders.CONTENT_DISPOSITION, ContentDisposition.attachment()
                         .filename(file.fileName(), StandardCharsets.UTF_8)
                         .build()
-                        .toString())
-                .body(file.resource());
+                        .toString());
+        if (file.contentLength() >= 0) {
+            response.contentLength(file.contentLength());
+        }
+        return response.body(file.resource());
     }
 }
