@@ -23,19 +23,6 @@
 !**/storage/reports/.gitkeep
 !**/storage/templates/.gitkeep
 
-# Keep downloaded source PDFs unless you explicitly remove them.
-
-# ========== 敏感配置文件（含 JWT 密钥、数据库密码等） ==========
-# 本地开发配置，每个开发者独立维护，不提交 Git
-**/application.properties
-**/application-dev.properties
-**/application-prod.properties
-**/application-local.properties
-# 配置模板文件可以提交（不含真实密钥）
-!**/application.properties.example
-!**/application-dev.properties.example
-!**/application-prod.properties.example
-
 # ========== Node.js ==========
 node_modules/
 npm-debug.log*

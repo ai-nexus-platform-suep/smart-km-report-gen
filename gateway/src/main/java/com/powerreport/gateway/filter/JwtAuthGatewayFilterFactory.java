@@ -4,6 +4,8 @@ import com.powerreport.gateway.config.RouteProperties;
 import com.powerreport.gateway.util.JwtTokenProvider;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.gateway.filter.GatewayFilterChain;
@@ -20,14 +22,6 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
-import java.nio.charset.StandardCharsets;
-
-/**
- * 全局 JWT 鉴权过滤器
- *
- * 对所有请求进行 JWT Token 校验，白名单路径除外。
- * 校验通过后，将用户信息注入请求头，传递给下游微服务。
- */
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -48,36 +42,41 @@ public class JwtAuthGatewayFilterFactory implements GlobalFilter, Ordered {
         ServerHttpRequest request = exchange.getRequest();
         String path = request.getURI().getPath();
 
-        // 白名单路径直接放行
         if (isPublicPath(path)) {
             log.debug("Public path accessed: {}", path);
             return chain.filter(exchange);
         }
 
-        // 获取 Authorization 请求头
         String authHeader = request.getHeaders().getFirst(AUTHORIZATION_HEADER);
         if (!StringUtils.hasText(authHeader) || !authHeader.startsWith(BEARER_PREFIX)) {
             log.warn("Missing or invalid Authorization header for path: {}", path);
-            return unauthorizedResponse(exchange, "缺少认证信息，请先登录");
+            return errorResponse(exchange, HttpStatus.UNAUTHORIZED, "Missing Authorization header");
         }
 
         String token = authHeader.substring(BEARER_PREFIX.length()).trim();
         if (!StringUtils.hasText(token)) {
-            return unauthorizedResponse(exchange, "Token 不能为空");
+            return errorResponse(exchange, HttpStatus.UNAUTHORIZED, "Token is empty");
         }
 
-        // 校验 Token
         try {
             if (!jwtTokenProvider.validateToken(token)) {
-                return unauthorizedResponse(exchange, "Token 无效或已过期");
+                return errorResponse(exchange, HttpStatus.UNAUTHORIZED, "Token is invalid or expired");
             }
 
             String username = jwtTokenProvider.getUsername(token);
-            String roles = String.join(",", jwtTokenProvider.getRoles(token));
+            List<String> roleList = jwtTokenProvider.getRoles(token);
+            if (roleList == null) {
+                roleList = List.of();
+            }
 
+            if (isAdminPath(path) && !hasAdminRole(roleList)) {
+                log.warn("Forbidden admin path access: username={}, path={}, roles={}", username, path, roleList);
+                return errorResponse(exchange, HttpStatus.FORBIDDEN, "Admin role is required");
+            }
+
+            String roles = String.join(",", roleList);
             log.debug("JWT auth success: username={}, path={}", username, path);
 
-            // 将用户信息注入请求头，传递给下游服务
             ServerHttpRequest mutatedRequest = request.mutate()
                     .header(X_USERNAME_HEADER, username)
                     .header(X_ROLES_HEADER, roles)
@@ -87,34 +86,45 @@ public class JwtAuthGatewayFilterFactory implements GlobalFilter, Ordered {
 
         } catch (ExpiredJwtException e) {
             log.warn("Token expired for path: {}", path);
-            return unauthorizedResponse(exchange, "Token 已过期，请重新登录");
+            return errorResponse(exchange, HttpStatus.UNAUTHORIZED, "Token expired");
         } catch (JwtException e) {
             log.warn("Invalid token for path: {}, error: {}", path, e.getMessage());
-            return unauthorizedResponse(exchange, "Token 无效");
+            return errorResponse(exchange, HttpStatus.UNAUTHORIZED, "Token invalid");
         } catch (Exception e) {
             log.error("JWT authentication error for path: {}", path, e);
-            return unauthorizedResponse(exchange, "认证服务异常");
+            return errorResponse(exchange, HttpStatus.UNAUTHORIZED, "Authentication service error");
         }
     }
 
-    /**
-     * 判断是否为白名单路径
-     */
     private boolean isPublicPath(String path) {
         return routeProperties.getPublicPaths().stream()
                 .anyMatch(pattern -> pathMatcher.match(pattern, path));
     }
 
-    /**
-     * 返回 401 未授权响应
-     */
-    private Mono<Void> unauthorizedResponse(ServerWebExchange exchange, String message) {
+    private boolean isAdminPath(String path) {
+        List<String> adminPaths = routeProperties.getAdminPaths();
+        if (adminPaths == null || adminPaths.isEmpty()) {
+            return pathMatcher.match("/api/admin/**", path);
+        }
+        return adminPaths.stream().anyMatch(pattern -> pathMatcher.match(pattern, path));
+    }
+
+    private boolean hasAdminRole(List<String> roles) {
+        List<String> configuredRoles = routeProperties.getAdminRoles();
+        List<String> allowedRoles = configuredRoles == null || configuredRoles.isEmpty()
+                ? List.of("ROLE_ADMIN", "ROLE_SUPER_ADMIN")
+                : configuredRoles;
+        return roles.stream().anyMatch(allowedRoles::contains);
+    }
+
+    private Mono<Void> errorResponse(ServerWebExchange exchange, HttpStatus status, String message) {
         ServerHttpResponse response = exchange.getResponse();
-        response.setStatusCode(HttpStatus.UNAUTHORIZED);
+        response.setStatusCode(status);
         response.getHeaders().setContentType(MediaType.APPLICATION_JSON);
 
         String body = String.format(
-                "{\"code\":401,\"message\":\"%s\",\"data\":null}",
+                "{\"code\":%d,\"message\":\"%s\",\"data\":null}",
+                status.value(),
                 message
         );
         DataBuffer buffer = response.bufferFactory()
