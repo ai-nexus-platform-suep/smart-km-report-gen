@@ -262,7 +262,7 @@ const moduleRoutes: RouteRecordRaw[] = [
   {
     path: '/admin/overview',
     name: 'AdminOverview',
-    component: () => import('../../../report-web/src/pages/admin/AdminDashboardPage.vue'),
+    component: () => import('../pages/admin/SystemOverviewPage.vue'),
     meta: { title: '总览统计', admin: true },
   },
   {
@@ -274,7 +274,7 @@ const moduleRoutes: RouteRecordRaw[] = [
   {
     path: '/admin/users',
     name: 'AdminUsers',
-    component: () => import('../pages/PlaceholderPage.vue'),
+    component: () => import('../pages/admin/UserManagementPage.vue'),
     meta: {
       title: '用户管理',
       description: '统一用户、角色和账号状态维护会在系统管理模块接入。',
@@ -284,7 +284,7 @@ const moduleRoutes: RouteRecordRaw[] = [
   {
     path: '/admin/roles',
     name: 'AdminRoles',
-    component: () => import('../pages/PlaceholderPage.vue'),
+    component: () => import('../pages/admin/RolePermissionPage.vue'),
     meta: {
       title: '角色权限',
       description: '角色组合、菜单权限和能力开关会统一收口到这个页面。',
