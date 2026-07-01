@@ -15,7 +15,7 @@
 | `reranker/` | 检索结果重排 |
 | `milvus/` | 向量存储与检索 |
 | `app/worker.py` | 消费 RabbitMQ 文档处理任务 |
-| `app/processor.py` | 下载原始文件、运行 MinerU、上传文本/JSON解析产物、回写 Java 状态 |
+| `app/processor.py` | 下载 MinIO 原始文件、调用托管 MinerU Agent 文件上传解析、上传 Markdown/元数据产物、回写 Java 状态 |
 
 ## 本地启动
 
@@ -43,10 +43,34 @@ VS Code / IDE 也要按模块启动：`module=app.worker`，工作目录设为 `
 
 本地 MVP 默认保守并发：`MAX_CONCURRENT_PARSE_JOBS=1`、`RABBITMQ_PREFETCH_COUNT=1`。需要提高吞吐时优先增加 worker 实例或调高这两个配置。
 
-MinerU 默认超时为 `MINERU_TIMEOUT_SECONDS=600`。如果 RabbitMQ 中消息长时间停在 `Unacked`，通常表示 worker 正在等待 MinerU 子进程；超过该时间后 worker 会把文档回调为 `FAILED` 并将消息转入 DLQ。
+MinerU Agent 默认超时为 `MINERU_TIMEOUT_SECONDS=600`，轮询间隔为 `MINERU_POLL_INTERVAL_SECONDS=2`。如果 RabbitMQ 中消息长时间停在 `Unacked`，通常表示 worker 正在等待托管解析任务；超过该时间后 worker 会把文档回调为 `FAILED` 并将消息转入 DLQ。
 
-本地 MVP 默认关闭重型识别：`MINERU_ENABLE_FORMULA=false`、`MINERU_ENABLE_IMAGE_ANALYSIS=false`，避免普通 PDF 在 MFR/图片分析模型阶段占用过多内存。Worker 只上传 RAG/status 需要的 `content.md`、`middle.json`、`layout.json`，不会上传 MinerU 图片目录；normalized Markdown 中的图片引用也会移除，减少 MinIO 存储和内存压力。
+Worker 使用托管 MinerU Agent 文件上传解析模式：先把 MinIO 原始对象下载到本地工作目录，提交 `MINERU_AGENT_API_BASE_URL=/parse/file` 获取 `task_id` 和上传地址，再用 PUT 上传本地文件，轮询任务完成后下载 Markdown。这个流程不要求 MinIO 对公网开放，适合本地开发和私有 MinIO 环境。
+
+托管轻量 API 限制：单文件不超过 10 MB，PDF 不超过 20 页，仅支持 PDF、图片、DOCX、PPTX、XLSX 等文件，不支持网页 HTML 或加密 PDF；接口免 Token，但可能按 IP 返回 429 限流。`MINERU_METHOD=ocr` 会以 `is_ocr=true` 强制 OCR，`MINERU_ENABLE_TABLE` 和 `MINERU_ENABLE_FORMULA` 会透传给托管解析接口。
+
+托管轻量 API 当前只返回 Markdown。Worker 上传 `content.md` 和项目自有 `metadata.json`，不会伪造 `middle.json` 或 `layout.json`；normalized Markdown 中的图片引用也会移除，减少 MinIO 存储和下游 RAG 噪声。
 
 MinIO 对象路径使用可读前缀：Java 原始文件写入 `raw/kb-{kbName}--{shortKbId}/{filename}--doc-{documentId}.{ext}`，Python 解析产物写入 `parsed/kb-{kbName}--{shortKbId}/{filename}--doc-{documentId}/...`。知识库名和文件名会被清理为安全片段，`documentId` 保证同名文件不冲突并支持重试覆盖。
 
 Smoke 调试可以设置 `KM_AI_SKIP_MINERU=true`，worker 会跳过 MinerU，验证队列消费和 Java 状态回调链路。
+
+如果后续方案改用 URL 解析、云对象存储、企业账号、外网反向代理等需要公共端点或云/企业前置条件的能力，必须在进入实现前明确提示这些部署前提，避免把本地不可复现的约束隐藏到实现中。
+
+## MinerU Agent 配置
+
+健康检查会显示当前托管解析配置：
+
+```bash
+curl http://localhost:8092/internal/health
+```
+
+常用配置：
+
+```bash
+MINERU_AGENT_API_BASE_URL=https://mineru.net/api/v1/agent
+MINERU_TIMEOUT_SECONDS=600
+MINERU_POLL_INTERVAL_SECONDS=2
+```
+
+不要把 MinerU 返回的上传地址或临时 `markdown_url` 写入持久化元数据；Worker 只保存稳定的文档 ID、文件名和 MinIO 对象路径。
