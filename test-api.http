@@ -21,7 +21,7 @@ Content-Disposition: form-data; name="tags"
 GET http://localhost:8091/api/knowledge-bases/kb-test-001/documents?page=1&pageSize=20
 
 ### 4. 文档详情（替换为你的文档ID）
-GET http://localhost:8091/api/documents/892f1bf5cdb145feb56035f079cd0ebe
+GET http://localhost:8091/api/documents/14c1c18d972b4523971a402f1432fa87
 
 ### 5. 查看切片
 GET http://localhost:8091/api/documents/892f1bf5cdb145feb56035f079cd0ebe/chunks?page=1&pageSize=50
@@ -52,7 +52,7 @@ Content-Type: application/json
 }
 
 ### 10. 重试处理
-POST http://localhost:8091/api/documents/5030ff76cbbc42afbbc45eff6ac8ed57/retry
+POST http://localhost:8091/api/documents/14c1c18d972b4523971a402f1432fa87/retry
 ### 11. 检索测试（vector_rerank 模式）
 POST http://localhost:8091/api/search
 Content-Type: application/json
@@ -108,7 +108,7 @@ fake exe content
 GET http://localhost:8091/api/documents/nonexistent-id-12345
 
 ### 19. 测试标签独立持久化
-PUT http://localhost:8091/api/documents/0960b3990db0457a84d0d39aa63603de/tags
+PUT http://localhost:8091/api/documents/你的文档ID/tags
 Content-Type: application/json
 
 {
@@ -116,3 +116,10 @@ Content-Type: application/json
     "颜色": "红色"
   }
 }
+
+### 20. 测试 3-3：越权删除拦截（用错误的知识库删文档）
+DELETE http://localhost:8091/api/knowledge-bases/kb-test-002/documents/9b0f0526046b4d8a8dd8dca5c685cd34
+
+### 21. 正常删除（用于对比）
+DELETE http://localhost:8091/api/knowledge-bases/kb-test-001/documents/9b0f0526046b4d8a8dd8dca5c685cd34
+

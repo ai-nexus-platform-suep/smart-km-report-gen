@@ -147,6 +147,9 @@ public class DocumentServiceImpl implements DocumentService {
         if (doc == null) {
             throw new BusinessException(ErrorCode.KM_DOC_001);
         }
+
+        // 3-3: 校验文档归属知识库（防越权）
+
         if (!kbId.equals(doc.getKbId())) {
             throw new BusinessException(ErrorCode.KM_DOC_001);
         }
