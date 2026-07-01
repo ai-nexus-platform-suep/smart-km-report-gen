@@ -4,6 +4,7 @@ import logging
 from typing import Any
 
 import requests
+from requests import RequestException
 
 from .settings import Settings
 
@@ -34,6 +35,12 @@ class StatusClient:
             "errorMsg": error_msg,
             "chunkCount": chunk_count,
         }
-        response = requests.post(callback_url or self._url, json=payload, timeout=10)
+        url = callback_url or self._url
+        try:
+            response = requests.post(url, json=payload, timeout=10)
+        except RequestException as exc:
+            raise RuntimeError(
+                f"Document status callback failed, url={url}, docId={document_id}, status={status}"
+            ) from exc
         response.raise_for_status()
         logger.info("Document status callback sent, docId=%s, status=%s", document_id, status)

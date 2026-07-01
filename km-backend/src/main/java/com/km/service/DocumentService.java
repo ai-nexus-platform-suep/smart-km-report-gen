@@ -1,9 +1,11 @@
 package com.km.service;
 
 import com.km.common.dto.PageResult;
+import com.km.dto.request.ReplaceDocumentChunksRequest;
 import com.km.dto.response.DocumentBatchDeleteResponse;
 import com.km.dto.response.DocumentDeleteResponse;
 import com.km.dto.response.DocumentUploadResponse;
+import com.km.dto.response.ReplaceDocumentChunksResponse;
 import com.km.vo.ChunkVO;
 import com.km.vo.DocumentVO;
 import org.springframework.web.multipart.MultipartFile;
@@ -65,4 +67,9 @@ public interface DocumentService {
      * 更新文档状态
      */
     void updateStatus(String docId, String status, String errorMsg);
+
+    /**
+     * 替换文档切片索引（供 AI Worker 内部调用）。
+     */
+    ReplaceDocumentChunksResponse replaceChunks(String docId, ReplaceDocumentChunksRequest request);
 }

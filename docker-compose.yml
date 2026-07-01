@@ -74,21 +74,17 @@ services:
       timeout: 5s
       retries: 5
 
-  milvus:
-    image: milvusdb/milvus:v2.3.4
-    container_name: km-milvus
+  qdrant:
+    image: qdrant/qdrant:v1.12.5
+    container_name: km-qdrant
     restart: unless-stopped
-    command: ["milvus", "run", "standalone"]
-    environment:
-      ETCD_USE_EMBED: "true"
-      COMMON_STORAGETYPE: local
     ports:
-      - "19530:19530"
-      - "9091:9091"
+      - "6333:6333"
+      - "6334:6334"
     volumes:
-      - km-milvus-data:/var/lib/milvus
+      - km-qdrant-data:/qdrant/storage
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      test: ["CMD", "curl", "-f", "http://localhost:6333/readyz"]
       interval: 15s
       timeout: 10s
       retries: 5
@@ -101,13 +97,12 @@ services:
   #   ports:
   #     - "8092:8092"
   #   environment:
-  #     MILVUS_HOST: milvus
-  #     MILVUS_PORT: 19530
+  #     QDRANT_URL: http://qdrant:6333
   #     RABBITMQ_HOST: rabbitmq
   #     MINIO_ENDPOINT: http://minio:9000
   #     SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY:-}
   #   depends_on:
-  #     - milvus
+  #     - qdrant
   #     - rabbitmq
   #     - minio
 
@@ -116,4 +111,4 @@ volumes:
   km-redis-data:
   km-rabbitmq-data:
   km-minio-data:
-  km-milvus-data:
+  km-qdrant-data:
