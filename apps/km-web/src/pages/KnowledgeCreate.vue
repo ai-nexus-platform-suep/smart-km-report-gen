@@ -171,4 +171,13 @@ async function handleSubmit() {
 .strategy-desc { margin-top: 8px; font-size: 13px; color: var(--text-secondary); line-height: 1.6; padding: 8px 12px; background: var(--bg-hover); border-radius: var(--border-radius-sm); }
 .option-desc { display: block; font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
 .form-actions { display: flex; justify-content: flex-end; gap: 12px; padding: 16px 0; }
+
+/* 深色模式 */
+[data-theme='dark'] .form-section {
+  background: var(--bg-container);
+}
+[data-theme='dark'] .strategy-desc {
+  background: var(--bg-hover);
+}
+
 </style>

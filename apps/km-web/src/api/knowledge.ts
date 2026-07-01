@@ -41,3 +41,14 @@ export function createKnowledgeBase(data: CreateKnowledgeBaseRequest) {
 export function deleteKnowledgeBase(id: number) {
   return apiDelete(API_KM.KB.DELETE, { params: { id } })
 }
+
+export interface SearchParams {
+  keyword: string
+  kbId?: number
+  page?: number
+  pageSize?: number
+}
+
+export function searchKnowledge(params: SearchParams) {
+  return apiGet(API_KM.SEARCH.FRONTEND, params as Record<string, unknown>)
+}

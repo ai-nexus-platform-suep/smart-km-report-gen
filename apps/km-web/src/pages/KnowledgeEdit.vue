@@ -108,7 +108,7 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, FolderOpened, SetUp } from '@element-plus/icons-vue'
 import { getKnowledgeBaseDetail, updateKnowledgeBase } from '../api/knowledge'
 
@@ -151,6 +151,15 @@ const rules = {
 
 function goBack() { router.push('/knowledge') }
 
+const originalForm = reactive({ chunkStrategy: { type: "heading", separator: "", recursiveMerge: true, chunkSize: 512, overlap: 64 }, searchStrategy: "VECTOR_RERANK" })
+
+function hasStrategyChanged() {
+  const orig = originalForm.chunkStrategy
+  const curr = form.chunkStrategy
+  const sc = orig.type !== curr.type || orig.separator !== curr.separator || orig.recursiveMerge !== curr.recursiveMerge || orig.chunkSize !== curr.chunkSize || orig.overlap !== curr.overlap
+  return sc || originalForm.searchStrategy !== form.searchStrategy
+}
+
 async function fetchDetail() {
   try {
     const res = await getKnowledgeBaseDetail(kbId)
@@ -158,8 +167,18 @@ async function fetchDetail() {
     if (data) {
       form.name = data.name || ''
       form.description = data.description || ''
-      form.docType = data.type || 'GENERAL'
-      form.searchStrategy = data.searchMode || 'VECTOR_RERANK'
+      form.docType = data.docType || data.type || 'GENERAL'
+      form.searchStrategy = data.searchStrategy || data.searchMode || 'VECTOR_RERANK'
+      if (data.chunkStrategy) {
+        const cs = data.chunkStrategy
+        form.chunkStrategy.type = cs.type === 'FIXED_SIZE' ? 'fixed_size' : 'heading'
+        form.chunkStrategy.separator = cs.separator || ''
+        form.chunkStrategy.recursiveMerge = cs.recursiveMerge ?? true
+        form.chunkStrategy.chunkSize = cs.chunkSize ?? 512
+        form.chunkStrategy.overlap = cs.overlap ?? 64
+      }
+      originalForm.chunkStrategy = { ...form.chunkStrategy }
+      originalForm.searchStrategy = form.searchStrategy
     }
   } catch {
     ElMessage.error('获取知识库详情失败')
@@ -197,4 +216,13 @@ onMounted(() => fetchDetail())
 .option-desc { display: block; font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
 .form-actions { display: flex; justify-content: flex-end; gap: 12px; padding: 16px 0; }
 .loading { padding: 60px; }
+
+/* 深色模式 */
+[data-theme='dark'] .form-section {
+  background: var(--bg-container);
+}
+[data-theme='dark'] .strategy-desc {
+  background: var(--bg-hover);
+}
+
 </style>

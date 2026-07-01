@@ -29,6 +29,11 @@
       </el-input>
     </div>
 
+    <div class="kb-hint">
+      <el-icon><InfoFilled /></el-icon>
+      <span>点击知识库名称进入文档管理</span>
+    </div>
+
     <div class="batch-bar" v-if="selectedIds.length > 0">
       <el-button type="danger" size="small" @click="handleBatchDelete">
         <el-icon><Delete /></el-icon> 批量删除（{{ selectedIds.length }}）
@@ -44,7 +49,7 @@
       <el-table-column prop="id" label="ID" width="80" />
       <el-table-column label="名称" min-width="200">
         <template #default="{ row }">
-          <el-link type="primary" :underline="false" @click="router.push(`/knowledge/${row.id}`)">
+          <el-link type="primary" underline="never" @click="router.push({ path: `/knowledge/${row.id}/documents`, query: { name: row.name } })">
             {{ row.name }}
           </el-link>
         </template>
@@ -89,7 +94,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Search, Delete } from '@element-plus/icons-vue'
+import { Plus, Search, Delete, InfoFilled } from '@element-plus/icons-vue'
 import { getKnowledgeBaseList, deleteKnowledgeBase, batchDeleteKnowledgeBase } from '../api/knowledge'
 
 const router = useRouter()
@@ -174,4 +179,25 @@ onMounted(() => fetchList())
 .page-header h2 { font-size: 20px; font-weight: 600; margin: 0; }
 .loading { padding: 40px; }
 .pagination { display: flex; justify-content: flex-end; margin-top: 20px; }
+
+
+/* 知识库名称链接 */
+.el-link.el-link--primary {
+  text-decoration: none;
+}
+[data-theme='dark'] .el-table {
+  --el-table-bg-color: var(--bg-container);
+  --el-table-tr-bg-color: var(--bg-container);
+  --el-table-header-bg-color: var(--bg-hover);
+  --el-table-row-hover-bg-color: var(--bg-hover);
+  --el-table-border-color: var(--border-color);
+  --el-table-text-color: var(--text-primary);
+  --el-table-header-text-color: var(--text-secondary);
+}
+[data-theme='dark'] .el-table--striped .el-table__body tr.el-table__row--striped td {
+  background: var(--bg-hover);
+}
+.kb-hint { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; padding: 8px 14px; background: var(--el-color-primary-light-9, #ecf5ff); border-radius: 6px; font-size: 13px; color: var(--el-color-primary, #409eff); }
+.kb-hint { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; padding: 8px 14px; background: var(--el-color-primary-light-9, #ecf5ff); border-radius: 6px; font-size: 13px; color: var(--el-color-primary, #409eff); }
+.kb-hint { display: flex; align-items: center; gap: 6px; margin-bottom: 12px; padding: 8px 14px; background: var(--el-color-primary-light-9, #ecf5ff); border-radius: 6px; font-size: 13px; color: var(--el-color-primary, #409eff); }
 </style>

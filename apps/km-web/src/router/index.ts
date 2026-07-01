@@ -1,7 +1,5 @@
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 import { baseRoutes, createAuthGuard } from '@platform/ui'
-import AuthGuard from '@platform/ui/src/components/AuthGuard.vue'
-import { h } from 'vue'
 
 const moduleRoutes: RouteRecordRaw[] = [
   {
@@ -43,43 +41,27 @@ const moduleRoutes: RouteRecordRaw[] = [
     children: [
       {
         path: 'km/dashboard',
-        component: guarded('AdminDashboard'),
+        component: () => import('../pages/admin/AdminDashboard.vue'),
         meta: { title: 'KM统计', admin: true },
       },
       {
         path: 'km/embed',
-        component: guarded('EmbedConfig'),
+        component: () => import('../pages/admin/EmbedConfig.vue'),
         meta: { title: '嵌入模型', admin: true },
       },
       {
         path: 'km/rerank',
-        component: guarded('RerankConfig'),
+        component: () => import('../pages/admin/RerankConfig.vue'),
         meta: { title: '重排序', admin: true },
       },
       {
         path: 'km/parser',
-        component: guarded('ParserConfig'),
+        component: () => import('../pages/admin/ParserConfig.vue'),
         meta: { title: '解析器', admin: true },
       },
     ],
   },
 ]
-
-function guarded(name: string) {
-  return () =>
-    Promise.resolve({
-      setup() {
-        return () => h(AuthGuard, { requireAdmin: true }, () => Placeholder(name))
-      },
-    })
-}
-
-function Placeholder(name: string) {
-  return h('div', { style: 'padding:40px;text-align:center;color:#999' }, [
-    h('h2', '🚧 ' + name),
-    h('p', '此页面待开发'),
-  ])
-}
 
 const router = createRouter({
   history: createWebHistory(),
