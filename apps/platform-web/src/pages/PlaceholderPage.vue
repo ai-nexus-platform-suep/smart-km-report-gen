@@ -46,7 +46,7 @@ const moduleBlueprints: Record<string, ModuleBlueprint> = {
     ],
     actions: ['新建素材', '批量打标', '同步报告素材'],
     tableTitle: '素材清单预览',
-    tableDescription: '静态骨架阶段先展示字段和布局，方便 A/C 组对齐后续接口。',
+    tableDescription: '静态骨架阶段先展示字段和布局，方便知识管理与报告生成模块对齐后续接口。',
     rows: [
       { name: '锅炉受热面监督检查要点', owner: '知识管理', status: '已归档', statusTone: 'success', updatedAt: '今天 10:12' },
       { name: '设备缺陷案例摘要模板', owner: '报告生成', status: '待打标', statusTone: 'warning', updatedAt: '今天 09:46' },
@@ -84,7 +84,7 @@ const moduleBlueprints: Record<string, ModuleBlueprint> = {
     stats: [
       { label: '平台用户', value: '36', tone: 'success' },
       { label: '待启用', value: '4', tone: 'warning' },
-      { label: '角色类型', value: '2 类', tone: 'neutral' },
+      { label: '角色类型', value: '3 类', tone: 'neutral' },
     ],
     actions: ['新建用户', '导入名单', '停用账号'],
     tableTitle: '用户列表预览',
@@ -103,7 +103,7 @@ const moduleBlueprints: Record<string, ModuleBlueprint> = {
     description:
       '统一维护管理员、普通用户等角色的菜单权限和能力开关，避免三个子系统各自判断权限导致行为不一致。',
     stats: [
-      { label: '角色组', value: '4', tone: 'success' },
+      { label: '角色类型', value: '3 类', tone: 'success' },
       { label: '菜单权限', value: '21', tone: 'neutral' },
       { label: '待确认能力', value: '5', tone: 'warning' },
     ],
@@ -116,7 +116,7 @@ const moduleBlueprints: Record<string, ModuleBlueprint> = {
       { name: 'USER -> 模型配置', owner: '管理员能力', status: '已限制', statusTone: 'warning', updatedAt: '昨天 12:40' },
     ],
     roadmap: ['补充菜单权限树', '统一前端路由 meta.admin', '对接后端能力点校验'],
-    tips: ['当前侧边栏已隐藏 admin 子菜单', '路由守卫会拦截非管理员访问', '这里后续适合做成可视化权限矩阵'],
+    tips: ['当前侧边栏已隐藏系统管理子菜单', '路由守卫会拦截非管理员访问', '这里后续适合做成可视化权限矩阵'],
   },
 }
 

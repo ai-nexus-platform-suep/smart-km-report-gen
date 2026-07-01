@@ -1,49 +1,43 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 
-const selectedRoleId = ref('admin')
+const selectedRoleId = ref('super-admin')
 
 const roles = [
   {
-    id: 'admin',
-    name: '管理员',
-    desc: '维护系统配置、用户、角色和所有业务模块管理能力。',
-    users: 6,
+    id: 'super-admin',
+    name: '超级管理员',
+    desc: '拥有平台最高权限，可维护用户、角色、权限和三大业务模块配置。',
+    users: 1,
     tone: 'danger',
     modules: [
-      { name: '平台首页', view: true, edit: true, config: true },
       { name: '知识管理', view: true, edit: true, config: true },
       { name: '智能问答', view: true, edit: true, config: true },
       { name: '报告生成', view: true, edit: true, config: true },
-      { name: '系统管理', view: true, edit: true, config: true },
+    ],
+  },
+  {
+    id: 'admin',
+    name: '管理员',
+    desc: '维护三大业务模块的配置和内容，可进行日常管理操作。',
+    users: 5,
+    tone: 'warning',
+    modules: [
+      { name: '知识管理', view: true, edit: true, config: true },
+      { name: '智能问答', view: true, edit: true, config: true },
+      { name: '报告生成', view: true, edit: true, config: true },
     ],
   },
   {
     id: 'user',
     name: '普通用户',
-    desc: '使用知识检索、智能问答和报告生成，不开放系统配置。',
+    desc: '使用知识检索、智能问答和报告生成，不开放配置类管理能力。',
     users: 30,
     tone: 'info',
     modules: [
-      { name: '平台首页', view: true, edit: false, config: false },
       { name: '知识管理', view: true, edit: false, config: false },
       { name: '智能问答', view: true, edit: false, config: false },
       { name: '报告生成', view: true, edit: true, config: false },
-      { name: '系统管理', view: false, edit: false, config: false },
-    ],
-  },
-  {
-    id: 'reviewer',
-    name: '报告审核员',
-    desc: '聚焦报告查看、校验和导出，暂不开放用户与模型配置。',
-    users: 4,
-    tone: 'warning',
-    modules: [
-      { name: '平台首页', view: true, edit: false, config: false },
-      { name: '知识管理', view: true, edit: false, config: false },
-      { name: '智能问答', view: false, edit: false, config: false },
-      { name: '报告生成', view: true, edit: true, config: false },
-      { name: '系统管理', view: false, edit: false, config: false },
     ],
   },
 ] as const
@@ -51,9 +45,9 @@ const roles = [
 const selectedRole = computed(() => roles.find((item) => item.id === selectedRoleId.value) || roles[0])
 
 const guardRules = [
-  '侧边栏按 admin 字段隐藏管理员菜单',
-  '路由 meta.admin 会拦截非管理员访问',
-  '第三次接口合并时再补后端能力点校验',
+  '普通用户只看到可使用的业务入口，不显示系统管理配置入口',
+  '管理员可维护三大模块配置，超级管理员额外维护用户和角色',
+  '第三次接口合并时由后端返回菜单树和按钮级权限',
 ] as const
 </script>
 
@@ -63,7 +57,7 @@ const guardRules = [
       <div>
         <span class="eyebrow">PERMISSION MATRIX</span>
         <h1>角色权限</h1>
-        <p>把菜单权限和能力开关放到同一张矩阵里，避免三个子系统各写一套权限判断。</p>
+        <p>围绕知识管理、智能问答、报告生成三大模块配置角色权限，统一管理用户、管理员和超级管理员。</p>
       </div>
       <el-button type="primary">新建角色</el-button>
     </section>
@@ -71,7 +65,7 @@ const guardRules = [
     <section class="role-layout">
       <aside class="surface role-list-panel">
         <span class="eyebrow">ROLES</span>
-        <h2>角色组</h2>
+        <h2>角色类型</h2>
         <button
           v-for="role in roles"
           :key="role.id"
@@ -101,7 +95,7 @@ const guardRules = [
           <div class="permission-row header">
             <span>模块</span>
             <span>可查看</span>
-            <span>可编辑</span>
+            <span>可操作</span>
             <span>可配置</span>
           </div>
           <div v-for="item in selectedRole.modules" :key="item.name" class="permission-row">

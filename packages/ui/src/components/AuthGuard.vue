@@ -19,7 +19,7 @@ const props = defineProps<{ requireAdmin?: boolean }>()
 const user = computed(() => getStoredUser<UserInfo>())
 const hasAccess = computed(() => {
   if (!props.requireAdmin) return true
-  return user.value?.role === 'ADMIN'
+  return user.value?.role === 'ADMIN' || user.value?.role === 'SUPER_ADMIN'
 })
 </script>
 

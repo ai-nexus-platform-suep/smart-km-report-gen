@@ -10,50 +10,46 @@ const activeUserId = ref('u-001')
 const users = [
   {
     id: 'u-001',
-    name: '系统管理员',
-    account: 'admin',
-    department: '平台运维组',
-    role: 'ADMIN',
+    name: '平台超级管理员',
+    account: 'super-admin',
+    role: 'SUPER_ADMIN',
     status: 'active',
     lastActive: '今天 11:20',
     modules: ['系统管理', '知识管理', '智能问答', '报告生成'],
   },
   {
     id: 'u-002',
-    name: '技术监督专责',
-    account: 'supervisor',
-    department: '技术监督部',
-    role: 'USER',
+    name: '系统管理员',
+    account: 'admin',
+    role: 'ADMIN',
     status: 'active',
     lastActive: '今天 10:46',
     modules: ['知识管理', '智能问答', '报告生成'],
   },
   {
     id: 'u-003',
-    name: '报告审核员',
-    account: 'report-review',
-    department: '生产技术部',
+    name: '知识管理用户',
+    account: 'km-user',
     role: 'USER',
     status: 'pending',
     lastActive: '昨天 18:12',
-    modules: ['报告生成'],
+    modules: ['知识管理', '智能问答'],
   },
   {
     id: 'u-004',
-    name: '问答测试员',
-    account: 'qa-tester',
-    department: '信息中心',
+    name: '报告生成用户',
+    account: 'report-user',
     role: 'USER',
     status: 'active',
     lastActive: '昨天 15:38',
-    modules: ['智能问答', '知识管理'],
+    modules: ['报告生成'],
   },
 ] as const
 
 const filteredUsers = computed(() => {
   const word = keyword.value.trim().toLowerCase()
   return users.filter((user) => {
-    const hitKeyword = !word || `${user.name}${user.account}${user.department}`.toLowerCase().includes(word)
+    const hitKeyword = !word || `${user.name}${user.account}`.toLowerCase().includes(word)
     const hitRole = !roleFilter.value || user.role === roleFilter.value
     const hitStatus = !statusFilter.value || user.status === statusFilter.value
     return hitKeyword && hitRole && hitStatus
@@ -62,11 +58,20 @@ const filteredUsers = computed(() => {
 
 const activeUser = computed(() => users.find((item) => item.id === activeUserId.value) || users[0])
 
-const activeCount = computed(() => users.filter((item) => item.status === 'active').length)
-const pendingCount = computed(() => users.filter((item) => item.status === 'pending').length)
+const superAdminCount = computed(() => users.filter((item) => item.role === 'SUPER_ADMIN').length)
+const adminCount = computed(() => users.filter((item) => item.role === 'ADMIN').length)
+const normalUserCount = computed(() => users.filter((item) => item.role === 'USER').length)
 
 function roleLabel(role: string) {
-  return role === 'ADMIN' ? '管理员' : '普通用户'
+  if (role === 'SUPER_ADMIN') return '超级管理员'
+  if (role === 'ADMIN') return '管理员'
+  return '普通用户'
+}
+
+function roleTagType(role: string) {
+  if (role === 'SUPER_ADMIN') return 'danger'
+  if (role === 'ADMIN') return 'warning'
+  return 'info'
 }
 
 function statusLabel(status: string) {
@@ -84,7 +89,7 @@ function statusType(status: string) {
       <div>
         <span class="eyebrow">IDENTITY CENTER</span>
         <h1>用户管理</h1>
-        <p>用更轻的列表完成账号维护：搜索、筛选、查看详情都在一页完成，避免把说明文案和操作入口堆在一起。</p>
+        <p>按普通用户、管理员、超级管理员维护平台账号，重点管理角色权限和三大模块访问范围。</p>
       </div>
       <div class="users-actions">
         <el-button>导入名单</el-button>
@@ -94,24 +99,25 @@ function statusType(status: string) {
 
     <section class="users-metrics">
       <article>
-        <span>总用户</span>
-        <strong>{{ users.length }}</strong>
+        <span>超级管理员</span>
+        <strong>{{ superAdminCount }}</strong>
       </article>
       <article>
-        <span>启用中</span>
-        <strong>{{ activeCount }}</strong>
+        <span>管理员</span>
+        <strong>{{ adminCount }}</strong>
       </article>
       <article>
-        <span>待启用</span>
-        <strong>{{ pendingCount }}</strong>
+        <span>普通用户</span>
+        <strong>{{ normalUserCount }}</strong>
       </article>
     </section>
 
     <section class="users-layout">
       <div class="surface users-table-panel">
         <div class="users-toolbar">
-          <el-input v-model="keyword" :prefix-icon="Search" clearable placeholder="搜索姓名、账号、部门" />
+          <el-input v-model="keyword" :prefix-icon="Search" clearable placeholder="搜索姓名、账号" />
           <el-select v-model="roleFilter" clearable placeholder="角色">
+            <el-option label="超级管理员" value="SUPER_ADMIN" />
             <el-option label="管理员" value="ADMIN" />
             <el-option label="普通用户" value="USER" />
           </el-select>
@@ -132,7 +138,7 @@ function statusType(status: string) {
           <el-table-column label="用户" min-width="220">
             <template #default="{ row }">
               <div class="user-cell">
-                <el-avatar :size="34">{{ row.name.slice(0, 1) }}</el-avatar>
+                <span class="initials-badge small">{{ row.name.slice(0, 1) }}</span>
                 <div>
                   <strong>{{ row.name }}</strong>
                   <small>@{{ row.account }}</small>
@@ -140,10 +146,16 @@ function statusType(status: string) {
               </div>
             </template>
           </el-table-column>
-          <el-table-column prop="department" label="部门" min-width="150" />
           <el-table-column label="角色" width="110">
             <template #default="{ row }">
-              <el-tag size="small" :type="row.role === 'ADMIN' ? 'danger' : 'info'">{{ roleLabel(row.role) }}</el-tag>
+              <el-tag size="small" :type="roleTagType(row.role)">{{ roleLabel(row.role) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="可访问模块" min-width="190">
+            <template #default="{ row }">
+              <div class="module-cell">
+                <span v-for="item in row.modules" :key="item">{{ item }}</span>
+              </div>
             </template>
           </el-table-column>
           <el-table-column label="状态" width="110">
@@ -164,10 +176,10 @@ function statusType(status: string) {
       <aside class="surface user-detail-panel">
         <span class="eyebrow">PROFILE</span>
         <div class="detail-user">
-          <el-avatar :size="52">{{ activeUser.name.slice(0, 1) }}</el-avatar>
+          <span class="initials-badge large">{{ activeUser.name.slice(0, 1) }}</span>
           <div>
             <h2>{{ activeUser.name }}</h2>
-            <p>@{{ activeUser.account }} · {{ activeUser.department }}</p>
+            <p>@{{ activeUser.account }} · {{ roleLabel(activeUser.role) }}</p>
           </div>
         </div>
 
@@ -302,6 +314,29 @@ function statusType(status: string) {
   align-items: center;
 }
 
+.initials-badge {
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 999px;
+  color: #475569;
+  background: linear-gradient(180deg, #f1f5f9, #e2e8f0);
+  font-weight: 900;
+}
+
+.initials-badge.small {
+  width: 34px;
+  height: 34px;
+  font-size: 14px;
+}
+
+.initials-badge.large {
+  width: 52px;
+  height: 52px;
+  font-size: 20px;
+}
+
 .user-cell strong {
   display: block;
   color: var(--platform-text-strong);
@@ -317,6 +352,21 @@ function statusType(status: string) {
   gap: 18px;
   align-content: start;
   padding: 22px;
+}
+
+.module-cell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.module-cell span {
+  padding: 4px 8px;
+  border-radius: 999px;
+  color: var(--accent-blue);
+  background: rgba(30, 107, 255, 0.08);
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .detail-user h2 {

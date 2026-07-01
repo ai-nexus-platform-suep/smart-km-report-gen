@@ -72,7 +72,7 @@ export const platformNavItems: NavItem[] = [
 export const quickAccessCards = [
   {
     title: '知识管理',
-    description: '已接入 A 组最新知识库列表、文档管理、检索和模型配置页面。',
+    description: '已接入知识库列表、文档管理、检索和模型配置页面。',
     icon: FolderOpened,
     links: [
       { label: '知识库管理', to: '/km/bases' },
@@ -82,7 +82,7 @@ export const quickAccessCards = [
   },
   {
     title: '智能问答',
-    description: '已接入 B 组最新问答页、会话记录、检索测试和模型配置页面。',
+    description: '已接入智能问答页、会话记录、检索测试和模型配置页面。',
     icon: ChatDotRound,
     links: [
       { label: '智能对话', to: '/qa/chat' },
@@ -92,7 +92,7 @@ export const quickAccessCards = [
   },
   {
     title: '报告生成',
-    description: '已接入 C 组最新报告记录、新建、大纲、工作台、导出和模板管理页面。',
+    description: '已接入报告记录、新建、大纲、工作台、导出和模板管理页面。',
     icon: Files,
     links: [
       { label: '报告记录', to: '/reports' },
@@ -111,7 +111,7 @@ export const mergePhases = [
   {
     title: '第 2 次',
     subtitle: '页面骨架合并',
-    items: ['A 组知识库列表、文档列表、知识检索', 'B 组问答页、会话列表、模型配置', 'C 组新建报告、报告工作台、历史记录'],
+    items: ['知识管理：知识库列表、文档列表、知识检索', '智能问答：问答页、会话列表、模型配置', '报告生成：新建报告、报告工作台、历史记录'],
     icon: DocumentAdd,
   },
   {
@@ -124,7 +124,7 @@ export const mergePhases = [
 
 export const dashboardStats = [
   { label: '统一入口', value: '1 个', icon: Histogram },
-  { label: '聚合模块', value: '3 组', icon: Collection },
+  { label: '聚合模块', value: '3 个', icon: Collection },
   { label: '一级菜单', value: '5 项', icon: Search },
-  { label: '权限角色', value: '2 类', icon: UserFilled },
+  { label: '权限角色', value: '3 类', icon: UserFilled },
 ] as const

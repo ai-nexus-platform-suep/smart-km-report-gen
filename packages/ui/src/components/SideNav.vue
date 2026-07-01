@@ -18,7 +18,7 @@ const props = defineProps<{ items: NavItem[]; collapsed: boolean }>()
 const route = useRoute()
 
 const user = computed(() => getStoredUser<UserInfo>())
-const isAdmin = computed(() => user.value?.role === 'ADMIN')
+const isAdmin = computed(() => user.value?.role === 'ADMIN' || user.value?.role === 'SUPER_ADMIN')
 
 const visibleItems = computed(() =>
   props.items

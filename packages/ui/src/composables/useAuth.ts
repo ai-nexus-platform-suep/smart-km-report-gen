@@ -4,7 +4,7 @@ import type { UserInfo } from '@platform/core/types'
 
 const user = ref<UserInfo | null>(getStoredUser<UserInfo>())
 const isLoggedIn = computed(() => !!getToken())
-const isAdmin = computed(() => user.value?.role === 'ADMIN')
+const isAdmin = computed(() => user.value?.role === 'ADMIN' || user.value?.role === 'SUPER_ADMIN')
 
 export function useAuth() {
   function login(token: string, u: UserInfo) {

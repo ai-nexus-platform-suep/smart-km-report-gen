@@ -29,13 +29,20 @@ export const mockUsers: (UserInfo & { password: string })[] = [
 ]
 
 export function buildLoginResponse(user: UserInfo): LoginResponse {
+  const roles =
+    user.role === 'SUPER_ADMIN'
+      ? ['ROLE_SUPER_ADMIN', 'ROLE_ADMIN', 'ROLE_USER']
+      : user.role === 'ADMIN'
+        ? ['ROLE_ADMIN', 'ROLE_USER']
+        : ['ROLE_USER']
+
   return {
     accessToken: mockToken,
     refreshToken: mockRefreshToken,
     tokenType: 'Bearer',
     expiresIn: 900,
     username: user.username,
-    roles: user.role === 'ADMIN' ? ['ROLE_ADMIN', 'ROLE_USER'] : ['ROLE_USER'],
+    roles,
   }
 }
 

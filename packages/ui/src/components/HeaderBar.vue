@@ -68,7 +68,11 @@ const isDark = ref(false)
 const user = computed(() => getStoredUser<UserInfo>())
 const username = computed(() => user.value?.nickname || user.value?.username || '用户')
 const userDisplayName = computed(() => user.value?.nickname || user.value?.username || '未登录用户')
-const userRole = computed(() => (user.value?.role === 'ADMIN' ? '管理员' : '普通用户'))
+const userRole = computed(() => {
+  if (user.value?.role === 'SUPER_ADMIN') return '超级管理员'
+  if (user.value?.role === 'ADMIN') return '管理员'
+  return '普通用户'
+})
 
 function toggleTheme() {
   isDark.value = !isDark.value

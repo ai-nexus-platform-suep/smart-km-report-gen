@@ -15,5 +15,11 @@
       "@platform/mock/*": ["../../packages/mock/src/*"]
     }
   },
-  "include": ["src/**/*.ts", "src/**/*.vue"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.vue",
+    "../km-web/src/platform-routes.ts",
+    "../qa-web/src/platform-routes.ts",
+    "../report-web/src/platform-routes.ts"
+  ]
 }
