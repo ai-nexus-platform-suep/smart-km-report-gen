@@ -20,8 +20,10 @@
 # Local generated files
 **/storage/reports/*
 **/storage/templates/*
+**/storage/assets/*
 !**/storage/reports/.gitkeep
 !**/storage/templates/.gitkeep
+!**/storage/assets/.gitkeep
 
 # ========== Node.js ==========
 node_modules/
