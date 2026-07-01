@@ -13,7 +13,14 @@ import com.powerreport.admin.service.TemplateService;
 import com.powerreport.entity.ReportTemplateEntity;
 import com.powerreport.enums.ReportType;
 import com.powerreport.mapper.ReportTemplateMapper;
+import io.minio.BucketExistsArgs;
+import io.minio.GetObjectArgs;
+import io.minio.MakeBucketArgs;
+import io.minio.MinioClient;
+import io.minio.PutObjectArgs;
+import io.minio.RemoveObjectArgs;
 import java.io.IOException;
+import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -21,6 +28,7 @@ import java.time.LocalDateTime;
 import java.util.Objects;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
 import org.springframework.stereotype.Service;
@@ -39,6 +47,7 @@ public class TemplateServiceImpl implements TemplateService {
     private final ReportTemplateMapper templateMapper;
     private final TemplateStorageProperties storageProperties;
     private final ObjectMapper objectMapper;
+    private final MinioClient minioClient;
 
     @Override
     public TemplatePageResponse list(Integer page, Integer size, String reportType, Boolean enabled, String keyword) {
@@ -71,14 +80,14 @@ public class TemplateServiceImpl implements TemplateService {
         String normalizedType = normalizeReportType(reportType);
         String normalizedVersion = normalizeVersion(version);
         validateConfigJson(configJson);
-        String filePath = storeFile(file);
+        StoredTemplateFile storedFile = storeFile(file, normalizedType);
 
         ReportTemplateEntity entity = new ReportTemplateEntity();
         entity.setId(UUID.randomUUID().toString());
         entity.setName(name.trim());
         entity.setReportType(normalizedType);
         entity.setVersion(normalizedVersion);
-        entity.setFilePath(filePath);
+        applyStoredFile(entity, storedFile);
         entity.setConfigJson(StringUtils.hasText(configJson) ? configJson : null);
         entity.setEnabled(enabled == null || enabled);
         entity.setCreatedBy(StringUtils.hasText(username) ? username : "local_user");
@@ -120,11 +129,11 @@ public class TemplateServiceImpl implements TemplateService {
     @Override
     public TemplateResponse replaceFile(String templateId, MultipartFile file) {
         ReportTemplateEntity entity = requireTemplate(templateId);
-        String oldPath = entity.getFilePath();
-        entity.setFilePath(storeFile(file));
+        StoredTemplateFile oldFile = toStoredFile(entity);
+        applyStoredFile(entity, storeFile(file, entity.getReportType()));
         entity.setUpdatedAt(LocalDateTime.now());
         templateMapper.updateById(entity);
-        deleteFileQuietly(oldPath);
+        deleteStoredFileQuietly(oldFile);
         return toResponse(entity);
     }
 
@@ -146,24 +155,17 @@ public class TemplateServiceImpl implements TemplateService {
     @Override
     public TemplateFileResource loadFile(String templateId) {
         ReportTemplateEntity entity = requireTemplate(templateId);
-        Path path = resolveStoredPath(entity.getFilePath());
-        if (!Files.exists(path) || !Files.isRegularFile(path)) {
-            throw new IllegalArgumentException("template file does not exist");
-        }
-        try {
-            Resource resource = new UrlResource(path.toUri());
-            String fileName = path.getFileName().toString();
-            return new TemplateFileResource(fileName, resource, Files.size(path));
-        } catch (IOException e) {
-            throw new IllegalStateException("failed to load template file");
-        }
+        StoredTemplateFile storedFile = toStoredFile(entity);
+        return isMinioStorage(storedFile.storageType())
+                ? loadMinioFile(storedFile)
+                : loadLocalFile(storedFile);
     }
 
     @Override
     public void delete(String templateId) {
         ReportTemplateEntity entity = requireTemplate(templateId);
         templateMapper.deleteById(templateId);
-        deleteFileQuietly(entity.getFilePath());
+        deleteStoredFileQuietly(toStoredFile(entity));
     }
 
     private ReportTemplateEntity requireTemplate(String templateId) {
@@ -177,10 +179,68 @@ public class TemplateServiceImpl implements TemplateService {
         return entity;
     }
 
-    private String storeFile(MultipartFile file) {
+    private StoredTemplateFile storeFile(MultipartFile file, String reportType) {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("template file is required");
         }
+        String originalFileName = cleanOriginalFileName(file);
+        return isMinioStorage(storageProperties.getStorageType())
+                ? storeMinioFile(file, originalFileName, reportType)
+                : storeLocalFile(file, originalFileName);
+    }
+
+    private StoredTemplateFile storeMinioFile(MultipartFile file, String originalFileName, String reportType) {
+        TemplateStorageProperties.Minio minio = storageProperties.getMinio();
+        String bucketName = minio.getBucketName();
+        String objectName = buildObjectName(minio.getObjectPrefix(), reportType);
+        String contentType = normalizeContentType(file.getContentType());
+        try (InputStream inputStream = file.getInputStream()) {
+            ensureBucket(bucketName);
+            minioClient.putObject(PutObjectArgs.builder()
+                    .bucket(bucketName)
+                    .object(objectName)
+                    .stream(inputStream, file.getSize(), -1)
+                    .contentType(contentType)
+                    .build());
+            return new StoredTemplateFile(
+                    "MINIO",
+                    buildMinioPath(bucketName, objectName),
+                    bucketName,
+                    objectName,
+                    originalFileName,
+                    contentType,
+                    file.getSize()
+            );
+        } catch (Exception e) {
+            throw new IllegalStateException("failed to store template file to MinIO: " + e.getMessage());
+        }
+    }
+
+    private StoredTemplateFile storeLocalFile(MultipartFile file, String originalFileName) {
+        try {
+            Path root = storageRoot();
+            Files.createDirectories(root);
+            String storedFileName = UUID.randomUUID() + ".docx";
+            Path target = root.resolve(storedFileName).normalize();
+            if (!target.startsWith(root)) {
+                throw new IllegalArgumentException("invalid template storage path");
+            }
+            file.transferTo(target);
+            return new StoredTemplateFile(
+                    "LOCAL",
+                    target.toString(),
+                    null,
+                    null,
+                    originalFileName,
+                    normalizeContentType(file.getContentType()),
+                    Files.size(target)
+            );
+        } catch (IOException e) {
+            throw new IllegalStateException("failed to store template file");
+        }
+    }
+
+    private String cleanOriginalFileName(MultipartFile file) {
         String originalFileName = org.springframework.util.StringUtils.cleanPath(
                 Objects.toString(file.getOriginalFilename(), "template.docx")
         );
@@ -191,19 +251,79 @@ public class TemplateServiceImpl implements TemplateService {
         if (!lowerName.endsWith(".docx")) {
             throw new IllegalArgumentException("only .docx template files are supported");
         }
-        try {
-            Path root = storageRoot();
-            Files.createDirectories(root);
-            String storedFileName = UUID.randomUUID() + ".docx";
-            Path target = root.resolve(storedFileName).normalize();
-            if (!target.startsWith(root)) {
-                throw new IllegalArgumentException("invalid template storage path");
-            }
-            file.transferTo(target);
-            return target.toString();
-        } catch (IOException e) {
-            throw new IllegalStateException("failed to store template file");
+        return originalFileName;
+    }
+
+    private TemplateFileResource loadMinioFile(StoredTemplateFile storedFile) {
+        if (!StringUtils.hasText(storedFile.bucketName()) || !StringUtils.hasText(storedFile.objectName())) {
+            throw new IllegalArgumentException("template MinIO object is empty");
         }
+        try {
+            InputStream inputStream = minioClient.getObject(GetObjectArgs.builder()
+                    .bucket(storedFile.bucketName())
+                    .object(storedFile.objectName())
+                    .build());
+            Resource resource = new InputStreamResource(inputStream);
+            return new TemplateFileResource(
+                    storedFile.downloadFileName(),
+                    resource,
+                    Objects.requireNonNullElse(storedFile.fileSize(), -1L),
+                    storedFile.safeContentType()
+            );
+        } catch (Exception e) {
+            throw new IllegalStateException("failed to load template file from MinIO: " + e.getMessage());
+        }
+    }
+
+    private TemplateFileResource loadLocalFile(StoredTemplateFile storedFile) {
+        Path path = resolveStoredPath(storedFile.filePath());
+        if (!Files.exists(path) || !Files.isRegularFile(path)) {
+            throw new IllegalArgumentException("template file does not exist");
+        }
+        try {
+            Resource resource = new UrlResource(path.toUri());
+            String fileName = StringUtils.hasText(storedFile.originalFileName())
+                    ? storedFile.originalFileName()
+                    : path.getFileName().toString();
+            return new TemplateFileResource(fileName, resource, Files.size(path), storedFile.safeContentType());
+        } catch (IOException e) {
+            throw new IllegalStateException("failed to load template file");
+        }
+    }
+
+    private void ensureBucket(String bucketName) throws Exception {
+        if (!storageProperties.getMinio().isAutoCreateBucket()) {
+            return;
+        }
+        boolean exists = minioClient.bucketExists(BucketExistsArgs.builder()
+                .bucket(bucketName)
+                .build());
+        if (!exists) {
+            minioClient.makeBucket(MakeBucketArgs.builder()
+                    .bucket(bucketName)
+                    .build());
+        }
+    }
+
+    private String buildObjectName(String prefix, String reportType) {
+        String normalizedPrefix = StringUtils.hasText(prefix) ? trimSlashes(prefix.trim()) : "templates";
+        String normalizedType = StringUtils.hasText(reportType) ? reportType.trim() : "UNKNOWN";
+        return normalizedPrefix + "/" + normalizedType + "/" + UUID.randomUUID() + ".docx";
+    }
+
+    private String trimSlashes(String value) {
+        String result = value;
+        while (result.startsWith("/")) {
+            result = result.substring(1);
+        }
+        while (result.endsWith("/")) {
+            result = result.substring(0, result.length() - 1);
+        }
+        return result;
+    }
+
+    private String buildMinioPath(String bucketName, String objectName) {
+        return "minio://" + bucketName + "/" + objectName;
     }
 
     private Path storageRoot() {
@@ -221,7 +341,32 @@ public class TemplateServiceImpl implements TemplateService {
         return storageRoot().resolve(filePath).normalize();
     }
 
-    private void deleteFileQuietly(String filePath) {
+    private void deleteStoredFileQuietly(StoredTemplateFile storedFile) {
+        if (storedFile == null) {
+            return;
+        }
+        if (isMinioStorage(storedFile.storageType())) {
+            deleteMinioFileQuietly(storedFile);
+        } else {
+            deleteLocalFileQuietly(storedFile.filePath());
+        }
+    }
+
+    private void deleteMinioFileQuietly(StoredTemplateFile storedFile) {
+        if (!StringUtils.hasText(storedFile.bucketName()) || !StringUtils.hasText(storedFile.objectName())) {
+            return;
+        }
+        try {
+            minioClient.removeObject(RemoveObjectArgs.builder()
+                    .bucket(storedFile.bucketName())
+                    .object(storedFile.objectName())
+                    .build());
+        } catch (Exception ignored) {
+            // DB deletion is the source of truth for template removal.
+        }
+    }
+
+    private void deleteLocalFileQuietly(String filePath) {
         if (!StringUtils.hasText(filePath)) {
             return;
         }
@@ -295,18 +440,114 @@ public class TemplateServiceImpl implements TemplateService {
         return Math.min(size, MAX_SIZE);
     }
 
+    private void applyStoredFile(ReportTemplateEntity entity, StoredTemplateFile storedFile) {
+        entity.setStorageType(storedFile.storageType());
+        entity.setFilePath(storedFile.filePath());
+        entity.setBucketName(storedFile.bucketName());
+        entity.setObjectName(storedFile.objectName());
+        entity.setOriginalFileName(storedFile.originalFileName());
+        entity.setContentType(storedFile.contentType());
+        entity.setFileSize(storedFile.fileSize());
+    }
+
+    private StoredTemplateFile toStoredFile(ReportTemplateEntity entity) {
+        String storageType = resolveStorageType(entity);
+        MinioObject minioObject = parseMinioPath(entity.getFilePath());
+        String bucketName = StringUtils.hasText(entity.getBucketName())
+                ? entity.getBucketName()
+                : minioObject.bucketName();
+        String objectName = StringUtils.hasText(entity.getObjectName())
+                ? entity.getObjectName()
+                : minioObject.objectName();
+        return new StoredTemplateFile(
+                storageType,
+                entity.getFilePath(),
+                bucketName,
+                objectName,
+                entity.getOriginalFileName(),
+                entity.getContentType(),
+                entity.getFileSize()
+        );
+    }
+
+    private String resolveStorageType(ReportTemplateEntity entity) {
+        if (StringUtils.hasText(entity.getBucketName()) && StringUtils.hasText(entity.getObjectName())) {
+            return "MINIO";
+        }
+        if (StringUtils.hasText(entity.getFilePath()) && entity.getFilePath().startsWith("minio://")) {
+            return "MINIO";
+        }
+        if (StringUtils.hasText(entity.getStorageType()) && !isMinioStorage(entity.getStorageType())) {
+            return entity.getStorageType();
+        }
+        return "LOCAL";
+    }
+
+    private MinioObject parseMinioPath(String filePath) {
+        if (!StringUtils.hasText(filePath) || !filePath.startsWith("minio://")) {
+            return new MinioObject(null, null);
+        }
+        String path = filePath.substring("minio://".length());
+        int slashIndex = path.indexOf('/');
+        if (slashIndex <= 0 || slashIndex == path.length() - 1) {
+            return new MinioObject(null, null);
+        }
+        return new MinioObject(path.substring(0, slashIndex), path.substring(slashIndex + 1));
+    }
+
+    private boolean isMinioStorage(String storageType) {
+        return "MINIO".equalsIgnoreCase(storageType);
+    }
+
+    private String normalizeContentType(String contentType) {
+        if (StringUtils.hasText(contentType)) {
+            return contentType;
+        }
+        return StoredTemplateFile.DOCX_CONTENT_TYPE;
+    }
+
     private TemplateResponse toResponse(ReportTemplateEntity entity) {
         TemplateResponse response = new TemplateResponse();
         response.setId(entity.getId());
         response.setName(entity.getName());
         response.setReportType(entity.getReportType());
         response.setVersion(entity.getVersion());
+        response.setStorageType(resolveStorageType(entity));
         response.setFilePath(entity.getFilePath());
+        response.setBucketName(entity.getBucketName());
+        response.setObjectName(entity.getObjectName());
+        response.setOriginalFileName(entity.getOriginalFileName());
+        response.setContentType(entity.getContentType());
+        response.setFileSize(entity.getFileSize());
         response.setConfigJson(entity.getConfigJson());
         response.setEnabled(entity.getEnabled());
         response.setCreatedBy(entity.getCreatedBy());
         response.setCreatedAt(entity.getCreatedAt());
         response.setUpdatedAt(entity.getUpdatedAt());
         return response;
+    }
+
+    private record StoredTemplateFile(
+            String storageType,
+            String filePath,
+            String bucketName,
+            String objectName,
+            String originalFileName,
+            String contentType,
+            Long fileSize
+    ) {
+        private static final String DOCX_CONTENT_TYPE =
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+        private String downloadFileName() {
+            return StringUtils.hasText(originalFileName) ? originalFileName : "template.docx";
+        }
+
+        private String safeContentType() {
+            return StringUtils.hasText(contentType) ? contentType : DOCX_CONTENT_TYPE;
+        }
+    }
+
+    private record MinioObject(String bucketName, String objectName) {
     }
 }

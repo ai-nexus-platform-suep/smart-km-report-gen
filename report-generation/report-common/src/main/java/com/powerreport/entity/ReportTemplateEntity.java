@@ -15,7 +15,13 @@ public class ReportTemplateEntity {
     private String name;
     private String reportType;
     private String version;
+    private String storageType;
     private String filePath;
+    private String bucketName;
+    private String objectName;
+    private String originalFileName;
+    private String contentType;
+    private Long fileSize;
     private String configJson;
     private Boolean enabled;
     private String createdBy;
