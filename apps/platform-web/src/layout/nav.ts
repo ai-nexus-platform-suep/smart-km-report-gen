@@ -61,8 +61,7 @@ export const platformNavItems: NavItem[] = [
     admin: true,
     children: [
       { path: '/km/settings', title: '知识模型配置', admin: true },
-      { path: '/qa/llm', title: 'LLM 配置', admin: true },
-      { path: '/reports/llm-configs', title: '报告模型配置', admin: true },
+      { path: '/qa/llm', title: 'LLM / 报告模型配置', admin: true },
     ],
   },
   {
@@ -111,12 +110,11 @@ export const quickAccessCards = [
   },
   {
     title: '模型配置',
-    description: '集中维护知识模型、问答 LLM 和报告模型配置，避免分散在各业务菜单中。',
+    description: '集中维护知识模型和统一 LLM 配置，报告生成复用同一套模型配置。',
     icon: SetUp,
     links: [
       { label: '知识模型配置', to: '/km/settings' },
-      { label: 'LLM 配置', to: '/qa/llm' },
-      { label: '报告模型配置', to: '/reports/llm-configs' },
+      { label: 'LLM / 报告模型配置', to: '/qa/llm' },
     ],
   },
 ] as const

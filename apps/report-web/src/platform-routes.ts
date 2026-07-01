@@ -57,15 +57,11 @@ export const reportPlatformRoutes: RouteRecordRaw[] = [
   },
   {
     path: '/reports/llm-configs',
-    name: 'ReportLlmConfig',
-    component: () => import('./pages/admin/LlmConfigPage.vue'),
-    meta: { title: '报告模型配置', admin: true },
+    redirect: '/qa/llm',
   },
   {
     path: '/admin/llm-configs',
-    name: 'ReportLlmConfigCompat',
-    component: () => import('./pages/admin/LlmConfigPage.vue'),
-    meta: { title: '报告模型配置', admin: true },
+    redirect: '/qa/llm',
   },
   {
     path: '/admin/dashboard',
