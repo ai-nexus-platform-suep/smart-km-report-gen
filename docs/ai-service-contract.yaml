@@ -188,7 +188,7 @@ components:
           $ref: "#/components/schemas/ChunkStrategy"
         callbackUrl:
           type: string
-          description: Java 状态回调，如 http://km-backend:8091/internal/document/status
+          description: Java 状态回调，如 http://km-backend:8091/internal/documents/status
 
     ProcessDocumentResult:
       type: object

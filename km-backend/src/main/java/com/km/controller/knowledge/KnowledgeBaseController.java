@@ -2,6 +2,7 @@ package com.km.controller.knowledge;
 
 import com.km.common.dto.ApiResponse;
 import com.km.common.dto.PageResult;
+import com.km.controller.support.RequestUserResolver;
 import com.km.dto.request.BatchDeleteRequest;
 import com.km.dto.request.CreateKnowledgeBaseRequest;
 import com.km.dto.request.UpdateKnowledgeBaseRequest;
@@ -18,6 +19,7 @@ import javax.validation.Valid;
 public class KnowledgeBaseController {
 
     private final KnowledgeBaseService knowledgeBaseService;
+    private final RequestUserResolver requestUserResolver;
 
     @GetMapping
     public ApiResponse<PageResult<KnowledgeBaseVO>> list(
@@ -29,9 +31,11 @@ public class KnowledgeBaseController {
     }
 
     @PostMapping
-    public ApiResponse<KnowledgeBaseVO> create(@Valid @RequestBody CreateKnowledgeBaseRequest request) {
-        // TODO: 接入认证后从 @RequestAttribute 获取 userId
-        return ApiResponse.ok(knowledgeBaseService.create(request, 0L));
+    public ApiResponse<KnowledgeBaseVO> create(
+            @Valid @RequestBody CreateKnowledgeBaseRequest request,
+            @RequestHeader(value = "userid", required = false) String userIdHeader) {
+        Long userId = requestUserResolver.requireUserId(userIdHeader);
+        return ApiResponse.ok(knowledgeBaseService.create(request, userId));
     }
 
     // 精确路由必须在 /{id} 之前，否则 batch 会被匹配为 id

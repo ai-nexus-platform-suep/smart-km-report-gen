@@ -59,6 +59,8 @@ curl http://localhost:8091/api/health
 # {"code":0,"message":"ok","data":{"service":"km-backend","status":"UP","version":"1.0.0-SNAPSHOT"}}
 ```
 
+Swagger UI: http://localhost:8091/swagger-ui/index.html
+
 ### 3. 启动前端（可选）
 
 ```bash
@@ -84,6 +86,10 @@ npm run dev
 - `SILICONFLOW_API_KEY`（嵌入/重排，Python 服务使用）
 - `JWT_SECRET`
 
+后端 Spring Boot 配置统一维护在 `km-backend/src/main/resources/application.yml`；本地数据库密码、MinIO、RabbitMQ 等连接信息都在该文件中修改。
+
+MySQL 表结构由 Flyway 自动执行 `km-backend/src/main/resources/db/migration` 初始化；如果本地库先执行过 `docs/user.sql` 导致 KM 表缺失，可用 `docs/mysql-km-schema.sql` 手动修复。不要把 `schema-h2.sql` 用于 MySQL。
+
 ## 对外 API 契约
 
 问答组 / 报告组对接请阅读 [`docs/api-contract.yaml`](docs/api-contract.yaml)。
@@ -99,6 +105,20 @@ npm run dev
 | `/api/admin/config/*` | GET/PUT | 嵌入 / 重排 / 解析器配置 |
 
 内部 Python 契约见 [`docs/ai-service-contract.yaml`](docs/ai-service-contract.yaml)。
+
+MVP 阶段未接入 JWT，创建知识库、上传文档、检索等需要用户上下文的接口必须传请求头 `userid`，后端会写入 `knowledge_base.owner_id` 或 `document.created_by`。
+
+```bash
+curl -X POST http://localhost:8091/api/knowledge-bases \
+  -H "Content-Type: application/json" \
+  -H "userid: 1" \
+  -d '{"name":"demo-kb","description":"demo","docType":"通用文档","chunkStrategy":{"type":"fixed_size","chunkSize":512,"overlap":50},"searchStrategy":"vector_rerank"}'
+
+curl -F "file=@sample.pdf" \
+  -F "tags=demo" \
+  -H "userid: 1" \
+  http://localhost:8091/api/knowledge-bases/{kbId}/documents
+```
 
 ## 组员开发流程
 

@@ -1,6 +1,7 @@
 package com.km.dto.response;
 
 import java.time.LocalDateTime;
+import java.util.Map;
 
 public class KnowledgeBaseVO {
     private String id;
@@ -8,7 +9,7 @@ public class KnowledgeBaseVO {
     private String description;
     private String docType;
     private Integer docCount;
-    private String chunkStrategy;
+    private Map<String, Object> chunkStrategy;
     private String searchStrategy;
     private Long ownerId;
     private String ownerName;
@@ -25,8 +26,8 @@ public class KnowledgeBaseVO {
     public void setDocType(String docType) { this.docType = docType; }
     public Integer getDocCount() { return docCount; }
     public void setDocCount(Integer docCount) { this.docCount = docCount; }
-    public String getChunkStrategy() { return chunkStrategy; }
-    public void setChunkStrategy(String chunkStrategy) { this.chunkStrategy = chunkStrategy; }
+    public Map<String, Object> getChunkStrategy() { return chunkStrategy; }
+    public void setChunkStrategy(Map<String, Object> chunkStrategy) { this.chunkStrategy = chunkStrategy; }
     public String getSearchStrategy() { return searchStrategy; }
     public void setSearchStrategy(String searchStrategy) { this.searchStrategy = searchStrategy; }
     public Long getOwnerId() { return ownerId; }

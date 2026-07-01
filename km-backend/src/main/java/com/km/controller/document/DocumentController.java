@@ -2,6 +2,7 @@ package com.km.controller.document;
 
 import com.km.common.dto.ApiResponse;
 import com.km.common.dto.PageResult;
+import com.km.controller.support.RequestUserResolver;
 import com.km.dto.request.BatchDeleteRequest;
 import com.km.dto.request.UpdateDocumentTagsRequest;
 import com.km.dto.response.DocumentBatchDeleteResponse;
@@ -10,7 +11,13 @@ import com.km.dto.response.DocumentUploadResponse;
 import com.km.service.DocumentService;
 import com.km.vo.ChunkVO;
 import com.km.vo.DocumentVO;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.enums.ParameterIn;
+import io.swagger.v3.oas.annotations.media.Content;
+import io.swagger.v3.oas.annotations.media.Schema;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -26,21 +33,22 @@ import javax.validation.Valid;
 public class DocumentController {
 
     private final DocumentService documentService;
+    private final RequestUserResolver requestUserResolver;
 
     /**
      * 上传文档到知识库
      * POST /api/knowledge-bases/{kbId}/documents
      */
-    @PostMapping("/knowledge-bases/{kbId}/documents")
+    @Operation(summary = "上传文档到知识库", requestBody = @io.swagger.v3.oas.annotations.parameters.RequestBody(required = true, content = @Content(mediaType = MediaType.MULTIPART_FORM_DATA_VALUE,
+            schema = @Schema(implementation = DocumentUploadForm.class))))
+    @PostMapping(value = "/knowledge-bases/{kbId}/documents", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<DocumentUploadResponse> uploadDocument(
             @PathVariable String kbId,
-            @RequestParam("file") MultipartFile file,
-            @RequestParam(value = "tags", required = false) String tags,
-            @RequestAttribute(value = "userId", required = false) Long userId) {
-        // TODO: userId 待 JWT 拦截器注入，暂用 0 占位
-        if (userId == null) {
-            userId = 0L;
-        }
+            @Parameter(hidden = true) @RequestPart("file") MultipartFile file,
+            @Parameter(hidden = true) @RequestPart(value = "tags", required = false) String tags,
+            @Parameter(name = "userid", description = "用户 ID", required = true, in = ParameterIn.HEADER)
+            @RequestHeader(value = "userid", required = false) String userIdHeader) {
+        Long userId = requestUserResolver.requireUserId(userIdHeader);
         DocumentUploadResponse result = documentService.uploadDocument(kbId, file, tags, userId);
         return ApiResponse.ok(result);
     }
@@ -135,5 +143,13 @@ public class DocumentController {
             @Valid @RequestBody UpdateDocumentTagsRequest request) {
         DocumentVO result = documentService.updateTags(docId, request.getTags());
         return ApiResponse.ok(result);
+    }
+
+    public static class DocumentUploadForm {
+        @Schema(description = "上传文件", type = "string", format = "binary", required = true)
+        public MultipartFile file;
+
+        @Schema(description = "标签 JSON 字符串", type = "string", required = false)
+        public String tags;
     }
 }
