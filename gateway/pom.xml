@@ -47,6 +47,10 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>com.myenglish</groupId>
+            <artifactId>common</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

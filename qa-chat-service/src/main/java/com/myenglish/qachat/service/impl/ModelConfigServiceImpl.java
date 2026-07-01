@@ -34,11 +34,12 @@ public class ModelConfigServiceImpl implements ModelConfigService {
 
     @Override
     public List<ModelConfigVO> listByUser(Long userId) {
+        log.info("开始查询");
         List<ModelConfig> configs = modelConfigMapper.selectList(
                 new LambdaQueryWrapper<ModelConfig>()
                         .eq(ModelConfig::getUserId, userId)
                         .orderByDesc(ModelConfig::getCreatedAt));
-
+        log.info("查询结束 {}",configs);
         return configs.stream().map(this::toVO).toList();
     }
 

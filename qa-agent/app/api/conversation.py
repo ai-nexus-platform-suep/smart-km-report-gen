@@ -54,12 +54,12 @@ def _to_message_vo(message: QaMessage) -> MessageVO:
 
 @router.get("/conversations")
 async def list_conversations_api(
-    x_user_id: int = Header(alias="X-User-Id"),
+    user_id: int = Header(alias="user-id"),
     page: int = Query(default=1, ge=1),
     size: int = Query(default=20, ge=1, le=100),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[PageResult[ConversationVO]]:
-    items, total = await list_conversations(db, user_id=x_user_id, page=page, size=size)
+    items, total = await list_conversations(db, user_id=user_id, page=page, size=size)
     return ApiResponse(
         data=PageResult(
             items=[_to_conversation_vo(item) for item in items],
@@ -73,11 +73,11 @@ async def list_conversations_api(
 @router.post("/conversations")
 async def create_conversation_api(
     req: CreateConversationReq | None = None,
-    x_user_id: int = Header(alias="X-User-Id"),
+    user_id: int = Header(alias="user-id"),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[ConversationVO]:
     title = req.title if req else None
-    conversation = await create_conversation(db, user_id=x_user_id, title=title)
+    conversation = await create_conversation(db, user_id=user_id, title=title)
     return ApiResponse(data=_to_conversation_vo(conversation))
 
 

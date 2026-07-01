@@ -198,7 +198,7 @@ async def _stream_chat(
 @router.post("/chat")
 async def chat(
     req: ChatReq,
-    x_user_id: int = Header(alias="X-User-Id"),
+    user_id: int = Header(alias="user-id"),
 ) -> EventSourceResponse:
     if not req.question.strip():
         raise HTTPException(status_code=400, detail="问题不能为空")
@@ -213,7 +213,7 @@ async def chat(
 
         async with session_factory() as db:
             try:
-                async for event in _stream_chat(req, db, x_user_id):
+                async for event in _stream_chat(req, db, user_id):
                     yield event
                 await db.commit()
             except Exception:
@@ -226,12 +226,12 @@ async def chat(
 @router.post("/chat/test", response_model=ChatTestResp)
 async def chat_test(
     req: ChatTestReq,
-    x_user_id: int = Header(alias="X-User-Id"),
+    user_id: int = Header(alias="user-id"),
 ) -> ChatTestResp:
     if not req.question.strip():
         raise HTTPException(status_code=400, detail="问题不能为空")
 
-    user_id = req.user_id or x_user_id
+    user_id = req.user_id or user_id
     model_config = await fetch_llm_config(user_id=user_id)
     agent_input = {
         "messages": _test_history_messages(req),
