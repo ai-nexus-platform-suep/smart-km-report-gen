@@ -16,7 +16,7 @@ spring:
             - Path=/api/conversations/**,/api/chat/**
         # --- QA: 模型配置 & 统计 (Java) ---
         - id: qa-chat-service
-          uri: http://localhost:8082
+          uri: http://localhost:8090
           predicates:
             - Path=/api/model-configs/**,/api/stats/qa/**
         # --- Report ---
@@ -32,6 +32,11 @@ spring:
 
 server:
   port: 8080
+
+logging:
+  level:
+    com.qa.gateway: INFO
+    org.springframework.cloud.gateway: INFO
 
 app:
   jwt:

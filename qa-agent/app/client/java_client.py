@@ -35,7 +35,7 @@ async def _fetch_json(path: str) -> dict | None:
     return None
 
 
-async def fetch_llm_config(user_id: int = 1, scenario: str = "chat") -> dict:
+async def fetch_llm_config(user_id: int, scenario: str = "chat") -> dict:
     """从 Java 获取指定用户在某场景下的默认模型配置（apiKey 已解密）"""
     remote_config = await _fetch_json(
         f"internal/model-configs/default?userId={user_id}&scenario={scenario}"

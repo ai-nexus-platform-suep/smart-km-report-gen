@@ -1,6 +1,7 @@
 """LangGraph 节点实现与共享上下文/引用集成。"""
 
 import json
+import time
 from collections.abc import AsyncIterator
 
 import httpx
@@ -8,12 +9,15 @@ from langgraph.config import get_stream_writer
 
 from app.client.knowledge_client import search_knowledge
 from app.core.config import settings
+from app.core.logging import get_logger
 from app.graph.context import build_context
 from app.graph.state import AgentState
 from app.model.embedding import embed_query
 from app.model.reranker import rerank
 from app.service.citation_service import build_citations, merge_consecutive_citations
 from app.service.thinking_service import add_thinking_step, to_sse_event
+
+logger = get_logger("graph")
 
 
 def _get_llm_config(state: dict) -> dict:
@@ -360,6 +364,7 @@ def _build_messages(
 async def intent_node(state: AgentState) -> dict:
     _emit_start_step("intent", "正在识别用户意图")
     question = _question_from_state(state)
+    logger.info("意图识别 问题=%s", question[:60])
     config = _get_llm_config(state)
     decision = await _classify_intent(question, config)
     intent = decision["intent"]
@@ -407,6 +412,8 @@ async def clarify_node(state: AgentState) -> dict:
 async def retrieve_node(state: AgentState) -> dict:
     _emit_start_step("retrieve", "正在检索知识库片段")
     question = _question_from_state(state)
+    kb_ids = state.get("selected_kb_ids") or []
+    logger.info("知识检索 问题=%s kb_ids=%s", question[:60], kb_ids)
     embedding = await embed_query(question)
     documents = await search_knowledge(
         query=question,
@@ -427,6 +434,8 @@ async def retrieve_node(state: AgentState) -> dict:
 
 async def rerank_node(state: AgentState) -> dict:
     _emit_start_step("rerank", "正在重排序候选片段")
+    candidate_count = len(state.get("retrieved_docs") or [])
+    logger.info("重排序 候选片段=%d", candidate_count)
     documents = await rerank(
         _question_from_state(state),
         state.get("retrieved_docs") or [],
@@ -440,7 +449,10 @@ async def rerank_node(state: AgentState) -> dict:
 
 async def generate_node(state: AgentState) -> dict:
     _emit_start_step("generate", "正在生成回答")
+    start = time.perf_counter()
     question = _question_from_state(state)
+    model_name = _get_llm_config(state).get("model_name", "unknown")
+    logger.info("生成回答 模型=%s 问题=%s", model_name, question[:60])
     documents = state.get("retrieved_docs") or []
     no_knowledge = state.get("intent") in RAG_INTENTS and not documents
     llm_messages = _build_messages(question, documents, no_knowledge, state.get("messages") or [])

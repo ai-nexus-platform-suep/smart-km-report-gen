@@ -1,6 +1,6 @@
 """GET/POST/DELETE /conversations (人员 B 独占)"""
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..api.schemas import (
@@ -12,7 +12,6 @@ from ..api.schemas import (
     PageResult,
     UpdateConversationReq,
 )
-from app.db.constants import DEFAULT_USER_ID
 from app.db.models import QaMessage, QaSession
 from app.db.repository import (
     create_conversation,
@@ -55,9 +54,9 @@ def _to_message_vo(message: QaMessage) -> MessageVO:
 
 @router.get("/conversations")
 async def list_conversations_api(
+    user_id: int = Header(alias="user-id"),
     page: int = Query(default=1, ge=1),
     size: int = Query(default=20, ge=1, le=100),
-    user_id: int = Query(default=DEFAULT_USER_ID),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[PageResult[ConversationVO]]:
     items, total = await list_conversations(db, user_id=user_id, page=page, size=size)
@@ -74,7 +73,7 @@ async def list_conversations_api(
 @router.post("/conversations")
 async def create_conversation_api(
     req: CreateConversationReq | None = None,
-    user_id: int = Query(default=DEFAULT_USER_ID),
+    user_id: int = Header(alias="user-id"),
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[ConversationVO]:
     title = req.title if req else None

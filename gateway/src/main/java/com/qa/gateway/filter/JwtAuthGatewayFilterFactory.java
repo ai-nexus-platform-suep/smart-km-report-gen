@@ -51,7 +51,7 @@ public class JwtAuthGatewayFilterFactory implements GlobalFilter, Ordered {
 
         // 白名单路径直接放行
         if (isPublicPath(path)) {
-            log.debug("Public path accessed: {}", path);
+            log.info("Public path accessed (bypass auth): {}", path);
             return chain.filter(exchange);
         }
 
@@ -77,7 +77,7 @@ public class JwtAuthGatewayFilterFactory implements GlobalFilter, Ordered {
             Long userId = jwtTokenProvider.getUserId(token);
             String roles = String.join(",", jwtTokenProvider.getRoles(token));
 
-            log.debug("JWT auth success: userId={}, username={}, path={}", userId, username, path);
+            log.info("JWT auth success: userId={}, username={}, path={}", userId, username, path);
 
             // 将用户信息注入请求头，传递给下游服务
             ServerHttpRequest mutatedRequest = request.mutate()
