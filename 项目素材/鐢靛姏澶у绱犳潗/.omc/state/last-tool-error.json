@@ -1,0 +1,7 @@
+{
+  "tool_name": "Read",
+  "tool_input_preview": "{\"file_path\":\"/Users/zhangyan/Documents/电力大学素材/2025年迎峰度夏闭环检查问题汇总.csv\"}",
+  "error": "File content (27817 tokens) exceeds maximum allowed tokens (25000). Use offset and limit parameters to read specific portions of the file, or search for specific content instead of reading the whole file.",
+  "timestamp": "2026-06-29T03:02:48.676Z",
+  "retry_count": 1
+}

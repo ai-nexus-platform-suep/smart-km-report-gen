@@ -123,3 +123,24 @@ CREATE TABLE IF NOT EXISTS report_templates (
   KEY idx_templates_type_enabled (report_type, enabled),
   KEY idx_templates_storage_object (bucket_name, object_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='报告模板表';
+
+CREATE TABLE IF NOT EXISTS project_assets (
+  id CHAR(36) NOT NULL COMMENT '素材 ID，UUID',
+  name VARCHAR(300) NOT NULL COMMENT '素材名称',
+  category VARCHAR(50) NOT NULL DEFAULT 'OTHER' COMMENT '素材分类：STANDARD_DOC / REPORT_DATA / OTHER',
+  file_type VARCHAR(20) NOT NULL COMMENT '文件类型扩展名，例如 pdf / xlsx',
+  file_path VARCHAR(1000) NOT NULL COMMENT '存储路径',
+  file_size BIGINT NOT NULL DEFAULT 0 COMMENT '文件大小，字节',
+  sha256 CHAR(64) NULL COMMENT '文件 SHA256',
+  description VARCHAR(1000) NULL COMMENT '描述',
+  tags VARCHAR(500) NULL COMMENT '标签，逗号分隔',
+  enabled TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否启用',
+  created_by VARCHAR(100) NOT NULL DEFAULT 'local_user' COMMENT '上传人',
+  created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
+  updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '更新时间',
+  PRIMARY KEY (id),
+  KEY idx_assets_category (category),
+  KEY idx_assets_enabled (enabled),
+  KEY idx_assets_file_type (file_type),
+  KEY idx_assets_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='专业素材文档表';

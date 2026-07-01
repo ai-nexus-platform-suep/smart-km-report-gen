@@ -2,11 +2,14 @@ package com.powerreport.admin.controller;
 
 import com.myenglish.qacommon.dto.ApiResponse;
 import com.powerreport.admin.dto.TemplateConfigRequest;
+import com.powerreport.admin.dto.TemplateConfigSchemaResponse;
 import com.powerreport.admin.dto.TemplateFileResource;
 import com.powerreport.admin.dto.TemplatePageResponse;
 import com.powerreport.admin.dto.TemplateResponse;
 import com.powerreport.admin.dto.TemplateUpdateRequest;
+import com.powerreport.admin.dto.TemplateVisualConfigDto;
 import com.powerreport.admin.service.TemplateService;
+import com.powerreport.admin.service.TemplateVisualEditorService;
 import jakarta.validation.Valid;
 import java.nio.charset.StandardCharsets;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +37,17 @@ import org.springframework.web.multipart.MultipartFile;
 public class ReportTemplateController {
 
     private final TemplateService templateService;
+    private final TemplateVisualEditorService visualEditorService;
+
+    @GetMapping("/config-schema")
+    public ApiResponse<TemplateConfigSchemaResponse> configSchema() {
+        return ApiResponse.success(visualEditorService.getConfigSchema());
+    }
+
+    @GetMapping("/defaults/{reportType}")
+    public ApiResponse<TemplateVisualConfigDto> defaultConfig(@PathVariable String reportType) {
+        return ApiResponse.success(visualEditorService.getDefaultConfig(reportType));
+    }
 
     @GetMapping
     public ApiResponse<TemplatePageResponse> list(
@@ -99,6 +113,19 @@ public class ReportTemplateController {
             @Valid @RequestBody TemplateConfigRequest request
     ) {
         return ApiResponse.success(templateService.updateConfig(templateId, request));
+    }
+
+    @GetMapping("/{templateId}/visual-config")
+    public ApiResponse<TemplateVisualConfigDto> getVisualConfig(@PathVariable String templateId) {
+        return ApiResponse.success(visualEditorService.getVisualConfig(templateId));
+    }
+
+    @PutMapping("/{templateId}/visual-config")
+    public ApiResponse<TemplateResponse> updateVisualConfig(
+            @PathVariable String templateId,
+            @Valid @RequestBody TemplateVisualConfigDto config
+    ) {
+        return ApiResponse.success(visualEditorService.updateVisualConfig(templateId, config));
     }
 
     @DeleteMapping("/{templateId}")
