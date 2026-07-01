@@ -11,6 +11,7 @@ import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 
@@ -25,7 +26,7 @@ public class JwtTokenProvider {
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
-    public String generateAccessToken(Long userId, String username, List<String> roles) {
+    public String generateAccessToken(Long userId, String username, List<String> roles, List<String> permissions) {
         Date now = new Date();
         Date expiration = new Date(now.getTime() + jwtProperties.getAccessTokenExpiration() * 1000);
 
@@ -34,6 +35,7 @@ public class JwtTokenProvider {
                 .subject(username)
                 .claim("userId", userId)
                 .claim("roles", roles)
+                .claim("permissions", permissions)
                 .issuedAt(now)
                 .expiration(expiration)
                 .signWith(getSigningKey())
@@ -82,7 +84,14 @@ public class JwtTokenProvider {
 
     @SuppressWarnings("unchecked")
     public List<String> getRoles(String token) {
-        return parseToken(token).get("roles", List.class);
+        List<String> roles = parseToken(token).get("roles", List.class);
+        return roles != null ? roles : Collections.emptyList();
+    }
+
+    @SuppressWarnings("unchecked")
+    public List<String> getPermissions(String token) {
+        List<String> permissions = parseToken(token).get("permissions", List.class);
+        return permissions != null ? permissions : Collections.emptyList();
     }
 
     public boolean isExpired(String token) {

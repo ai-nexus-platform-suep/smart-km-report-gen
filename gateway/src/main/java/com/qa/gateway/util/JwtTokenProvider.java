@@ -9,11 +9,9 @@ import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.util.Base64;
+import java.util.Collections;
 import java.util.List;
 
-/**
- * Gateway 专用 JWT 工具：只验签，不签发
- */
 @Component
 public class JwtTokenProvider {
 
@@ -56,6 +54,13 @@ public class JwtTokenProvider {
 
     @SuppressWarnings("unchecked")
     public List<String> getRoles(String token) {
-        return parseToken(token).get("roles", List.class);
+        List<String> roles = parseToken(token).get("roles", List.class);
+        return roles != null ? roles : Collections.emptyList();
+    }
+
+    @SuppressWarnings("unchecked")
+    public List<String> getPermissions(String token) {
+        List<String> permissions = parseToken(token).get("permissions", List.class);
+        return permissions != null ? permissions : Collections.emptyList();
     }
 }

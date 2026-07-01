@@ -11,6 +11,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app.api.chat import router as chat_router
 from app.api.conversation import router as conversation_router
 from app.core.logging import setup_logging
+from app.core.user_context_middleware import UserContextMiddleware
 
 logger = setup_logging()
 
@@ -40,6 +41,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.add_middleware(RequestLogMiddleware)
+app.add_middleware(UserContextMiddleware)
 
 app.include_router(chat_router, prefix="/api")
 app.include_router(conversation_router, prefix="/api")

@@ -27,9 +27,9 @@ public class CorsConfig {
         config.setMaxAge(3600L);
 
         config.setExposedHeaders(Arrays.asList(
-                "X-User-Id",
-                "X-Username",
-                "X-Roles",
+                "user-id",
+                "username",
+                "roles",
                 "Content-Disposition"
         ));
 
