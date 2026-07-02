@@ -14,6 +14,7 @@ import com.km.repository.DocumentMapper;
 import com.km.service.SearchService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestClientResponseException;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -33,8 +34,8 @@ public class SearchServiceImpl implements SearchService {
     private final ChunkMapper chunkMapper;
 
     public SearchServiceImpl(KmAiClient kmAiClient,
-                             DocumentMapper documentMapper,
-                             ChunkMapper chunkMapper) {
+                              DocumentMapper documentMapper,
+                              ChunkMapper chunkMapper) {
         this.kmAiClient = kmAiClient;
         this.documentMapper = documentMapper;
         this.chunkMapper = chunkMapper;
@@ -56,13 +57,25 @@ public class SearchServiceImpl implements SearchService {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "topK must be between 1 and 50");
         }
         String searchMode = request.getSearchMode() != null ? request.getSearchMode() : "vector_rerank";
-        if (!"vector".equals(searchMode) && !"vector_rerank".equals(searchMode)) {
+        if (!"vector".equals(searchMode) && !"vector_rerank".equals(searchMode) && !"hybrid".equals(searchMode)) {
             throw new BusinessException(ErrorCode.BAD_REQUEST, "Unsupported searchMode: " + searchMode);
         }
         float rerankThreshold = request.getRerankThreshold() != null ? request.getRerankThreshold() : 0.5f;
+        if ("vector_rerank".equals(searchMode)) {
+            validateThreshold("rerankThreshold", rerankThreshold);
+        }
 
-        List<String> kbIds = request.getKnowledgeBaseIds();
+        List<String> kbIds = request.getKnowledgeBaseIds() != null ? request.getKnowledgeBaseIds() : Collections.emptyList();
         float similarityThreshold = request.getSimilarityThreshold() != null ? request.getSimilarityThreshold() : 0.6f;
+        validateThreshold("similarityThreshold", similarityThreshold);
+
+        if ("hybrid".equals(searchMode)) {
+            SearchResultVO result = new SearchResultVO();
+            List<SearchResultItemVO> items = performHybridSearch(query, kbIds, topK, similarityThreshold, request);
+            result.setResults(items);
+            result.setTotal(items.size());
+            return result;
+        }
 
         // 调用向量检索（AI 服务）
         List<VectorSearchResponse.VectorSearchHit> hits;
@@ -108,6 +121,73 @@ public class SearchServiceImpl implements SearchService {
         VectorSearchRequest req = new VectorSearchRequest(query, kbIds, topK, threshold);
         VectorSearchResponse resp = kmAiClient.vectorSearch(req);
         return resp != null ? resp.getHits() : Collections.emptyList();
+    }
+
+    // ========== 混合检索 ==========
+
+    private List<SearchResultItemVO> performHybridSearch(String query, List<String> kbIds, int topK,
+                                                          float similarityThreshold, SearchRequest request) {
+        validateHybridWeights(request);
+        try {
+            HybridSearchResponse response = kmAiClient.hybridSearch(new HybridSearchRequest(
+                    query,
+                    kbIds,
+                    topK,
+                    similarityThreshold,
+                    request.getBm25Weight(),
+                    request.getVectorWeight()));
+            List<SearchResultItemVO> items = hybridHitsToItems(response != null ? response.getHits() : null);
+            if (!items.isEmpty()) {
+                backfillDocumentNames(items);
+                return items;
+            }
+        } catch (BusinessException e) {
+            throw e;
+        } catch (RestClientResponseException e) {
+            if (e.getRawStatusCode() >= 400 && e.getRawStatusCode() < 500) {
+                throw new BusinessException(ErrorCode.BAD_REQUEST, "Hybrid search is unavailable: " + e.getResponseBodyAsString());
+            }
+            log.warn("AI hybrid search failed: {}, falling back to LIKE search", e.getMessage());
+        } catch (Exception e) {
+            log.warn("AI hybrid search failed: {}, falling back to LIKE search", e.getMessage());
+        }
+        return performBasicSearch(query, kbIds, topK);
+    }
+
+    private void validateHybridWeights(SearchRequest request) {
+        Float bm25WeightValue = request.getBm25Weight();
+        Float vectorWeightValue = request.getVectorWeight();
+        if (bm25WeightValue == null && vectorWeightValue == null) {
+            return;
+        }
+        float bm25Weight = bm25WeightValue != null ? bm25WeightValue : 0.45f;
+        float vectorWeight = vectorWeightValue != null ? vectorWeightValue : 0.55f;
+        if (!Float.isFinite(bm25Weight) || !Float.isFinite(vectorWeight) || bm25Weight < 0 || vectorWeight < 0) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Hybrid weights must be non-negative");
+        }
+        if (bm25Weight + vectorWeight <= 0) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "Hybrid weights cannot both be zero");
+        }
+    }
+
+    private List<SearchResultItemVO> hybridHitsToItems(List<HybridSearchResponse.HybridSearchHit> hits) {
+        if (hits == null) return Collections.emptyList();
+        List<SearchResultItemVO> items = new ArrayList<>(hits.size());
+        for (HybridSearchResponse.HybridSearchHit hit : hits) {
+            SearchResultItemVO item = new SearchResultItemVO();
+            item.setChunkId(hit.getChunkId());
+            item.setDocumentId(hit.getDocumentId());
+            item.setDocumentName(null);
+            item.setChapterPath(hit.getChapterPath());
+            item.setContent(hit.getContent());
+            item.setSimilarityScore(hit.getSimilarityScore());
+            item.setRerankScore(null);
+            item.setBm25Score(hit.getBm25Score());
+            item.setHybridScore(hit.getHybridScore());
+            item.setChunkType(hit.getChunkType());
+            items.add(item);
+        }
+        return items;
     }
 
     // ========== 重排序 ==========
@@ -180,8 +260,16 @@ public class SearchServiceImpl implements SearchService {
         item.setContent(hit.getContent());
         item.setSimilarityScore(hit.getSimilarityScore());
         item.setRerankScore(null);
+        item.setBm25Score(null);
+        item.setHybridScore(null);
         item.setChunkType("paragraph");
         return item;
+    }
+
+    private void validateThreshold(String fieldName, float value) {
+        if (!Float.isFinite(value) || value < 0 || value > 1) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, fieldName + " must be between 0 and 1");
+        }
     }
 
     // ========== 回填文档名称 ==========

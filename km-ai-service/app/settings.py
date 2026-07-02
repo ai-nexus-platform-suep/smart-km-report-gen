@@ -39,6 +39,16 @@ def _non_negative_int_env(name: str, default: int) -> int:
         return default
 
 
+def _float_env(name: str, default: float) -> float:
+    value = os.getenv(name)
+    if value is None or not value.strip():
+        return default
+    try:
+        return float(value)
+    except ValueError:
+        return default
+
+
 def _str_env(name: str, default: str) -> str:
     value = os.getenv(name)
     if value is None or not value.strip():
@@ -100,6 +110,16 @@ class Settings:
     qdrant_api_key: str
     qdrant_collection: str
     qdrant_timeout_seconds: int
+    elasticsearch_enabled: bool
+    elasticsearch_base_url: str
+    elasticsearch_index_name: str
+    elasticsearch_username: str
+    elasticsearch_password: str
+    elasticsearch_api_key: str
+    elasticsearch_timeout_seconds: int
+    hybrid_bm25_weight: float
+    hybrid_vector_weight: float
+    hybrid_candidate_multiplier: int
     minio_endpoint: str
     minio_access_key: str
     minio_secret_key: str
@@ -172,6 +192,16 @@ class Settings:
             qdrant_api_key=_str_env("QDRANT_API_KEY", ""),
             qdrant_collection=_str_env("QDRANT_COLLECTION", "km_chunks"),
             qdrant_timeout_seconds=_int_env("QDRANT_TIMEOUT_SECONDS", 30),
+            elasticsearch_enabled=_bool_env("KM_ELASTICSEARCH_ENABLED", False),
+            elasticsearch_base_url=_str_env("KM_ELASTICSEARCH_BASE_URL", "http://localhost:9200").rstrip("/"),
+            elasticsearch_index_name=_str_env("KM_ELASTICSEARCH_INDEX_NAME", "km_chunks_bm25"),
+            elasticsearch_username=_str_env("KM_ELASTICSEARCH_USERNAME", ""),
+            elasticsearch_password=_str_env("KM_ELASTICSEARCH_PASSWORD", ""),
+            elasticsearch_api_key=_str_env("KM_ELASTICSEARCH_API_KEY", ""),
+            elasticsearch_timeout_seconds=_int_env("KM_ELASTICSEARCH_TIMEOUT_SECONDS", 5),
+            hybrid_bm25_weight=_float_env("KM_SEARCH_HYBRID_BM25_WEIGHT", 0.45),
+            hybrid_vector_weight=_float_env("KM_SEARCH_HYBRID_VECTOR_WEIGHT", 0.55),
+            hybrid_candidate_multiplier=_int_env("KM_SEARCH_HYBRID_CANDIDATE_MULTIPLIER", 3),
             minio_endpoint=endpoint,
             minio_access_key=os.getenv("MINIO_ACCESS_KEY", "minioadmin"),
             minio_secret_key=os.getenv("MINIO_SECRET_KEY", "minioadmin"),

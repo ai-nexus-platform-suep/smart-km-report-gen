@@ -14,5 +14,7 @@ public class SearchRequest {
     private String searchMode = "vector_rerank";
     private Float similarityThreshold = 0.6f;
     private Float rerankThreshold = 0.5f;
+    private Float bm25Weight;
+    private Float vectorWeight;
     private Map<String, String> tagFilters;
 }

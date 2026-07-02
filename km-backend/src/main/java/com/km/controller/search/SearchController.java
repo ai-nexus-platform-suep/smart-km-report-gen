@@ -25,7 +25,7 @@ public class SearchController {
     }
 
     /**
-     * 执行知识检索。支持 vector / vector_rerank 两种模式。
+     * 执行知识检索。支持 vector / vector_rerank / hybrid 模式。
      * MVP 阶段 JWT 暂未启用，userId 从 userid 头取。
      */
     @PostMapping("/search")

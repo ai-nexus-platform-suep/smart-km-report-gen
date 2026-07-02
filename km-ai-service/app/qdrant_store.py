@@ -104,6 +104,8 @@ class QdrantVectorStore:
                     "documentId": payload.get("document_id"),
                     "content": payload.get("content"),
                     "chapterPath": payload.get("chapter_path"),
+                    "chunkIndex": payload.get("chunk_index"),
+                    "chunkType": payload.get("chunk_type"),
                     "similarityScore": float(hit.score),
                 }
             )

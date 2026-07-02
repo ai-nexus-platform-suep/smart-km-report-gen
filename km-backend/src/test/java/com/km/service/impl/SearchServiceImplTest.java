@@ -178,6 +178,68 @@ class SearchServiceImplTest {
                 req.getSimilarityThreshold() != null && req.getSimilarityThreshold() == 0.7f));
     }
 
+    @Test
+    void shouldDelegateHybridSearchToAiService() {
+        SearchRequest request = createDefaultRequest("变压器油温异常");
+        request.setSearchMode("hybrid");
+        request.setTopK(3);
+        request.setBm25Weight(0.5f);
+        request.setVectorWeight(0.5f);
+        HybridSearchResponse response = new HybridSearchResponse();
+        response.setHits(Collections.singletonList(createHybridHit("chunk-a", "doc-a", 0.8f, 12f, 0.9f)));
+        when(kmAiClient.hybridSearch(any())).thenReturn(response);
+
+        SearchResultVO result = searchService.search(request, mockUserId);
+
+        assertEquals(1, result.getTotal());
+        assertEquals("chunk-a", result.getResults().get(0).getChunkId());
+        assertEquals(12f, result.getResults().get(0).getBm25Score(), 0.001f);
+        assertEquals(0.8f, result.getResults().get(0).getSimilarityScore(), 0.001f);
+        assertEquals(0.9f, result.getResults().get(0).getHybridScore(), 0.001f);
+        verify(kmAiClient).hybridSearch(argThat(req ->
+                req.getTopK() == 3
+                        && req.getBm25Weight() == 0.5f
+                        && req.getVectorWeight() == 0.5f
+                        && req.getSimilarityThreshold() == 0.6f));
+        verify(kmAiClient, never()).vectorSearch(any());
+    }
+
+    @Test
+    void shouldRejectInvalidHybridWeights() {
+        SearchRequest request = createDefaultRequest("变压器油温异常");
+        request.setSearchMode("hybrid");
+        request.setBm25Weight(0f);
+        request.setVectorWeight(0f);
+
+        assertThrows(BusinessException.class, () -> searchService.search(request, mockUserId));
+        verify(kmAiClient, never()).hybridSearch(any());
+    }
+
+    @Test
+    void shouldRejectNanHybridWeights() {
+        SearchRequest request = createDefaultRequest("变压器油温异常");
+        request.setSearchMode("hybrid");
+        request.setBm25Weight(Float.NaN);
+        request.setVectorWeight(1f);
+
+        assertThrows(BusinessException.class, () -> searchService.search(request, mockUserId));
+        verify(kmAiClient, never()).hybridSearch(any());
+    }
+
+    @Test
+    void shouldFallbackToBasicSearchWhenAiHybridSearchFails() {
+        SearchRequest request = createDefaultRequest("变压器油温异常");
+        request.setSearchMode("hybrid");
+        when(kmAiClient.hybridSearch(any())).thenThrow(new RuntimeException("timeout"));
+        when(chunkMapper.searchByKeyword(anyString(), anyList(), anyInt())).thenReturn(Collections.emptyList());
+
+        SearchResultVO result = searchService.search(request, mockUserId);
+
+        assertEquals(0, result.getTotal());
+        verify(kmAiClient).hybridSearch(any());
+        verify(chunkMapper).searchByKeyword(anyString(), anyList(), anyInt());
+    }
+
     // ====== 辅助方法 ======
 
     private SearchRequest createDefaultRequest(String query) {
@@ -206,6 +268,30 @@ class SearchServiceImplTest {
         }
         response.setHits(hits);
         return response;
+    }
+
+    private VectorSearchResponse.VectorSearchHit createVectorHit(String chunkId, String docId, float score) {
+        VectorSearchResponse.VectorSearchHit hit = new VectorSearchResponse.VectorSearchHit();
+        hit.setChunkId(chunkId);
+        hit.setDocumentId(docId);
+        hit.setContent("vector content " + chunkId);
+        hit.setChapterPath("vector path");
+        hit.setSimilarityScore(score);
+        return hit;
+    }
+
+    private HybridSearchResponse.HybridSearchHit createHybridHit(String chunkId, String docId, float similarityScore,
+                                                                 float bm25Score, float hybridScore) {
+        HybridSearchResponse.HybridSearchHit hit = new HybridSearchResponse.HybridSearchHit();
+        hit.setChunkId(chunkId);
+        hit.setDocumentId(docId);
+        hit.setContent("hybrid content " + chunkId);
+        hit.setChapterPath("hybrid path");
+        hit.setChunkType("paragraph");
+        hit.setSimilarityScore(similarityScore);
+        hit.setBm25Score(bm25Score);
+        hit.setHybridScore(hybridScore);
+        return hit;
     }
 
     private RerankResponse createRerankResponse(List<Integer> indices, List<Float> scores) {

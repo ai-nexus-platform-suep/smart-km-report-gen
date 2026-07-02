@@ -1,17 +1,22 @@
 from __future__ import annotations
 
-from fastapi import FastAPI
+import logging
+
+from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from .backend_client import BackendClient
 from .batch_reindex import BatchReindexRequest, BatchReindexService
+from .elasticsearch_store import ElasticsearchChunkStore
 from .embedder import Embedder
+from .hybrid_search import HybridSearchService
 from .qdrant_store import QdrantVectorStore
 from .settings import Settings
 
 
 app = FastAPI(title="km-ai-service", version="0.1.0")
 _batch_reindex_service: BatchReindexService | None = None
+logger = logging.getLogger(__name__)
 
 
 def _get_batch_reindex_service(settings: Settings) -> BatchReindexService:
@@ -65,6 +70,19 @@ class VectorSearchRequest(BaseModel):
     similarityThreshold: float = 0.6
 
 
+class HybridSearchRequest(BaseModel):
+    query: str
+    knowledgeBaseIds: list[str] = Field(default_factory=list)
+    topK: int = Field(default=10, ge=1, le=50)
+    similarityThreshold: float = Field(default=0.6, ge=0, le=1)
+    bm25Weight: float | None = Field(default=None, ge=0)
+    vectorWeight: float | None = Field(default=None, ge=0)
+
+
+class RetrievalProjectionDeleteRequest(BaseModel):
+    documentIds: list[str] = Field(default_factory=list)
+
+
 class BatchReindexApiRequest(BaseModel):
     prefix: str | None = None
     documentIds: list[str] = Field(default_factory=list)
@@ -100,6 +118,49 @@ def vector_search(request: VectorSearchRequest) -> dict[str, object]:
         similarity_threshold=request.similarityThreshold,
     )
     return {"code": 0, "message": "ok", "data": {"hits": hits}}
+
+
+@app.post("/internal/search/hybrid")
+def hybrid_search(request: HybridSearchRequest) -> dict[str, object]:
+    settings = Settings.from_env()
+    if not settings.elasticsearch_enabled:
+        raise HTTPException(status_code=400, detail="Elasticsearch projection is disabled; set KM_ELASTICSEARCH_ENABLED=true for hybrid search")
+    query_vector: list[float] | None = None
+    try:
+        backend_client = BackendClient(settings)
+        embedding_config = backend_client.get_embedding_config()
+        embedder = Embedder(settings, backend_client)
+        vectors, _dimension = embedder.embed_texts([request.query], config=embedding_config)
+        query_vector = vectors[0]
+    except Exception as exc:
+        logger.warning("Hybrid vector embedding failed; continuing with BM25 branch only: %s", exc)
+    qdrant_store = QdrantVectorStore(settings)
+    service = HybridSearchService(settings, ElasticsearchChunkStore(settings), qdrant_store)
+    try:
+        hits = service.search(
+            query=request.query,
+            query_vector=query_vector,
+            knowledge_base_ids=request.knowledgeBaseIds,
+            top_k=request.topK,
+            similarity_threshold=request.similarityThreshold,
+            bm25_weight=request.bm25Weight,
+            vector_weight=request.vectorWeight,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {"code": 0, "message": "ok", "data": {"hits": hits}}
+
+
+@app.post("/internal/retrieval-projections:delete")
+def delete_retrieval_projections(request: RetrievalProjectionDeleteRequest) -> dict[str, object]:
+    settings = Settings.from_env()
+    try:
+        ElasticsearchChunkStore(settings).delete_by_document_ids(request.documentIds)
+        deleted_document_count = len(request.documentIds)
+    except Exception as exc:
+        logger.warning("Retrieval projection delete failed; continuing, documentIds=%s: %s", request.documentIds, exc)
+        deleted_document_count = 0
+    return {"code": 0, "message": "ok", "data": {"deletedDocumentCount": deleted_document_count}}
 
 
 @app.post("/internal/chunks:batch-reindex")

@@ -19,7 +19,7 @@ info:
 
     **响应码**：本模块 `code=0` 成功；大组 `middleware-spec` 中 ApiCode.SUCCESS=200，
     跨服务 Feign 联调时需网关或公共 DTO 统一约定。
-  version: 1.3.0
+  version: 1.4.0
   contact:
     name: 知识管理组
 
@@ -294,7 +294,8 @@ paths:
       summary: 向量检索（问答 RAG 核心接口）
       description: |
         根据 query 在指定知识库中检索相关切片。
-        EPIC-06 实现真实向量检索；脚手架阶段可返回空列表。
+        `searchMode=hybrid` 会由 km-ai-service 融合 Elasticsearch BM25 与 Qdrant 向量候选；
+        需在 Python 服务启用 Elasticsearch 投影。
       operationId: search
       requestBody:
         required: true
@@ -309,6 +310,8 @@ paths:
               searchMode: vector_rerank
               similarityThreshold: 0.6
               rerankThreshold: 0.5
+              bm25Weight: 0.45
+              vectorWeight: 0.55
               tagFilters:
                 专业: 汽机
       responses:
@@ -602,7 +605,7 @@ components:
           $ref: "#/components/schemas/ChunkStrategy"
         searchStrategy:
           type: string
-          enum: [vector, vector_rerank]
+          enum: [vector, vector_rerank, hybrid]
         docCount:
           type: integer
           description: 知识库内文档数量（对应 doc_count 列，上传/删除后立即更新）
@@ -637,7 +640,7 @@ components:
           $ref: "#/components/schemas/ChunkStrategy"
         searchStrategy:
           type: string
-          enum: [vector, vector_rerank]
+          enum: [vector, vector_rerank, hybrid]
 
     UpdateKnowledgeBaseRequest:
       type: object
@@ -652,7 +655,7 @@ components:
           $ref: "#/components/schemas/ChunkStrategy"
         searchStrategy:
           type: string
-          enum: [vector, vector_rerank]
+          enum: [vector, vector_rerank, hybrid]
 
     BatchDeleteRequest:
       type: object
@@ -712,8 +715,9 @@ components:
           maximum: 50
         searchMode:
           type: string
-          enum: [vector, vector_rerank]
+          enum: [vector, vector_rerank, hybrid]
           default: vector_rerank
+          description: hybrid 为 BM25 + 向量融合检索，由 km-ai-service 执行；需设置 KM_ELASTICSEARCH_ENABLED=true。
         similarityThreshold:
           type: number
           format: float
@@ -722,6 +726,18 @@ components:
           type: number
           format: float
           default: 0.5
+        bm25Weight:
+          type: number
+          format: float
+          default: 0.45
+          minimum: 0
+          description: hybrid 模式 BM25 分支权重；与 vectorWeight 归一化后使用，不能同时为 0。
+        vectorWeight:
+          type: number
+          format: float
+          default: 0.55
+          minimum: 0
+          description: hybrid 模式向量分支权重；与 bm25Weight 归一化后使用，不能同时为 0。
         tagFilters:
           type: object
           additionalProperties:
@@ -746,6 +762,16 @@ components:
         rerankScore:
           type: number
           format: float
+        bm25Score:
+          type: number
+          format: float
+          nullable: true
+          description: hybrid 模式下 Elasticsearch BM25 原始分数；向量-only 命中可为空。
+        hybridScore:
+          type: number
+          format: float
+          nullable: true
+          description: hybrid 模式下归一化融合后的最终分数。
         chunkType:
           type: string
 

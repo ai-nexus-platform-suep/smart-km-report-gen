@@ -26,7 +26,7 @@ import java.util.stream.Collectors;
 public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
     private static final List<String> ALLOWED_DOC_TYPES = Arrays.asList("规程规范", "技术报告论文", "术语条目", "通用文档");
-    private static final List<String> ALLOWED_SEARCH_STRATEGIES = Arrays.asList("vector", "vector_rerank");
+    private static final List<String> ALLOWED_SEARCH_STRATEGIES = Arrays.asList("vector", "vector_rerank", "hybrid");
 
     private final KnowledgeBaseMapper knowledgeBaseMapper;
 
@@ -198,7 +198,7 @@ public class KnowledgeBaseServiceImpl implements KnowledgeBaseService {
 
     private void validateSearchStrategy(String searchStrategy) {
         if (!ALLOWED_SEARCH_STRATEGIES.contains(searchStrategy)) {
-            throw new BusinessException(ErrorCode.BAD_REQUEST, "searchStrategy must be vector or vector_rerank");
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "searchStrategy must be vector, vector_rerank, or hybrid");
         }
     }
 
