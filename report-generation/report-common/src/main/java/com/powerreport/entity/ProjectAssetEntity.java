@@ -15,7 +15,12 @@ public class ProjectAssetEntity {
     private String name;
     private String category;
     private String fileType;
+    private String storageType;
     private String filePath;
+    private String bucketName;
+    private String objectName;
+    private String originalFileName;
+    private String contentType;
     private Long fileSize;
     private String sha256;
     private String description;

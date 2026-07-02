@@ -11,7 +11,12 @@ public class AssetResponse {
     private String category;
     private String categoryLabel;
     private String fileType;
+    private String storageType;
     private String filePath;
+    private String bucketName;
+    private String objectName;
+    private String originalFileName;
+    private String contentType;
     private Long fileSize;
     private String sha256;
     private String description;
