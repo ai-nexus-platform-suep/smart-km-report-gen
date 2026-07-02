@@ -1,0 +1,114 @@
+# 显式指定项目名，避免中文目录名导致 project name must not be empty
+name: km-platform
+
+services:
+  mysql:
+    image: mysql:5.7
+    container_name: km-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: root123456
+      MYSQL_DATABASE: km_db
+      MYSQL_USER: km
+      MYSQL_PASSWORD: km123456
+      TZ: Asia/Shanghai
+    ports:
+      - "3306:3306"
+    volumes:
+      - km-mysql-data:/var/lib/mysql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-ukm", "-pkm123456"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:6-alpine
+    container_name: km-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - km-redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  rabbitmq:
+    image: rabbitmq:3.11-management-alpine
+    container_name: km-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: km
+      RABBITMQ_DEFAULT_PASS: km123456
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - km-rabbitmq-data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  minio:
+    image: minio/minio:latest
+    container_name: km-minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - km-minio-data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.5
+    container_name: km-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - km-qdrant-data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/readyz"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  # Python AI 服务（chunk / embed / rerank）— 代码就绪后取消注释 build
+  # km-ai-service:
+  #   build: ./km-ai-service
+  #   container_name: km-ai-service
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8092:8092"
+  #   environment:
+  #     QDRANT_URL: http://qdrant:6333
+  #     RABBITMQ_HOST: rabbitmq
+  #     MINIO_ENDPOINT: http://minio:9000
+  #     SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY:-}
+  #   depends_on:
+  #     - qdrant
+  #     - rabbitmq
+  #     - minio
+
+volumes:
+  km-mysql-data:
+  km-redis-data:
+  km-rabbitmq-data:
+  km-minio-data:
+  km-qdrant-data:

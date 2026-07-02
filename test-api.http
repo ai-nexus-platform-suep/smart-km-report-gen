@@ -1,0 +1,118 @@
+### 1. 健康检查
+GET http://localhost:8091/api/health
+
+### 2. 上传文档
+POST http://localhost:8091/api/knowledge-bases/kb-test-001/documents
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="file"; filename="test.txt"
+
+这是一个测试文档的内容。
+电力设备运行规程中规定，变压器油温异常时应立即检查冷却系统。
+
+--boundary123
+Content-Disposition: form-data; name="tags"
+
+{"专业":"电力"}
+--boundary123--
+
+### 3. 文档列表
+GET http://localhost:8091/api/knowledge-bases/kb-test-001/documents?page=1&pageSize=20
+
+### 4. 文档详情（替换为你的文档ID）
+GET http://localhost:8091/api/documents/892f1bf5cdb145feb56035f079cd0ebe
+
+### 5. 查看切片
+GET http://localhost:8091/api/documents/892f1bf5cdb145feb56035f079cd0ebe/chunks?page=1&pageSize=50
+
+### 6. 下载文档
+GET http://localhost:8091/api/documents/892f1bf5cdb145feb56035f079cd0ebe/download
+
+### 7. 更新标签
+PUT http://localhost:8091/api/documents/892f1bf5cdb145feb56035f079cd0ebe/tags
+Content-Type: application/json
+
+{
+  "tags": {
+    "专业": "电力",
+    "设备": "变压器"
+  }
+}
+
+### 8. 删除文档
+DELETE http://localhost:8091/api/knowledge-bases/kb-test-001/documents/892f1bf5cdb145feb56035f079cd0ebe
+
+### 9. 批量删除
+POST http://localhost:8091/api/knowledge-bases/kb-test-001/documents/batch-delete
+Content-Type: application/json
+
+{
+  "ids": ["文档ID1", "文档ID2"]
+}
+
+### 10. 重试处理
+POST http://localhost:8091/api/documents/5030ff76cbbc42afbbc45eff6ac8ed57/retry
+### 11. 检索测试（vector_rerank 模式）
+POST http://localhost:8091/api/search
+Content-Type: application/json
+
+{
+  "query": "变压器油温异常如何处理",
+  "knowledgeBaseIds": ["kb-test-001"],
+  "topK": 10,
+  "searchMode": "vector_rerank",
+  "similarityThreshold": 0.6,
+  "rerankThreshold": 0.5,
+  "tagFilters": {
+    "专业": "汽机"
+  }
+}
+
+### 12. 检索测试（纯向量模式）
+POST http://localhost:8091/api/search
+Content-Type: application/json
+
+{
+  "query": "设备巡检周期",
+  "knowledgeBaseIds": [],
+  "topK": 5,
+  "searchMode": "vector",
+  "similarityThreshold": 0.7
+}
+
+### 13. 知识库列表（对外 API - 供问答/报告组消费）
+GET http://localhost:8091/api/knowledge-bases?page=1&pageSize=20
+
+### 14. 知识库列表 - 按类型筛选
+GET http://localhost:8091/api/knowledge-bases?docType=规程规范&page=1&pageSize=20
+
+### 15. 知识库列表 - 按关键词搜索
+GET http://localhost:8091/api/knowledge-bases?keyword=规程&page=1&pageSize=20
+
+### 16. 知识库详情（对外 API）
+GET http://localhost:8091/api/knowledge-bases/kb-test-001
+
+
+### 17. 测试 400 错误（上传不支持的格式）
+POST http://localhost:8091/api/knowledge-bases/kb-test-001/documents
+Content-Type: multipart/form-data; boundary=boundary123
+
+--boundary123
+Content-Disposition: form-data; name="file"; filename="test.exe"
+
+fake exe content
+--boundary123--
+
+### 18. 测试 404 错误（查询不存在的文档）
+GET http://localhost:8091/api/documents/nonexistent-id-12345
+
+### 19. 测试标签独立持久化
+PUT http://localhost:8091/api/documents/0960b3990db0457a84d0d39aa63603de/tags
+Content-Type: application/json
+
+{
+  "tags": {
+    "颜色": "红色"
+  }
+}

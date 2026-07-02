@@ -1,0 +1,982 @@
+﻿openapi: 3.0.3
+info:
+  title: 知识管理子系统 API
+  description: |
+    知识管理组对外契约，供问答组、报告组、集成平台消费。
+    统一响应格式：`{ "code": 0, "message": "ok", "data": ... }`，`code=0` 表示成功。
+
+    **知识库文档数同步**：`KnowledgeBase.docCount` 对应表字段 `doc_count`；文档上传/删除后
+    事务内更新 `doc_count` 与 `updated_at`，列表/详情返回最新值。
+
+    **数据模型对齐**（见 `docs/user.sql`、Flyway）：
+    - `ownerId` / `createdBy` → `user.id`（BIGINT）
+    - `ownerName` → `user.nickname`（空则 `username`），JOIN 字段
+    - `chunkStrategy` ↔ `chunk_strategy_json`；`tags` ↔ `tags_json`
+
+    **路径前缀**：对外接口统一为 `/api/...`（URL 中不含 v1/v2 版本段）。
+
+    **鉴权**：JWT 暂未实现（EPIC-01）；上线后除 login/register 外需 Bearer Token。
+
+    **响应码**：本模块 `code=0` 成功；大组 `middleware-spec` 中 ApiCode.SUCCESS=200，
+    跨服务 Feign 联调时需网关或公共 DTO 统一约定。
+  version: 1.3.0
+  contact:
+    name: 知识管理组
+
+servers:
+  - url: http://localhost:8091
+    description: 本地直连 km-backend
+  - url: http://localhost:8080/km
+    description: 经 Gateway 路由（大组联调，路径以 Gateway 配置为准）
+
+tags:
+  - name: health
+    description: 健康检查
+  - name: knowledge-base
+    description: 知识库（管理端 CRUD；GET 亦供问答/报告只读消费）
+  - name: search
+    description: 检索（问答 RAG 核心依赖，对外 P0）
+  - name: document
+    description: 文档（上传、列表、切片；部分 GET 供问答溯源）
+  - name: stats
+    description: 统计（对外只读）
+
+paths:
+  /api/health:
+    get:
+      tags: [health]
+      summary: 服务健康检查
+      operationId: healthCheck
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseHealth"
+
+  /api/knowledge-bases:
+    get:
+      tags: [knowledge-base]
+      summary: 知识库列表（支持筛选与搜索）
+      description: |
+        管理端列表与问答组只读列表共用。
+        上传/删除文档后 `docCount` 会实时更新，无需额外刷新接口。
+      operationId: listKnowledgeBases
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: docType
+          in: query
+          description: 按文档类型筛选
+          schema:
+            type: string
+            enum: [规程规范, 技术报告论文, 术语条目, 通用文档]
+        - name: keyword
+          in: query
+          description: 按知识库名称模糊搜索
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseKnowledgeBasePage"
+
+    post:
+      tags: [knowledge-base]
+      summary: 创建知识库
+      operationId: createKnowledgeBase
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateKnowledgeBaseRequest"
+      responses:
+        "200":
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseKnowledgeBase"
+        "400":
+          description: 参数校验失败
+
+  /api/knowledge-bases/batch:
+    delete:
+      tags: [knowledge-base]
+      summary: 批量删除知识库
+      description: 二次确认后调用；级联删除下属文档、切片与向量数据。
+      operationId: batchDeleteKnowledgeBases
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchDeleteRequest"
+      responses:
+        "200":
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseVoid"
+
+  /api/knowledge-bases/{id}:
+    get:
+      tags: [knowledge-base]
+      summary: 知识库详情
+      operationId: getKnowledgeBase
+      parameters:
+        - $ref: "#/components/parameters/KnowledgeBaseId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseKnowledgeBase"
+        "404":
+          description: 知识库不存在
+
+    put:
+      tags: [knowledge-base]
+      summary: 更新知识库
+      description: 可修改名称、描述、分段策略、检索策略；文档类型创建后不可改。
+      operationId: updateKnowledgeBase
+      parameters:
+        - $ref: "#/components/parameters/KnowledgeBaseId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateKnowledgeBaseRequest"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseKnowledgeBase"
+        "404":
+          description: 知识库不存在
+
+    delete:
+      tags: [knowledge-base]
+      summary: 删除知识库
+      description: 级联删除下属文档、切片与向量数据。
+      operationId: deleteKnowledgeBase
+      parameters:
+        - $ref: "#/components/parameters/KnowledgeBaseId"
+      responses:
+        "200":
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseVoid"
+        "404":
+          description: 知识库不存在
+
+  /api/knowledge-bases/{kbId}/documents:
+    get:
+      tags: [document]
+      summary: 知识库内文档列表
+      operationId: listDocumentsByKnowledgeBase
+      parameters:
+        - $ref: "#/components/parameters/KnowledgeBaseIdPath"
+        - name: status
+          in: query
+          description: 按处理状态筛选
+          schema:
+            type: string
+            enum: [UPLOADED, PARSING, CHUNKING, EMBEDDING, READY, FAILED]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseDocumentPage"
+        "404":
+          description: 知识库不存在
+
+    post:
+      tags: [document]
+      summary: 上传文档到知识库
+      description: |
+        支持 PDF、DOCX、PPTX、XLSX、MD、TXT、JPG/PNG；单文件 ≤ 50MB。
+        上传成功后：
+        1. 创建文档记录并触发异步处理管线；
+        2. **立即更新**所属知识库的 `docCount` 与 `updatedAt`；
+        3. 响应体返回文档信息及更新后的 `docCount`。
+      operationId: uploadDocument
+      parameters:
+        - $ref: "#/components/parameters/KnowledgeBaseIdPath"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: 待上传文件
+                tags:
+                  type: string
+                  description: |
+                    可选，JSON 字符串，键值对标签。
+                    例：`{"专业":"汽机","设备":"变压器"}`
+      responses:
+        "200":
+          description: 上传成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseDocumentUpload"
+        "400":
+          description: 文件格式/大小不合法
+        "404":
+          description: 知识库不存在
+
+  /api/knowledge-bases/{kbId}/documents/{docId}:
+    delete:
+      tags: [document]
+      summary: 删除知识库内文档
+      description: |
+        删除文档及关联切片、向量数据；
+        **同步减少**所属知识库的 `docCount`（`doc_count` 列）并更新 `updatedAt`。
+      operationId: deleteDocumentInKnowledgeBase
+      parameters:
+        - $ref: "#/components/parameters/KnowledgeBaseIdPath"
+        - $ref: "#/components/parameters/DocumentIdInKb"
+      responses:
+        "200":
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseDocumentDelete"
+        "404":
+          description: 知识库或文档不存在
+
+  /api/search:
+    post:
+      tags: [search]
+      summary: 向量检索（问答 RAG 核心接口）
+      description: |
+        根据 query 在指定知识库中检索相关切片。
+        EPIC-06 实现真实向量检索；脚手架阶段可返回空列表。
+      operationId: search
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SearchRequest"
+            example:
+              query: 变压器油温异常如何处理
+              knowledgeBaseIds: ["kb-uuid-1"]
+              topK: 10
+              searchMode: vector_rerank
+              similarityThreshold: 0.6
+              rerankThreshold: 0.5
+              tagFilters:
+                专业: 汽机
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseSearchResult"
+
+  /api/documents/{id}:
+    get:
+      tags: [document]
+      summary: 文档元数据（跨库查询，供问答溯源）
+      operationId: getDocument
+      parameters:
+        - $ref: "#/components/parameters/DocumentId"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseDocument"
+        "404":
+          description: 文档不存在
+
+  /api/documents/{id}/chunks:
+    get:
+      tags: [document]
+      summary: 文档切片列表
+      operationId: listDocumentChunks
+      parameters:
+        - $ref: "#/components/parameters/DocumentId"
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: pageSize
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseChunkPage"
+
+  /api/documents/{id}/download:
+    get:
+      tags: [document]
+      summary: 原文下载
+      operationId: downloadDocument
+      parameters:
+        - $ref: "#/components/parameters/DocumentId"
+      responses:
+        "200":
+          description: 文件流
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+
+  /api/documents/{id}/retry:
+    post:
+      tags: [document]
+      summary: 重试失败的文档处理
+      operationId: retryDocumentProcess
+      parameters:
+        - $ref: "#/components/parameters/DocumentId"
+      responses:
+        "200":
+          description: 已重新入队
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseDocument"
+        "404":
+          description: 文档不存在
+        "400":
+          description: 文档状态非 FAILED，不可重试
+
+  /api/documents/{id}/tags:
+    put:
+      tags: [document]
+      summary: 更新文档标签
+      description: 对应 PRD US-DOC05；全量覆盖 tags_json。
+      operationId: updateDocumentTags
+      parameters:
+        - $ref: "#/components/parameters/DocumentId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DocumentTagsRequest"
+      responses:
+        "200":
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseDocument"
+        "404":
+          description: 文档不存在
+
+  /api/knowledge-bases/{kbId}/documents/batch-delete:
+    post:
+      tags: [document]
+      summary: 批量删除知识库内文档
+      description: 对应 PRD US-DOC06；删除后同步更新知识库 doc_count。
+      operationId: batchDeleteDocumentsInKnowledgeBase
+      parameters:
+        - $ref: "#/components/parameters/KnowledgeBaseIdPath"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchDeleteRequest"
+      responses:
+        "200":
+          description: 删除成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseDocumentBatchDelete"
+
+  /api/stats/summary:
+    get:
+      tags: [stats]
+      summary: 统计摘要
+      operationId: getStatsSummary
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseStatsSummary"
+
+  /api/stats/knowledge-bases/{kbId}:
+    get:
+      tags: [stats]
+      summary: 知识库维度统计
+      operationId: getKbStats
+      parameters:
+        - name: kbId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseKbStats"
+
+components:
+  parameters:
+    KnowledgeBaseId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    KnowledgeBaseIdPath:
+      name: kbId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+    DocumentId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: 文档 ID
+
+    DocumentIdInKb:
+      name: docId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: 文档 ID（知识库内路径参数名）
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        鉴权暂未实现。EPIC-01 上线后，除 /api/auth/login、/api/auth/register 外均需携带。
+        Payload 含 userId(BIGINT)、username、role(USER|ADMIN)。
+
+  schemas:
+    ApiResponseBase:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: integer
+          description: "0=成功，非0=错误码"
+        message:
+          type: string
+
+    ApiResponseVoid:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponseBase"
+        - type: object
+          properties:
+            data:
+              type: object
+              nullable: true
+
+    ApiResponseHealth:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponseBase"
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                service:
+                  type: string
+                status:
+                  type: string
+                version:
+                  type: string
+
+    ChunkStrategy:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [heading, fixed_size]
+          description: heading=按标题层级；fixed_size=固定字符数
+        chunkSize:
+          type: integer
+          default: 512
+          minimum: 128
+          maximum: 2048
+          description: 固定字符数模式下的切片长度
+        overlap:
+          type: integer
+          default: 50
+          minimum: 0
+          maximum: 256
+          description: 重叠长度
+        separator:
+          type: string
+          default: "\n\n"
+          description: 分隔符
+        recursiveMerge:
+          type: boolean
+          default: false
+          description: 是否递归合并
+
+    KnowledgeBase:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+        docType:
+          type: string
+          enum: [规程规范, 技术报告论文, 术语条目, 通用文档]
+        chunkStrategy:
+          $ref: "#/components/schemas/ChunkStrategy"
+        searchStrategy:
+          type: string
+          enum: [vector, vector_rerank]
+        docCount:
+          type: integer
+          description: 知识库内文档数量（对应 doc_count 列，上传/删除后立即更新）
+        ownerId:
+          type: integer
+          format: int64
+          description: 创建人 ID，关联 user.id（BIGINT）
+        ownerName:
+          type: string
+          description: 创建人显示名，来自 user.nickname，为空时回退 user.username
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateKnowledgeBaseRequest:
+      type: object
+      required: [name, docType, chunkStrategy, searchStrategy]
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+        docType:
+          type: string
+          enum: [规程规范, 技术报告论文, 术语条目, 通用文档]
+        chunkStrategy:
+          $ref: "#/components/schemas/ChunkStrategy"
+        searchStrategy:
+          type: string
+          enum: [vector, vector_rerank]
+
+    UpdateKnowledgeBaseRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+        chunkStrategy:
+          $ref: "#/components/schemas/ChunkStrategy"
+        searchStrategy:
+          type: string
+          enum: [vector, vector_rerank]
+
+    BatchDeleteRequest:
+      type: object
+      required: [ids]
+      properties:
+        ids:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            format: uuid
+
+    ApiResponseKnowledgeBase:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponseBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/KnowledgeBase"
+
+    ApiResponseKnowledgeBasePage:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponseBase"
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                list:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/KnowledgeBase"
+                total:
+                  type: integer
+                page:
+                  type: integer
+                pageSize:
+                  type: integer
+
+    SearchRequest:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: string
+          description: 检索问题
+        knowledgeBaseIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+          description: 限定知识库，空则检索全部可访问库
+        topK:
+          type: integer
+          default: 10
+          minimum: 1
+          maximum: 50
+        searchMode:
+          type: string
+          enum: [vector, vector_rerank]
+          default: vector_rerank
+        similarityThreshold:
+          type: number
+          format: float
+          default: 0.6
+        rerankThreshold:
+          type: number
+          format: float
+          default: 0.5
+        tagFilters:
+          type: object
+          additionalProperties:
+            type: string
+
+    SearchResultItem:
+      type: object
+      properties:
+        chunkId:
+          type: string
+        documentId:
+          type: string
+        documentName:
+          type: string
+        chapterPath:
+          type: string
+        content:
+          type: string
+        similarityScore:
+          type: number
+          format: float
+        rerankScore:
+          type: number
+          format: float
+        chunkType:
+          type: string
+
+    SearchResult:
+      type: object
+      properties:
+        results:
+          type: array
+          items:
+            $ref: "#/components/schemas/SearchResultItem"
+        total:
+          type: integer
+
+    ApiResponseSearchResult:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponseBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/SearchResult"
+
+    Document:
+      type: object
+      properties:
+        id:
+          type: string
+        kbId:
+          type: string
+        filename:
+          type: string
+        fileSize:
+          type: integer
+        mimeType:
+          type: string
+        status:
+          type: string
+          enum: [UPLOADED, PARSING, CHUNKING, EMBEDDING, READY, FAILED]
+        errorMsg:
+          type: string
+          description: 处理失败时的错误原因
+        tags:
+          type: object
+          additionalProperties:
+            type: string
+        createdBy:
+          type: integer
+          format: int64
+          description: 上传人 ID，关联 user.id（BIGINT）
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    DocumentUploadResult:
+      type: object
+      properties:
+        document:
+          $ref: "#/components/schemas/Document"
+        kbDocCount:
+          type: integer
+          description: 上传后知识库的最新文档数
+
+    DocumentDeleteResult:
+      type: object
+      properties:
+        deletedDocumentId:
+          type: string
+        kbDocCount:
+          type: integer
+          description: 删除后知识库的最新文档数
+
+    DocumentBatchDeleteResult:
+      type: object
+      properties:
+        deletedIds:
+          type: array
+          items:
+            type: string
+        kbDocCount:
+          type: integer
+          description: 批量删除后知识库的最新文档数
+
+    DocumentTagsRequest:
+      type: object
+      properties:
+        tags:
+          type: object
+          additionalProperties:
+            type: string
+          description: 键值对标签，全量覆盖；对应 document.tags_json
+
+    ApiResponseDocumentBatchDelete:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponseBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/DocumentBatchDeleteResult"
+
+    ApiResponseDocument:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponseBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/Document"
+
+    ApiResponseDocumentUpload:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponseBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/DocumentUploadResult"
+
+    ApiResponseDocumentDelete:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponseBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/DocumentDeleteResult"
+
+    ApiResponseDocumentPage:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponseBase"
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                list:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/Document"
+                total:
+                  type: integer
+                page:
+                  type: integer
+                pageSize:
+                  type: integer
+
+    Chunk:
+      type: object
+      properties:
+        id:
+          type: string
+        docId:
+          type: string
+        content:
+          type: string
+        chapterPath:
+          type: string
+        chunkIndex:
+          type: integer
+        chunkType:
+          type: string
+        charCount:
+          type: integer
+          description: 切片字符数（PRD 切片详情辅助信息）
+
+    ApiResponseChunkPage:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponseBase"
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                list:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/Chunk"
+                total:
+                  type: integer
+
+    KbStats:
+      type: object
+      properties:
+        kbId:
+          type: string
+        kbName:
+          type: string
+        documentCount:
+          type: integer
+        chunkCount:
+          type: integer
+
+    ApiResponseKbStats:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponseBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/KbStats"
+
+    StatsSummary:
+      type: object
+      properties:
+        knowledgeBaseCount:
+          type: integer
+        documentCount:
+          type: integer
+        chunkCount:
+          type: integer
+        readyDocumentCount:
+          type: integer
+        processingDocumentCount:
+          type: integer
+          description: 处理中的文档数（PARSING/CHUNKING/EMBEDDING）
+        failedDocumentCount:
+          type: integer
+          description: 处理失败的文档数
+        dailyUploadTrend:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              count:
+                type: integer
+          description: 近30天每天上传文档数
+
+    ApiResponseStatsSummary:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponseBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/StatsSummary"

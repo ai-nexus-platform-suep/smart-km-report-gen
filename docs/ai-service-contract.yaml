@@ -1,0 +1,336 @@
+openapi: 3.0.3
+info:
+  title: 知识管理 AI 服务内部 API（km-ai-service）
+  description: |
+    Java `km-backend` ↔ Python `km-ai-service` 内部契约。
+    - **chunk 切分、embedding、rerank** 均由本服务提供
+    - 路径前缀 `/internal`，不对外暴露；经 Gateway 时仅内网可达
+    - 向量库：**Qdrant**
+    - 统一响应：`{ "code": 0, "message": "ok", "data": ... }`（联调前与大组确认是否改为 200）
+  version: 1.0.0
+  contact:
+    name: 知识管理组
+
+servers:
+  - url: http://localhost:8092
+    description: 本地 km-ai-service
+  - url: http://km-ai-service:8092
+    description: Docker / K8s 服务名
+
+tags:
+  - name: health
+  - name: process
+    description: 文档处理（解析+chunk+embed+写Qdrant）
+  - name: embed
+  - name: rerank
+  - name: search
+    description: Qdrant 向量检索
+
+paths:
+  /internal/health:
+    get:
+      tags: [health]
+      summary: 健康检查
+      operationId: aiHealthCheck
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseHealth"
+
+  /internal/process/document:
+    post:
+      tags: [process]
+      summary: 处理单个文档（异步推荐）
+      description: |
+        完整管线：读 MinIO → 解析 → chunk → 回写 MySQL chunk 元数据 → embed → 写 Qdrant。
+        可由 RabbitMQ 消费者内部调用；也可 Java 直接 HTTP 触发。
+        处理过程中通过回调更新 Java 侧 document.status。
+      operationId: processDocument
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProcessDocumentRequest"
+      responses:
+        "200":
+          description: 已接受（异步）或处理完成（同步 MVP）
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseProcessDocument"
+
+  /internal/embed:
+    post:
+      tags: [embed]
+      summary: 文本批量嵌入
+      operationId: embedTexts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/EmbedRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseEmbed"
+
+  /internal/rerank:
+    post:
+      tags: [rerank]
+      summary: 重排序
+      operationId: rerankPassages
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RerankRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseRerank"
+
+  /internal/search:
+    post:
+      tags: [search]
+      summary: Qdrant 向量检索
+      description: |
+        由本接口完成 query embedding、Qdrant 向量检索和知识库过滤。
+        km-backend 的 `/api/search` 编排本接口 + `/internal/rerank`。
+      operationId: vectorSearch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/VectorSearchRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseVectorSearch"
+
+components:
+  schemas:
+    ApiResponseBase:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: integer
+        message:
+          type: string
+
+    ApiResponseHealth:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponseBase"
+        - type: object
+          properties:
+            data:
+              type: object
+              properties:
+                service:
+                  type: string
+                  example: km-ai-service
+                status:
+                  type: string
+                  example: UP
+
+    ChunkStrategy:
+      type: object
+      required: [type]
+      properties:
+        type:
+          type: string
+          enum: [heading, fixed_size]
+        chunkSize:
+          type: integer
+          default: 512
+        overlap:
+          type: integer
+          default: 50
+        separator:
+          type: string
+          default: "\n\n"
+        recursiveMerge:
+          type: boolean
+          default: false
+
+    ProcessDocumentRequest:
+      type: object
+      required: [documentId, kbId, minioPath, chunkStrategy]
+      properties:
+        documentId:
+          type: string
+          format: uuid
+        kbId:
+          type: string
+          format: uuid
+        minioPath:
+          type: string
+          description: MinIO 对象路径
+        mimeType:
+          type: string
+        chunkStrategy:
+          $ref: "#/components/schemas/ChunkStrategy"
+        callbackUrl:
+          type: string
+          description: Java 状态回调，如 http://km-backend:8091/internal/documents/status
+
+    ProcessDocumentResult:
+      type: object
+      properties:
+        documentId:
+          type: string
+        chunkCount:
+          type: integer
+        status:
+          type: string
+          enum: [READY, FAILED]
+        errorMsg:
+          type: string
+
+    ApiResponseProcessDocument:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponseBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/ProcessDocumentResult"
+
+    EmbedRequest:
+      type: object
+      required: [texts]
+      properties:
+        texts:
+          type: array
+          items:
+            type: string
+        model:
+          type: string
+          description: 可选，默认读取 Java `/internal/config/embedding` 配置
+
+    EmbedResult:
+      type: object
+      properties:
+        vectors:
+          type: array
+          items:
+            type: array
+            items:
+              type: number
+              format: float
+        dimension:
+          type: integer
+
+    ApiResponseEmbed:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponseBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/EmbedResult"
+
+    RerankRequest:
+      type: object
+      required: [query, passages]
+      properties:
+        query:
+          type: string
+        passages:
+          type: array
+          items:
+            type: string
+        topK:
+          type: integer
+          default: 10
+        model:
+          type: string
+
+    RerankItem:
+      type: object
+      properties:
+        index:
+          type: integer
+          description: 对应 passages 下标
+        score:
+          type: number
+          format: float
+
+    RerankResult:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/RerankItem"
+
+    ApiResponseRerank:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponseBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/RerankResult"
+
+    VectorSearchRequest:
+      type: object
+      required: [query, knowledgeBaseIds]
+      properties:
+        query:
+          type: string
+        knowledgeBaseIds:
+          type: array
+          items:
+            type: string
+        topK:
+          type: integer
+          default: 20
+        similarityThreshold:
+          type: number
+          format: float
+          default: 0.6
+
+    VectorSearchHit:
+      type: object
+      properties:
+        chunkId:
+          type: string
+        documentId:
+          type: string
+        content:
+          type: string
+        chapterPath:
+          type: string
+        similarityScore:
+          type: number
+          format: float
+
+    VectorSearchResult:
+      type: object
+      properties:
+        hits:
+          type: array
+          items:
+            $ref: "#/components/schemas/VectorSearchHit"
+
+    ApiResponseVectorSearch:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponseBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/VectorSearchResult"

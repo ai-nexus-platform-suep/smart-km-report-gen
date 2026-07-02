@@ -2,33 +2,55 @@
 .idea/
 *.iml
 .vscode/
+*.swp
 
-# Maven
+# Local AI tooling
+.opencode/
+.trellis/
+.claude/
+.cursor/
+AGENTS.md
+
+# Maven & Java
 target/
+*.class
 *.jar
 *.war
+*.log
+hs_err_pid*
 
 # Node
 node_modules/
 dist/
+.npm
+*.local
+
+# Env & secrets
+.env
+.env.local
 
 # OS
 .DS_Store
 Thumbs.db
 
-# Env
-.env
-*.log
+# Upload / temp
+uploads/
+tmp/
+km-backend/data/
+server.log
+server.err
+data/
 
-# Python
+# Python (km-ai-service)
 __pycache__/
+*.pyc
+*.pyo
 *.py[cod]
 *.egg-info/
 .venv/
+venv/
 .pytest_cache/
-
-# AI Tools
-.claude/
-.cursor/
-.trellis/
-AGENTS.md
+km-ai-service/.cache/
+km-ai-service/.work/
+km-ai-service/.tmp/
+km-ai-service/.mineru/

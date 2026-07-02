@@ -1,0 +1,67 @@
+spring:
+  application:
+    name: km-backend
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:smart_km_report_gen}?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  redis:
+    host: localhost
+    port: 6379
+  rabbitmq:
+    host: localhost
+    port: 5672
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    virtual-host: /
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+    baseline-version: 0
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 50MB
+
+server:
+  port: 8091
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+km:
+  minio:
+    enabled: true
+    endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    access-key: ${MINIO_ACCESS_KEY:minioadmin}
+    secret-key: ${MINIO_SECRET_KEY:minioadmin}
+    bucket: ${MINIO_BUCKET:km-documents}
+  storage:
+    type: minio
+    local-path: ${KM_STORAGE_LOCAL_PATH:D:/kb/uploads}
+  jwt:
+    secret: change-me-in-production-km-platform-2026
+    expire-hours: 24
+  ai-service:
+    base-url: http://localhost:8092
+  document-processing:
+    queue:
+      enabled: true
+      exchange: km.document.processing
+      queue: km.document.processing.parse
+      routing-key: document.process
+      dead-letter-exchange: km.document.processing.dlx
+      dead-letter-queue: km.document.processing.dlq
+      dead-letter-routing-key: document.process.dead
+      callback-url: http://localhost:8091/internal/documents/status
+      parser-backend: mineru
