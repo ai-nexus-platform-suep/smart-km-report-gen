@@ -7,11 +7,8 @@
 # Local AI tooling
 .opencode/
 .trellis/
-.claude/
-.cursor/
-AGENTS.md
 
-# Maven & Java
+# Java
 target/
 *.class
 *.jar
@@ -39,17 +36,15 @@ tmp/
 km-backend/data/
 server.log
 server.err
+
 data/
 
 # Python (km-ai-service)
 __pycache__/
 *.pyc
 *.pyo
-*.py[cod]
-*.egg-info/
 .venv/
 venv/
-.pytest_cache/
 km-ai-service/.cache/
 km-ai-service/.work/
 km-ai-service/.tmp/
