@@ -6,6 +6,10 @@ export type {
   RefreshTokenRequest,
   RefreshTokenResponse,
   RegisterRequest,
+  RegisterType,
+  CaptchaResponse,
+  ChangePasswordRequest,
+  SendRegisterCodeRequest,
   Role,
   UserInfo,
 } from './auth'

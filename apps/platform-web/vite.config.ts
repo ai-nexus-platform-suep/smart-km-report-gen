@@ -5,7 +5,7 @@ import { resolve } from 'path'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const gatewayTarget = env.VITE_API_PROXY_TARGET || env.VITE_GATEWAY_BASE_URL || env.VITE_API_BASE || env.VITE_API_BASE_URL || 'http://localhost:8080'
+  const gatewayTarget = env.VITE_API_PROXY_TARGET || env.VITE_GATEWAY_BASE_URL || env.VITE_API_BASE || env.VITE_API_BASE_URL || 'http://localhost:8099'
 
   return {
     plugins: [vue(), ElementPlus()],

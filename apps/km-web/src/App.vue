@@ -3,13 +3,14 @@ import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { AppLayout } from '@platform/ui'
 import type { NavItem } from '@platform/ui/src/components/SideNav.vue'
-import { Collection, Search, Setting } from '@element-plus/icons-vue'
+import { Collection, Document, Search, Setting } from '@element-plus/icons-vue'
 
 const route = useRoute()
 const showLayout = computed(() => route.meta.requiresAuth !== false)
 
 const navItems: NavItem[] = [
   { path: '/knowledge', title: '知识库管理', icon: Collection },
+  { path: '/documents', title: '文档管理', icon: Document },
   { path: '/search', title: '知识检索', icon: Search },
   {
     path: '/admin',

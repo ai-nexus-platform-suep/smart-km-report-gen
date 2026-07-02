@@ -1,7 +1,7 @@
 <template>
   <div class="page">
     <div class="page-header">
-      <h2>知识库管理</h2>
+      <h2>{{ pageTitle }}</h2>
       <el-button type="primary" @click="handleCreate">
         <el-icon><Plus /></el-icon>新建知识库
       </el-button>
@@ -31,7 +31,7 @@
 
     <div class="kb-hint">
       <el-icon><InfoFilled /></el-icon>
-      <span>点击知识库名称进入文档管理</span>
+      <span>{{ hintText }}</span>
     </div>
 
     <div class="batch-bar" v-if="selectedIds.length > 0">
@@ -49,7 +49,7 @@
       <el-table-column prop="id" label="ID" width="80" />
       <el-table-column label="名称" min-width="200">
         <template #default="{ row }">
-          <el-link type="primary" underline="never" @click="router.push({ path: `/knowledge/${row.id}/documents`, query: { name: row.name } })">
+          <el-link type="primary" underline="never" @click="router.push(buildDocumentListLocation(route.path, row.id, row.name))">
             {{ row.name }}
           </el-link>
         </template>
@@ -91,13 +91,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, ref, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { Plus, Search, Delete, InfoFilled } from '@element-plus/icons-vue'
 import { getKnowledgeBaseList, deleteKnowledgeBase, batchDeleteKnowledgeBase } from '../api/knowledge'
+import { buildDocumentListLocation, getKnowledgeBaseCreatePath, getKnowledgeBaseEditPath } from '../router/navigation.helpers'
 
 const router = useRouter()
+const route = useRoute()
 const list = ref<any[]>([])
 const loading = ref(false)
 const total = ref(0)
@@ -107,6 +109,13 @@ const filterType = ref('')
 const searchKeyword = ref('')
 const selectedIds = ref<number[]>([])
 let searchTimer: ReturnType<typeof setTimeout> | null = null
+const isDocumentEntry = computed(() => route.meta.documentEntry === true)
+const pageTitle = computed(() => (isDocumentEntry.value ? '文档管理' : '知识库管理'))
+const hintText = computed(() => (
+  isDocumentEntry.value
+    ? '请选择一个知识库进入文档管理'
+    : '点击知识库名称进入文档管理'
+))
 
 function onSearchInput() {
   if (searchTimer) clearTimeout(searchTimer)
@@ -127,8 +136,8 @@ async function handleBatchDelete() {
   fetchList()
 }
 
-const handleCreate = () => router.push('/knowledge/create')
-const handleEdit = (row: any) => router.push(`/knowledge/${row.id}`)
+const handleCreate = () => router.push(getKnowledgeBaseCreatePath(route.path))
+const handleEdit = (row: any) => router.push(getKnowledgeBaseEditPath(route.path, row.id))
 
 async function fetchList() {
   loading.value = true

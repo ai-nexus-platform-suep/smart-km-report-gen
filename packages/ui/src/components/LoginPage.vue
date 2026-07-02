@@ -99,7 +99,7 @@
             <el-form-item prop="username">
               <el-input
                 v-model="form.username"
-                placeholder="用户名"
+                placeholder="用户名或邮箱"
                 size="large"
                 autocomplete="username"
                 :prefix-icon="User"
@@ -119,6 +119,30 @@
                 class="auth-input"
                 @keyup.enter="handleLogin"
               />
+            </el-form-item>
+
+            <el-form-item prop="captchaCode" class="captcha-form-item">
+              <div class="captcha-row">
+                <el-input
+                  v-model="form.captchaCode"
+                  placeholder="图形验证码"
+                  size="large"
+                  autocomplete="off"
+                  :prefix-icon="Key"
+                  class="auth-input"
+                  @keyup.enter="handleLogin"
+                />
+                <button
+                  type="button"
+                  class="captcha-button"
+                  :disabled="captchaLoading"
+                  aria-label="刷新图形验证码"
+                  @click="loadCaptcha"
+                >
+                  <img v-if="captchaImage" :src="captchaImage" alt="图形验证码" />
+                  <el-icon v-else :size="20"><Refresh /></el-icon>
+                </button>
+              </div>
             </el-form-item>
 
             <div class="form-extra">
@@ -150,11 +174,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { FormInstance } from 'element-plus'
 import { ElMessage } from 'element-plus'
-import { User, Lock } from '@element-plus/icons-vue'
+import { Key, Lock, Refresh, User } from '@element-plus/icons-vue'
 import {
   apiGet,
   apiPost,
@@ -164,17 +188,26 @@ import {
   setStoredUser,
 } from '@platform/core'
 import { API_QA } from '@platform/core'
-import type { CurrentUserResponse, LoginRequest, LoginResponse, ApiResponse } from '@platform/core/types'
+import type { ApiResponse, CaptchaResponse, CurrentUserResponse, LoginResponse } from '@platform/core/types'
+import { buildLoginPayload, normalizeLoginForm, type LoginFormModel } from './login.helpers'
 
 const router = useRouter()
 const formRef = ref<FormInstance>()
 const loading = ref(false)
+const captchaLoading = ref(false)
+const captchaImage = ref('')
 const rememberMe = ref(false)
-const form = reactive<LoginRequest>({ username: '', password: '' })
+const form = reactive<LoginFormModel>({
+  username: '',
+  password: '',
+  captchaCode: '',
+  captchaKey: '',
+})
 
 const rules = {
-  username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+  username: [{ required: true, message: '请输入用户名或邮箱', trigger: 'blur' }],
   password: [{ required: true, message: '请输入密码', trigger: 'blur' }],
+  captchaCode: [{ required: true, message: '请输入图形验证码', trigger: 'blur' }],
 }
 
 function getErrorMessage(error: unknown, fallback: string) {
@@ -185,13 +218,33 @@ function getErrorMessage(error: unknown, fallback: string) {
   return fallback
 }
 
+async function loadCaptcha() {
+  captchaLoading.value = true
+  try {
+    const res = await apiGet<ApiResponse<CaptchaResponse>>(API_QA.AUTH.CAPTCHA, { _t: Date.now() })
+    const captcha = res.data.data
+    if (res.data.code === 200 && captcha?.captchaKey && captcha?.captchaImage) {
+      form.captchaKey = captcha.captchaKey
+      form.captchaCode = ''
+      captchaImage.value = captcha.captchaImage
+    } else {
+      ElMessage.error(res.data.message || '验证码加载失败')
+    }
+  } catch (error) {
+    ElMessage.error(getErrorMessage(error, '验证码加载失败，请稍后重试'))
+  } finally {
+    captchaLoading.value = false
+  }
+}
+
 async function handleLogin() {
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
 
+  const normalized = normalizeLoginForm(form)
   loading.value = true
   try {
-    const res = await apiPost<ApiResponse<LoginResponse>>(API_QA.AUTH.LOGIN, form)
+    const res = await apiPost<ApiResponse<LoginResponse>>(API_QA.AUTH.LOGIN, buildLoginPayload(normalized))
     if (res.data.code === 200 && res.data.data) {
       const auth = res.data.data
       setAuthTokens(auth)
@@ -207,13 +260,19 @@ async function handleLogin() {
       router.push('/')
     } else {
       ElMessage.error(res.data.message || '登录失败')
+      await loadCaptcha()
     }
   } catch (error) {
     ElMessage.error(getErrorMessage(error, '登录失败，请检查用户名或密码'))
+    await loadCaptcha()
   } finally {
     loading.value = false
   }
 }
+
+onMounted(() => {
+  void loadCaptcha()
+})
 </script>
 
 <style scoped>
@@ -416,6 +475,47 @@ async function handleLogin() {
   box-shadow: 0 0 0 3px rgba(21, 94, 239, 0.10);
 }
 
+.captcha-form-item :deep(.el-form-item__content) {
+  display: block;
+}
+
+.captcha-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 118px;
+  gap: 10px;
+}
+
+.captcha-button {
+  display: grid;
+  min-width: 0;
+  height: 48px;
+  place-items: center;
+  border: 1px solid var(--border-color);
+  border-radius: 11px;
+  background: #ffffff;
+  color: var(--text-secondary);
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.captcha-button:hover:not(:disabled) {
+  border-color: var(--color-primary-hover);
+  box-shadow: 0 0 0 3px rgba(21, 94, 239, 0.08);
+}
+
+.captcha-button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
+.captcha-button img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .form-extra {
   display: flex;
   justify-content: space-between;
@@ -469,6 +569,12 @@ async function handleLogin() {
 
 [data-theme='dark'] .auth-input :deep(.el-input__wrapper:hover) {
   border-color: rgba(110, 168, 255, 0.54);
+}
+
+[data-theme='dark'] .captcha-button {
+  border-color: rgba(148, 163, 184, 0.24);
+  background: #0f172a;
+  color: rgba(226, 232, 240, 0.72);
 }
 
 @media (max-width: 820px) {

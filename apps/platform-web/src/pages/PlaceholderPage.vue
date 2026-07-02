@@ -34,27 +34,6 @@ interface ModuleBlueprint {
 const route = useRoute()
 
 const moduleBlueprints: Record<string, ModuleBlueprint> = {
-  '/km/materials': {
-    eyebrow: 'Knowledge Material Hub',
-    title: '素材管理',
-    description:
-      '先把知识库、报告和问答都会复用的素材资产放在同一个工作台里，后续接入标签、来源、审批和批量操作接口。',
-    stats: [
-      { label: '可复用素材', value: '128', tone: 'success' },
-      { label: '待补标签', value: '17', tone: 'warning' },
-      { label: '共享模块', value: '3 个', tone: 'neutral' },
-    ],
-    actions: ['新建素材', '批量打标', '同步报告素材'],
-    tableTitle: '素材清单预览',
-    tableDescription: '静态骨架阶段先展示字段和布局，方便知识管理与报告生成模块对齐后续接口。',
-    rows: [
-      { name: '锅炉受热面监督检查要点', owner: '知识管理', status: '已归档', statusTone: 'success', updatedAt: '今天 10:12' },
-      { name: '设备缺陷案例摘要模板', owner: '报告生成', status: '待打标', statusTone: 'warning', updatedAt: '今天 09:46' },
-      { name: '环保监督常见问答素材', owner: '智能问答', status: '可复用', statusTone: 'success', updatedAt: '昨天 18:20' },
-    ],
-    roadmap: ['接入素材列表接口', '统一标签字典和来源字段', '支持批量绑定知识库与报告模板'],
-    tips: ['这里适合沉淀跨模块共用材料', '先不接后端也能用于演示页面结构', '后续可以抽成公共 MaterialTable 组件'],
-  },
   '/reports/materials': {
     eyebrow: 'Report Material Mapping',
     title: '素材映射',

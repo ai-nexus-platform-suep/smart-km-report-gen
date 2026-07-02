@@ -13,6 +13,12 @@ const moduleRoutes: RouteRecordRaw[] = [
     meta: { title: '知识库管理' },
   },
   {
+    path: '/documents',
+    name: 'DocumentsEntry',
+    component: () => import('../pages/KnowledgeList.vue'),
+    meta: { title: '文档管理', documentEntry: true },
+  },
+  {
     path: '/knowledge/create',
     name: 'KnowledgeCreate',
     component: () => import('../pages/KnowledgeCreate.vue'),
@@ -27,6 +33,12 @@ const moduleRoutes: RouteRecordRaw[] = [
   {
     path: '/knowledge/:kbId/documents',
     name: 'DocumentList',
+    component: () => import('../pages/DocumentList.vue'),
+    meta: { title: '文档管理' },
+  },
+  {
+    path: '/documents/:kbId',
+    name: 'DocumentsByBase',
     component: () => import('../pages/DocumentList.vue'),
     meta: { title: '文档管理' },
   },

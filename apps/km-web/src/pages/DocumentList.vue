@@ -2,7 +2,7 @@
   <div class="document-page">
     <!-- 页面标题 & 返回 -->
     <div class="page-header">
-      <el-button text :icon="ArrowLeft" @click="$router.push('/knowledge')" class="back-btn">
+      <el-button text :icon="ArrowLeft" @click="goBack" class="back-btn">
         返回知识库
       </el-button>
       <h2>{{ kbName }} - 文档管理</h2>
@@ -172,11 +172,16 @@ import DocUploader from '../components/DocUploader.vue'
 import DocStatusBadge from '../components/DocStatusBadge.vue'
 import TagEditor from '../components/TagEditor.vue'
 import ChunkDrawer from '../components/ChunkDrawer.vue'
+import { getKnowledgeBaseListPath } from '../router/navigation.helpers'
 
 const route = useRoute()
 const router = useRouter()
 const kbId = computed(() => String(route.params.kbId))
 const kbName = computed(() => String(route.query.name || '知识库'))
+
+function goBack() {
+  router.push(getKnowledgeBaseListPath(route.path))
+}
 
 // Status options for filter
 const statusOptions = [

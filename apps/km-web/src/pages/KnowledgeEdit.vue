@@ -111,6 +111,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { ArrowLeft, FolderOpened, SetUp } from '@element-plus/icons-vue'
 import { getKnowledgeBaseDetail, updateKnowledgeBase } from '../api/knowledge'
+import { getKnowledgeBaseListPath } from '../router/navigation.helpers'
 
 const router = useRouter()
 const route = useRoute()
@@ -149,7 +150,7 @@ const rules = {
   docType: [{ required: true, message: '请选择文档类型', trigger: 'change' }],
 }
 
-function goBack() { router.push('/knowledge') }
+function goBack() { router.push(getKnowledgeBaseListPath(route.path)) }
 
 const originalForm = reactive({ chunkStrategy: { type: "heading", separator: "", recursiveMerge: true, chunkSize: 512, overlap: 64 }, searchStrategy: "VECTOR_RERANK" })
 
@@ -194,7 +195,7 @@ async function handleSubmit() {
   try {
     await updateKnowledgeBase(kbId, form)
     ElMessage.success('修改已保存')
-    router.push('/knowledge')
+    router.push(getKnowledgeBaseListPath(route.path))
   } catch {
     ElMessage.error('保存失败，请稍后重试')
   } finally {

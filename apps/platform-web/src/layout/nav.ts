@@ -27,7 +27,7 @@ export const platformNavItems: NavItem[] = [
     icon: Collection,
     children: [
       { path: '/km/bases', title: '知识库管理' },
-      { path: '/km/resources', title: '文档与素材' },
+      { path: '/km/documents', title: '文档管理' },
       { path: '/km/search', title: '知识检索' },
     ],
   },
@@ -80,11 +80,11 @@ export const platformNavItems: NavItem[] = [
 export const quickAccessCards = [
   {
     title: '知识管理',
-    description: '已接入知识库列表、文档与素材管理、知识检索页面。',
+    description: '已接入知识库列表、文档管理、知识检索页面。',
     icon: FolderOpened,
     links: [
       { label: '知识库管理', to: '/km/bases' },
-      { label: '文档与素材', to: '/km/resources' },
+      { label: '文档管理', to: '/km/documents' },
       { label: '知识检索', to: '/km/search' },
     ],
   },
@@ -129,7 +129,7 @@ export const mergePhases = [
   {
     title: '第 2 次',
     subtitle: '页面骨架合并',
-    items: ['知识管理：知识库列表、文档素材、知识检索', '智能问答：问答页、会话列表、问答配置', '报告生成：新建报告、报告工作台、趋势统计'],
+    items: ['知识管理：知识库列表、文档管理、知识检索', '智能问答：问答页、会话列表、问答配置', '报告生成：新建报告、报告工作台、趋势统计'],
     icon: DocumentAdd,
   },
   {
