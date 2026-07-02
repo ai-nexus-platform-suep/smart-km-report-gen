@@ -50,6 +50,18 @@ public class ApiCode {
     /** 账号已被禁用或锁定 */
     public static final int ACCOUNT_DISABLED = 1006;
 
+    /** 账号因多次密码错误被临时锁定 */
+    public static final int ACCOUNT_LOCKED = 1007;
+
+    /** 验证码错误或已过期 */
+    public static final int CAPTCHA_ERROR = 1008;
+
+    /** 邮箱验证码错误或已过期 */
+    public static final int EMAIL_CODE_ERROR = 1009;
+
+    /** 邮箱已被注册 */
+    public static final int EMAIL_ALREADY_EXISTS = 1010;
+
     /** 第三方服务超时 */
     public static final int THIRD_PARTY_TIMEOUT = 4004;
 

@@ -15,7 +15,7 @@ public class JwtProperties {
     /**
      * JWT 签名密钥（至少 256 位，建议使用 Base64 编码的密钥）
      */
-    private String secret = "dGhpcyBpcyBhIHNlY3JldCBrZXkgZm9yIGp3dCB0b2tlbiAyNTYgYml0cyBsb25nAAAAAAAAAAA=";
+    private String secret;
 
     /**
      * Access Token 过期时间，单位：秒（默认 24 小时）

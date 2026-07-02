@@ -1,0 +1,59 @@
+# ============================================
+# Nacos 配置: qa-auth.yaml
+# data_id: qa-auth.yaml
+# group:   DEFAULT_GROUP
+# ============================================
+
+spring:
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/auth_db?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    username: root
+    password: ${MYSQL_PASSWORD:1234}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:1234}
+      database: 0
+      lettuce:
+        pool:
+          max-active: 8
+          max-idle: 8
+          min-idle: 0
+          max-wait: -1ms
+
+  mail:
+    host: ${MAIL_HOST:smtp.qq.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+            required: true
+
+server:
+  port: 8081
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  mapper-locations: classpath:mapper/*.xml
+  global-config:
+    db-config:
+      id-type: auto
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:/O+iqksxQ8P7xHjF9z0bxKXvEClBvG3ORdIdL440AA0=}
+    access-token-expiration: 86400
+    refresh-token-expiration: 604800
+    issuer: tech-supervision-platform
+  login:
+    max-fail-count: 5
+    lock-minutes: 15
