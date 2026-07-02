@@ -5,10 +5,10 @@
       title="报告生成工作台"
       description="按叶子章节流式生成正文，目录级标题只作为结构导航。生成后可直接在线编辑 Markdown，并预览表格排版。"
     >
-      <el-button @click="backToOutline">返回大纲</el-button>
-      <el-button :disabled="store.streaming" @click="startGenerate('TEMPLATE')">模板生成正文</el-button>
-      <el-button type="primary" :loading="store.streaming" @click="startGenerate('AI')">AI 生成正文</el-button>
-      <el-button :disabled="!canExport" @click="$router.push(`/reports/${reportId}/export`)">导出 DOCX</el-button>
+      <el-button :disabled="contentGenerating" @click="backToOutline">返回大纲</el-button>
+      <el-button :disabled="contentGenerating" @click="startGenerate('TEMPLATE')">模板生成正文</el-button>
+      <el-button type="primary" :loading="contentGenerating" @click="startGenerate('AI')">AI 生成正文</el-button>
+      <el-button :disabled="contentGenerating || !canExport" @click="$router.push(`/reports/${reportId}/export`)">导出 DOCX</el-button>
     </PageHeader>
 
     <section v-if="report" class="terminal-band workspace-band">
@@ -57,29 +57,38 @@
           </div>
           <div class="action-row">
             <StatusBadge v-if="selectedSection" :status="selectedSection.status" type="section" />
-            <el-radio-group v-model="mode" class="mode-switch">
-              <el-radio-button label="edit">编辑</el-radio-button>
-              <el-radio-button label="preview">预览</el-radio-button>
-            </el-radio-group>
-            <el-button size="small" :disabled="!dirty || selectedSection?.status === 'GENERATING'" @click="save">
+            <el-button size="small" :disabled="!dirty || !canPersistSelectedSection" @click="save">
               保存章节
             </el-button>
           </div>
         </div>
 
         <div v-if="selectedSection" class="single-editor">
-          <el-input
-            v-show="mode === 'edit'"
-            v-model="draft"
-            class="markdown-textarea"
-            type="textarea"
-            :disabled="selectedSection.status === 'GENERATING'"
-            :autosize="false"
-            placeholder="这里编辑当前章节 Markdown 正文。表格按大纲中的结构化表格计划生成；没有表格计划的章节不会生成表格。"
-            @input="dirty = true"
-          />
+          <div class="editor-preview-grid">
+            <section class="editor-pane">
+              <div class="pane-title">
+                <span class="eyebrow">EDIT</span>
+                <h3>正文编辑</h3>
+              </div>
+              <el-input
+                v-model="draft"
+                class="markdown-textarea"
+                type="textarea"
+                :disabled="!canPersistSelectedSection"
+                :autosize="false"
+                placeholder="这里编辑当前章节 Markdown 正文。表格按大纲中的结构化表格计划生成；没有表格计划的章节不会生成表格。"
+                @input="dirty = true"
+              />
+            </section>
 
-          <article v-show="mode === 'preview'" class="markdown-reader" v-html="previewHtml" />
+            <section class="editor-pane preview-pane">
+              <div class="pane-title">
+                <span class="eyebrow">PREVIEW</span>
+                <h3>实时预览</h3>
+              </div>
+              <article class="markdown-reader" v-html="previewHtml" />
+            </section>
+          </div>
 
           <div v-if="plannedTables.length" class="table-inspector">
             <div class="surface-title mini-title">
@@ -137,8 +146,8 @@
           </div>
           <el-alert v-if="dirty" type="warning" :closable="false" title="当前章节有未保存修改，切换前请保存。" />
           <el-button v-if="store.streaming && streamSection" @click="locateStreamSection">定位正在生成章节</el-button>
-          <el-button :disabled="!selectedSection" @click="confirmRegenerate">重新生成本节</el-button>
-          <el-button type="primary" :disabled="!canExport" @click="$router.push(`/reports/${reportId}/export`)">
+          <el-button :disabled="!canPersistSelectedSection" @click="confirmRegenerate">重新生成本节</el-button>
+          <el-button type="primary" :disabled="contentGenerating || !canExport" @click="$router.push(`/reports/${reportId}/export`)">
             进入导出检查
           </el-button>
         </div>
@@ -150,7 +159,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
 import OutlineTree from '@/components/OutlineTree.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
@@ -168,10 +177,11 @@ const selectedOutlineId = ref<EntityId>()
 const sameId = (a?: EntityId, b?: EntityId) => String(a) === String(b)
 const draft = ref('')
 const dirty = ref(false)
-const mode = ref<'edit' | 'preview'>('edit')
 const streamSectionId = ref<EntityId>()
+const generationStarting = ref(false)
 
 const report = computed(() => store.current)
+const contentGenerating = computed(() => generationStarting.value || store.streaming)
 const contentNodes = computed(() => (report.value ? contentOutlineNodes(report.value.outline) : []))
 const selectedOutlineNode = computed(() => report.value?.outline.find((node) => sameId(node.id, selectedOutlineId.value)))
 const selectedSection = computed(() => {
@@ -181,6 +191,8 @@ const selectedSection = computed(() => {
 const streamSection = computed(() => report.value?.sections.find((section) => sameId(section.id, streamSectionId.value)))
 const previewHtml = computed(() => renderMarkdownHtml(draft.value || ''))
 const canExport = computed(() => report.value?.status === 'CONTENT_READY' || report.value?.status === 'EXPORTED')
+const isSyntheticSection = computed(() => String(selectedSection.value?.id || '').startsWith('outline-'))
+const canPersistSelectedSection = computed(() => Boolean(selectedSection.value && selectedSection.value.status !== 'GENERATING' && !isSyntheticSection.value))
 const plannedTables = computed(() => {
   if (selectedSection.value?.tableJson?.length) return selectedSection.value.tableJson
   return selectedOutlineNode.value?.tables || []
@@ -199,12 +211,28 @@ const childContentNodes = computed(() => {
 })
 
 onMounted(async () => {
+  window.addEventListener('beforeunload', handleBeforeUnload)
   const detail = await store.fetchDetail(reportId)
   selectedOutlineId.value = contentOutlineNodes(detail.outline)[0]?.id ?? detail.outline[0]?.id
   draft.value = selectedSection.value?.contentMarkdown ?? ''
 })
 
-onBeforeUnmount(() => store.stopStream())
+onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', handleBeforeUnload)
+  store.stopStream()
+})
+
+onBeforeRouteLeave(() => {
+  if (!contentGenerating.value) return true
+  ElMessage.warning('正文正在生成，请等待生成完成后再离开当前页面')
+  return false
+})
+
+function handleBeforeUnload(event: BeforeUnloadEvent) {
+  if (!contentGenerating.value) return
+  event.preventDefault()
+  event.returnValue = ''
+}
 
 watch(
   () => selectedSection.value?.id,
@@ -281,8 +309,14 @@ function selectSectionBySectionId(sectionId: EntityId) {
 }
 
 async function startGenerate(generationMode: GenerationMode) {
-  await store.startGenerate(reportId, generationMode)
-  ElMessage.info(generationMode === 'TEMPLATE' ? '模板正文生成任务已启动' : 'AI 正文生成任务已启动')
+  if (contentGenerating.value) return
+  generationStarting.value = true
+  try {
+    await store.startGenerate(reportId, generationMode)
+    ElMessage.info(generationMode === 'TEMPLATE' ? '模板正文生成任务已启动' : 'AI 正文生成任务已启动')
+  } finally {
+    generationStarting.value = false
+  }
 }
 
 function backToOutline() {
@@ -291,6 +325,10 @@ function backToOutline() {
 
 async function save() {
   if (!selectedSection.value) return
+  if (!canPersistSelectedSection.value) {
+    ElMessage.warning('当前章节尚未生成，请先生成正文')
+    return
+  }
   await store.saveSection(reportId, selectedSection.value.id, draft.value)
   dirty.value = false
   ElMessage.success('章节已保存')
@@ -298,6 +336,10 @@ async function save() {
 
 async function confirmRegenerate() {
   if (!selectedSection.value) return
+  if (!canPersistSelectedSection.value) {
+    ElMessage.warning('当前章节尚未生成，请先生成正文')
+    return
+  }
   const sectionId = selectedSection.value.id
   await ElMessageBox.confirm('重新生成会覆盖当前章节正文。若内容已人工编辑，请先确认是否继续。', '重新生成章节', {
     confirmButtonText: '重新生成',
@@ -369,47 +411,68 @@ async function confirmRegenerate() {
   align-items: flex-start;
 }
 
-.mode-switch {
-  overflow: hidden;
-  border: 1px solid rgba(30, 107, 255, 0.24);
-  border-radius: 999px;
-  box-shadow: 0 10px 22px rgba(30, 107, 255, 0.08);
-}
-
-.mode-switch :deep(.el-radio-button__inner) {
-  min-width: 74px;
-  height: 36px;
-  border: 0;
-  padding: 0 18px;
-  font-size: 15px;
-  font-weight: 800;
-  line-height: 36px;
-}
-
 .single-editor {
   display: grid;
   gap: 14px;
   padding: 14px;
 }
 
+.editor-preview-grid {
+  display: grid;
+  grid-template-columns: minmax(300px, 1fr) minmax(300px, 1fr);
+  gap: 14px;
+  align-items: stretch;
+}
+
+.editor-pane {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.pane-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 52px;
+  padding: 12px 14px 9px;
+  border-bottom: 1px solid var(--border-default);
+  background: rgba(247, 250, 254, 0.74);
+}
+
+.pane-title h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+}
+
 .markdown-textarea {
-  min-height: calc(100vh - 355px);
+  min-height: calc(100vh - 410px);
 }
 
 .markdown-textarea :deep(.el-textarea__inner) {
-  min-height: calc(100vh - 355px) !important;
+  min-height: calc(100vh - 410px) !important;
+  border: 0;
+  border-radius: 0;
   padding: 16px;
   font-family: "Cascadia Mono", "Microsoft YaHei UI", monospace;
   font-size: 15px;
   line-height: 1.75;
+  box-shadow: none !important;
+  resize: none;
 }
 
 .markdown-reader {
-  min-height: calc(100vh - 355px);
+  min-height: calc(100vh - 410px);
+  max-height: calc(100vh - 410px);
+  overflow: auto;
   padding: 18px;
-  border: 1px solid var(--border-default);
-  border-radius: var(--radius-md);
-  background: rgba(255, 255, 255, 0.74);
+  background: #fff;
   color: var(--text-primary);
   line-height: 1.8;
 }
@@ -505,6 +568,22 @@ async function confirmRegenerate() {
   .sticky-rail {
     position: static;
     grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 1220px) {
+  .editor-preview-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .markdown-textarea,
+  .markdown-textarea :deep(.el-textarea__inner),
+  .markdown-reader {
+    min-height: 360px;
+  }
+
+  .markdown-reader {
+    max-height: 420px;
   }
 }
 </style>

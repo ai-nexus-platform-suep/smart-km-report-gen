@@ -5,11 +5,11 @@
       title="报告大纲"
       description="大纲按模板生成，支持章、节、子节等多级结构。表格属于章节内容，不作为独立章节节点。"
     >
-      <el-button class="header-action" :loading="store.loading" @click="generate">重新生成大纲</el-button>
-      <el-button class="header-action" :disabled="outline.length === 0" @click="save">
+      <el-button class="header-action" :loading="outlineGenerating" :disabled="outlineGenerating || store.loading" @click="generate">重新生成大纲</el-button>
+      <el-button class="header-action" :disabled="outlineGenerating || outline.length === 0" @click="save">
         保存大纲
       </el-button>
-      <el-button class="header-action" type="primary" :disabled="outline.length === 0" @click="startContent">
+      <el-button class="header-action" type="primary" :disabled="outlineGenerating || outline.length === 0" @click="startContent">
         进入正文生成
       </el-button>
     </PageHeader>
@@ -109,9 +109,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
 import OutlineTree from '@/components/OutlineTree.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
@@ -126,11 +126,12 @@ const reportId = ref(String(route.params.id))
 const outline = ref<OutlineNode[]>([])
 const selectedId = ref<EntityId>()
 const numberingMode = ref<'global' | 'section'>('global')
+const outlineGenerating = ref(false)
 const sameId = (a?: EntityId, b?: EntityId) => String(a) === String(b)
 
 const report = computed(() => store.current)
 const needsOutlineConfirm = computed(() => report.value?.status === 'DRAFT')
-const canEditOutline = computed(() => needsOutlineConfirm.value)
+const canEditOutline = computed(() => needsOutlineConfirm.value && !outlineGenerating.value)
 const displayStatus = computed(() => report.value?.status || 'DRAFT')
 const selectedNode = computed(() => outline.value.find((node) => sameId(node.id, selectedId.value)))
 const canAttachTable = computed(() => Boolean(selectedNode.value && selectedNode.value.level > 1))
@@ -145,12 +146,29 @@ const selectedTableRows = computed(() =>
 )
 
 onMounted(async () => {
+  window.addEventListener('beforeunload', handleBeforeUnload)
   const detail = await store.fetchDetail(reportId.value)
   setOutline(detail.outline)
   if (!outline.value.length && needsOutlineConfirm.value) {
     await generate(true)
   }
 })
+
+onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', handleBeforeUnload)
+})
+
+onBeforeRouteLeave(() => {
+  if (!outlineGenerating.value) return true
+  ElMessage.warning('大纲正在生成，请等待生成完成后再离开当前页面')
+  return false
+})
+
+function handleBeforeUnload(event: BeforeUnloadEvent) {
+  if (!outlineGenerating.value) return
+  event.preventDefault()
+  event.returnValue = ''
+}
 
 function setOutline(nodes: OutlineNode[]) {
   outline.value = normalizeOutline(nodes.map((node) => ({ ...node, tables: cloneTables(node.tables) })))
@@ -162,9 +180,15 @@ async function generate(auto = false) {
     ElMessage.warning('只有草稿状态可以重新生成大纲')
     return
   }
-  const detail = await store.generateOutline(reportId.value)
-  setOutline(detail.outline)
-  ElMessage.success(auto ? '大纲已按模板自动生成' : '大纲已按模板重新生成')
+  if (outlineGenerating.value) return
+  outlineGenerating.value = true
+  try {
+    const detail = await store.generateOutline(reportId.value)
+    setOutline(detail.outline)
+    ElMessage.success(auto ? '大纲已按模板自动生成' : '大纲已按模板重新生成')
+  } finally {
+    outlineGenerating.value = false
+  }
 }
 
 function renumber() {
@@ -177,8 +201,9 @@ function nextId() {
 
 function addChapter() {
   if (!canEditOutline.value) return
+  const id = nextId()
   outline.value.push({
-    id: nextId(),
+    id,
     reportId: reportId.value,
     level: 1,
     sortOrder: outline.value.filter((node) => !node.parentId).length + 1,
@@ -187,15 +212,16 @@ function addChapter() {
     promptHint: '请补充本章节生成提示。',
   })
   renumber()
-  selectedId.value = outline.value[outline.value.length - 1]?.id
+  selectedId.value = id
 }
 
 function addChild() {
   if (!canEditOutline.value) return
   if (!selectedNode.value) return
   const parent = selectedNode.value
+  const id = nextId()
   outline.value.push({
-    id: nextId(),
+    id,
     reportId: reportId.value,
     parentId: parent.id,
     level: parent.level + 1,
@@ -205,7 +231,7 @@ function addChild() {
     promptHint: '请补充子章节生成提示。',
   })
   renumber()
-  selectedId.value = outline.value[outline.value.length - 1]?.id
+  selectedId.value = id
 }
 
 function addTableToNode() {

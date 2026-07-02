@@ -14,7 +14,7 @@ import type {
   ReportSection
 } from "@/types/domain";
 import { createReportDocxBlob, normalizeDocxFileName } from "@/utils/docx";
-import { countContentOutlineNodes, isContentOutlineNode, renumberOutline } from "@/utils/outline";
+import { contentOutlineNodes, countContentOutlineNodes, isContentOutlineNode, renumberOutline } from "@/utils/outline";
 
 interface BackendPage<T> {
   records: T[];
@@ -35,6 +35,8 @@ interface BackendOutlineNode {
   level: number;
   promptHint?: string;
   tables?: BackendOutlineTable[];
+  tableJson?: string | BackendOutlineTable[] | null;
+  tablePlans?: BackendOutlineTable[];
   children?: BackendOutlineNode[];
 }
 
@@ -217,6 +219,24 @@ function parseTableJson(value: BackendSection["tableJson"]) {
   }
 }
 
+function outlineTables(node: BackendOutlineNode) {
+  const tables = normalizeTables(node.tables);
+  if (tables.length) return tables;
+
+  const tableJson = parseTableJson(node.tableJson);
+  if (tableJson.length) return tableJson;
+
+  return normalizeTables(node.tablePlans);
+}
+
+function cloneTables(tables?: OutlineTable[]) {
+  return (tables || []).map((table) => ({
+    ...table,
+    columns: [...table.columns],
+    rows: table.rows?.map((row) => [...row])
+  }));
+}
+
 function flattenOutline(nodes: BackendOutlineNode[] = [], reportId: EntityId, parentId?: EntityId): OutlineNode[] {
   return nodes.flatMap((node, index) => {
     const id = node.id || `${reportId}-${node.number || index + 1}`;
@@ -229,7 +249,7 @@ function flattenOutline(nodes: BackendOutlineNode[] = [], reportId: EntityId, pa
       number: node.number,
       title: node.title,
       promptHint: node.promptHint,
-      tables: normalizeTables(node.tables)
+      tables: outlineTables(node)
     };
     return [current, ...flattenOutline(node.children || [], reportId, id)];
   });
@@ -275,7 +295,7 @@ function mapSection(section: BackendSection): ReportSection {
   return {
     id: section.sectionId,
     reportId: section.reportId,
-    outlineNodeId: section.outlineNodeId,
+    outlineNodeId: section.outlineNodeId || section.sectionId,
     number: section.number,
     title: section.title,
     contentMarkdown: section.contentMarkdown || "",
@@ -289,18 +309,80 @@ function mapSection(section: BackendSection): ReportSection {
   };
 }
 
-function mapDetail(record: BackendReportRecord): ReportDetail {
+function findOutlineForSection(outline: OutlineNode[], section: ReportSection) {
+  return (
+    outline.find((node) => sameId(node.id, section.outlineNodeId)) ||
+    outline.find((node) => node.number === section.number && node.title === section.title)
+  );
+}
+
+function ensureReportSections(detail: ReportDetail): ReportDetail {
+  const outline = detail.outline.map((node) => ({ ...node, tables: cloneTables(node.tables) }));
+  const sections = detail.sections.map((section) => ({ ...section, tableJson: cloneTables(section.tableJson) }));
+  const now = new Date().toISOString();
+
+  sections.forEach((section) => {
+    const node = findOutlineForSection(outline, section);
+    if (!node) return;
+
+    if ((!node.tables || node.tables.length === 0) && section.tableJson?.length) {
+      node.tables = cloneTables(section.tableJson);
+    }
+    if ((!section.tableJson || section.tableJson.length === 0) && node.tables?.length) {
+      section.tableJson = cloneTables(node.tables);
+    }
+    section.outlineNodeId = node.id;
+    section.number = section.number || node.number;
+    section.title = section.title || node.title;
+  });
+
+  contentOutlineNodes(outline).forEach((node) => {
+    const existing = sections.find((section) => sameId(section.outlineNodeId, node.id));
+    if (existing) {
+      if ((!existing.tableJson || existing.tableJson.length === 0) && node.tables?.length) {
+        existing.tableJson = cloneTables(node.tables);
+      }
+      existing.number = node.number;
+      existing.title = node.title;
+      return;
+    }
+
+    sections.push({
+      id: `outline-${node.id}-section`,
+      reportId: detail.id,
+      outlineNodeId: node.id,
+      number: node.number,
+      title: node.title,
+      contentMarkdown: "",
+      tableJson: cloneTables(node.tables),
+      status: "PENDING",
+      source: "AI",
+      version: 1,
+      createdAt: detail.updatedAt || now,
+      updatedAt: detail.updatedAt || now
+    });
+  });
+
   return {
+    ...detail,
+    outline,
+    sections,
+    totalSections: detail.totalSections || countContentOutlineNodes(outline)
+  };
+}
+
+function mapDetail(record: BackendReportRecord): ReportDetail {
+  return ensureReportSections({
     ...mapReport(record),
     outline: flattenOutline(record.outline || [], record.reportId),
     sections: (record.sections || []).map(mapSection)
-  };
+  });
 }
 
 function mapOutlineDraft(record: OutlineDraftResponse, base?: Partial<ReportDetail>): ReportDetail {
   const outline = flattenOutline(record.outline || [], record.reportId);
   const now = new Date().toISOString();
-  return {
+  return ensureReportSections({
     id: record.reportId,
     tempId: base?.tempId,
     templateId: record.templateId ?? base?.templateId,
@@ -321,7 +403,7 @@ function mapOutlineDraft(record: OutlineDraftResponse, base?: Partial<ReportDeta
     outline,
     sections: base?.sections || [],
     files: base?.files || []
-  };
+  });
 }
 
 function mapFile(file: ExportDocxResponse): ReportFile {
@@ -507,7 +589,7 @@ export async function saveOutline(id: EntityId, outline: OutlineNode[]) {
   });
 
   const confirmedOutline = flattenOutline(result.outline || buildOutlineTree(outline), result.reportId);
-  return {
+  return ensureReportSections({
     ...draft,
     id: result.reportId,
     tempId: undefined,
@@ -517,7 +599,7 @@ export async function saveOutline(id: EntityId, outline: OutlineNode[]) {
     outline: confirmedOutline,
     totalSections: countContentOutlineNodes(confirmedOutline),
     updatedAt: new Date().toISOString()
-  };
+  });
 }
 
 export async function saveOutlineDraft(id: EntityId, outline: OutlineNode[]) {
@@ -722,12 +804,26 @@ export async function downloadFile(_reportId: EntityId, fileId: EntityId) {
   return (await apiDownload(`/api/reports/files/${fileId}/download`)).blob;
 }
 
+function findOutlineForStreamEvent(detail: ReportDetail, event: { number: string; title: string }) {
+  return (
+    detail.outline.find((node) => node.number === event.number && node.title === event.title) ||
+    detail.outline.find((node) => node.number === event.number) ||
+    detail.outline.find((node) => node.title === event.title)
+  );
+}
+
 export function applyStreamEvent(detail: ReportDetail, event: GenerateStreamEvent) {
   if (event.type === "section_started") {
+    const outline = findOutlineForStreamEvent(detail, event);
+    if (outline && !isContentOutlineNode(detail.outline, outline)) return;
+
     let section = detail.sections.find((item) => sameId(item.id, event.sectionId));
+    if (!section && outline) {
+      section = detail.sections.find((item) => sameId(item.outlineNodeId, outline.id));
+      if (section) section.id = event.sectionId;
+    }
+
     if (!section) {
-      const outline = detail.outline.find((node) => node.number === event.number || node.title === event.title);
-      if (outline && !isContentOutlineNode(detail.outline, outline)) return;
       const now = new Date().toISOString();
       section = {
         id: event.sectionId,
@@ -745,6 +841,12 @@ export function applyStreamEvent(detail: ReportDetail, event: GenerateStreamEven
       };
       detail.sections.push(section);
     }
+    if (outline) {
+      section.outlineNodeId = outline.id;
+      section.tableJson = section.tableJson?.length ? section.tableJson : cloneTables(outline.tables);
+    }
+    section.number = event.number;
+    section.title = event.title;
     section.status = "GENERATING";
   }
   if (event.type === "content_delta") {

@@ -135,7 +135,7 @@
         </template>
       </el-dialog>
 
-      <el-dialog v-model="previewVisible" title="模板内容预览" width="920px">
+      <el-dialog v-model="previewVisible" title="模板 Word 预览" width="1120px" class="word-preview-dialog">
         <div v-loading="previewLoading" class="preview-panel">
           <template v-if="previewTemplate">
             <div class="preview-meta-grid">
@@ -165,22 +165,37 @@
               </div>
             </div>
 
-            <div class="docx-preview">
-              <span class="terminal-label">WORD CONTENT</span>
+            <div class="word-browser">
+              <div class="word-browser-toolbar">
+                <div>
+                  <span class="terminal-label">WORD DOCUMENT</span>
+                  <strong>{{ previewTemplate.originalFileName || `${previewTemplate.name}.docx` }}</strong>
+                </div>
+                <span>{{ previewDoc.sections.length }} 页</span>
+              </div>
               <template v-if="previewDoc.sections.length">
-                <section v-for="section in previewDoc.sections" :key="section.name" class="docx-section">
-                  <h3>{{ section.name }}</h3>
-                  <template v-for="(block, index) in section.blocks" :key="`${section.name}-${index}`">
-                    <p v-if="block.type === 'paragraph'" class="docx-paragraph">{{ block.text }}</p>
-                    <table v-else class="docx-table">
-                      <tbody>
-                        <tr v-for="(row, rowIndex) in block.rows" :key="rowIndex">
-                          <td v-for="(cell, cellIndex) in row" :key="cellIndex">{{ cell }}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  </template>
-                </section>
+                <div class="word-pages">
+                  <article v-for="(section, sectionIndex) in previewDoc.sections" :key="section.name" class="word-page">
+                    <header class="word-page-header">
+                      <span>{{ previewTemplate.name }}</span>
+                      <span>{{ reportTypeLabels[previewTemplate.reportType] }}</span>
+                    </header>
+                    <div class="word-page-body">
+                      <h2>{{ section.name }}</h2>
+                      <template v-for="(block, index) in section.blocks" :key="`${section.name}-${index}`">
+                        <p v-if="block.type === 'paragraph'" class="word-paragraph">{{ block.text }}</p>
+                        <table v-else class="word-table">
+                          <tbody>
+                            <tr v-for="(row, rowIndex) in block.rows" :key="rowIndex">
+                              <td v-for="(cell, cellIndex) in row" :key="cellIndex">{{ cell }}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </template>
+                    </div>
+                    <footer class="word-page-footer">第 {{ sectionIndex + 1 }} 页</footer>
+                  </article>
+                </div>
               </template>
               <el-empty v-else :description="previewError || '未读取到模板正文内容'" />
             </div>
@@ -536,7 +551,7 @@ async function remove(template: TemplateRecord) {
 }
 
 .preview-panel {
-  min-height: 320px;
+  min-height: 520px;
 }
 
 .preview-meta-grid {
@@ -546,49 +561,126 @@ async function remove(template: TemplateRecord) {
   margin-bottom: 18px;
 }
 
-.docx-preview {
+.word-browser {
   display: grid;
-  gap: 10px;
-  padding: 16px;
+  overflow: hidden;
   border: 1px solid var(--border-default);
   border-radius: var(--radius-md);
-  background: rgba(247, 250, 254, 0.76);
+  background: #e9edf3;
 }
 
-.docx-section {
+.word-browser-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(132, 151, 176, 0.28);
+  color: var(--text-secondary);
+  background: #f8fafc;
+}
+
+.word-browser-toolbar strong,
+.word-browser-toolbar span {
+  display: block;
+}
+
+.word-browser-toolbar strong {
+  margin-top: 4px;
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+.word-pages {
   display: grid;
-  gap: 10px;
-  max-height: 420px;
+  gap: 22px;
+  max-height: 62vh;
   overflow: auto;
-  padding: 14px;
-  border: 1px solid rgba(132, 151, 176, 0.22);
-  border-radius: var(--radius-sm);
-  background: rgba(255, 255, 255, 0.72);
+  padding: 28px;
 }
 
-.docx-section h3 {
-  margin: 0 0 4px;
-  color: var(--text-primary);
-  font-size: 17px;
+.word-page {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(100%, 794px);
+  min-height: 1123px;
+  margin: 0 auto;
+  padding: 42px 58px 38px;
+  border: 1px solid rgba(132, 151, 176, 0.32);
+  background: #fff;
+  box-shadow: 0 18px 42px rgba(21, 26, 32, 0.14);
+  color: #202733;
+  font-family: "Times New Roman", "SimSun", serif;
 }
 
-.docx-paragraph {
-  margin: 0;
-  color: var(--text-primary);
-  line-height: 1.8;
+.word-page-header,
+.word-page-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: #7a8493;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.word-page-header {
+  padding-bottom: 12px;
+  border-bottom: 1px solid #d8dde5;
+}
+
+.word-page-footer {
+  justify-content: center;
+  padding-top: 12px;
+  border-top: 1px solid #d8dde5;
+}
+
+.word-page-body {
+  padding: 30px 0;
+}
+
+.word-page-body h2 {
+  margin: 0 0 18px;
+  color: #111827;
+  font-family: "SimHei", "Microsoft YaHei UI", sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.word-paragraph {
+  margin: 0 0 12px;
+  color: #202733;
+  font-size: 15px;
+  line-height: 1.9;
+  text-align: justify;
+  text-indent: 2em;
   white-space: pre-wrap;
 }
 
-.docx-table {
+.word-table {
   width: 100%;
+  margin: 16px 0;
   border-collapse: collapse;
   background: #fff;
+  font-size: 14px;
 }
 
-.docx-table td {
+.word-table td {
   padding: 8px 10px;
-  border: 1px solid var(--border-default);
-  color: var(--text-primary);
-  line-height: 1.55;
+  border: 1px solid #3f4a5a;
+  color: #202733;
+  line-height: 1.6;
+}
+
+@media (max-width: 1220px) {
+  .word-pages {
+    padding: 18px;
+  }
+
+  .word-page {
+    min-height: 980px;
+    padding: 34px 38px 30px;
+  }
 }
 </style>

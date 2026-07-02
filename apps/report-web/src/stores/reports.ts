@@ -94,6 +94,7 @@ export const useReportStore = defineStore("reports", () => {
   function connectStream(id: EntityId, resetSectionId?: EntityId) {
     streaming.value = true;
     streamMessage.value = "SSE CONNECTED";
+    let generationCompleted = false;
     streamController = reportApi.createGenerateStream(
       id,
       (event) => {
@@ -105,12 +106,16 @@ export const useReportStore = defineStore("reports", () => {
         if (current.value) reportApi.applyStreamEvent(current.value, event);
         if (event.type === "section_started") streamMessage.value = `AI WRITING / ${event.number}`;
         if (event.type === "task_completed") {
+          generationCompleted = true;
           streamMessage.value = "GENERATION COMPLETE";
         }
         if (event.type === "error") streamMessage.value = event.message;
       },
       () => {
         streaming.value = false;
+        if (generationCompleted) {
+          void fetchDetail(id).catch(() => undefined);
+        }
       }
     );
   }
