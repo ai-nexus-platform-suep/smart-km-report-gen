@@ -1,0 +1,42 @@
+spring:
+  application:
+    name: qa-auth
+<<<<<<< Updated upstream
+  datasource:
+    url: jdbc:mysql://127.0.0.1:3306/auth_db?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+    username: root
+    password: ${MYSQL_PASSWORD:1234}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+server:
+  port: 8081
+
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+  mapper-locations: classpath:mapper/*.xml
+  global-config:
+    db-config:
+      id-type: auto
+
+app:
+  jwt:
+    secret: ${JWT_SECRET:/O+iqksxQ8P7xHjF9z0bxKXvEClBvG3ORdIdL440AA0=}
+    access-token-expiration: 86400
+    refresh-token-expiration: 604800
+    issuer: tech-supervision-platform
+=======
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:0eab4d97-bb36-401e-8481-3b50d0963efe}
+      config:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:0eab4d97-bb36-401e-8481-3b50d0963efe}
+        file-extension: yaml
+        group: DEFAULT_GROUP
+  config:
+    import:
+      - optional:nacos:qa-auth.yaml?group=DEFAULT_GROUP
+>>>>>>> Stashed changes
