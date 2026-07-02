@@ -82,7 +82,7 @@
           <div class="form-header">
             <p class="form-eyebrow">Account setup</p>
             <h2>创建账号</h2>
-            <p>设置用户名和密码，注册后自动进入平台</p>
+            <p>支持用户名注册或邮箱验证注册</p>
           </div>
 
           <el-form
@@ -92,42 +92,113 @@
             class="reg-form"
             @submit.prevent="handleRegister"
           >
-            <el-form-item prop="username">
-              <el-input
-                v-model="form.username"
-                placeholder="用户名，3-50 个字符"
-                size="large"
-                autocomplete="username"
-                :prefix-icon="User"
-                class="auth-input"
-              />
+            <el-form-item prop="registerType" class="type-item">
+              <el-radio-group v-model="form.registerType" class="register-type">
+                <el-radio-button label="USERNAME">用户名注册</el-radio-button>
+                <el-radio-button label="EMAIL">邮箱注册</el-radio-button>
+              </el-radio-group>
             </el-form-item>
 
-            <el-form-item prop="password">
-              <el-input
-                v-model="form.password"
-                type="password"
-                placeholder="密码，至少 6 位"
-                size="large"
-                autocomplete="new-password"
-                show-password
-                :prefix-icon="Lock"
-                class="auth-input"
-              />
-            </el-form-item>
+            <template v-if="form.registerType === 'USERNAME'">
+              <el-form-item prop="username">
+                <el-input
+                  v-model="form.username"
+                  placeholder="用户名，3-50 个字符"
+                  size="large"
+                  autocomplete="username"
+                  :prefix-icon="User"
+                  class="auth-input"
+                />
+              </el-form-item>
 
-            <el-form-item prop="confirmPassword">
+              <el-form-item prop="password">
+                <el-input
+                  v-model="form.password"
+                  type="password"
+                  placeholder="密码，至少 8 位且包含 3 类字符"
+                  size="large"
+                  autocomplete="new-password"
+                  show-password
+                  :prefix-icon="Lock"
+                  class="auth-input"
+                />
+              </el-form-item>
+
+              <el-form-item prop="confirmPassword">
+                <el-input
+                  v-model="form.confirmPassword"
+                  type="password"
+                  placeholder="再次输入密码"
+                  size="large"
+                  autocomplete="new-password"
+                  show-password
+                  :prefix-icon="Lock"
+                  class="auth-input"
+                  @keyup.enter="handleRegister"
+                />
+              </el-form-item>
+            </template>
+
+            <template v-else>
+              <el-form-item prop="email">
+                <el-input
+                  v-model="form.email"
+                  placeholder="邮箱地址"
+                  size="large"
+                  autocomplete="email"
+                  :prefix-icon="Message"
+                  class="auth-input"
+                />
+              </el-form-item>
+
+              <el-form-item prop="emailCode" class="email-code-form-item">
+                <div class="email-code-row">
+                  <el-input
+                    v-model="form.emailCode"
+                    placeholder="邮箱验证码"
+                    size="large"
+                    autocomplete="one-time-code"
+                    :prefix-icon="Key"
+                    class="auth-input"
+                    @keyup.enter="handleRegister"
+                  />
+                  <el-button
+                    type="primary"
+                    plain
+                    size="large"
+                    class="send-code-btn"
+                    :loading="sendingCode"
+                    :disabled="emailCodeCooldown > 0"
+                    @click="sendEmailCode"
+                  >
+                    {{ sendCodeText }}
+                  </el-button>
+                </div>
+              </el-form-item>
+            </template>
+
+            <el-form-item prop="captchaCode" class="captcha-form-item">
+              <div class="captcha-row">
               <el-input
-                v-model="form.confirmPassword"
-                type="password"
-                placeholder="再次输入密码"
+                v-model="form.captchaCode"
+                placeholder="图形验证码"
                 size="large"
-                autocomplete="new-password"
-                show-password
-                :prefix-icon="Lock"
+                autocomplete="off"
+                :prefix-icon="Key"
                 class="auth-input"
                 @keyup.enter="handleRegister"
               />
+              <button
+                type="button"
+                class="captcha-button"
+                :disabled="captchaLoading"
+                aria-label="刷新图形验证码"
+                @click="loadCaptcha"
+              >
+                <img v-if="captchaImage" :src="captchaImage" alt="图形验证码" />
+                <el-icon v-else :size="20"><Refresh /></el-icon>
+              </button>
+              </div>
             </el-form-item>
 
             <el-form-item prop="acceptTerms" class="terms-item">
@@ -143,7 +214,7 @@
                 class="submit-btn"
                 @click="handleRegister"
               >
-                创建并登录
+                {{ submitText }}
               </el-button>
             </el-form-item>
           </el-form>
@@ -159,11 +230,11 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import type { FormInstance } from 'element-plus'
-import { ElMessage } from 'element-plus'
-import { Lock, User } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Key, Lock, Message, Refresh, User } from '@element-plus/icons-vue'
 import {
   API_QA,
   apiGet,
@@ -173,10 +244,17 @@ import {
   setAuthTokens,
   setStoredUser,
 } from '@platform/core'
-import type { ApiResponse, CurrentUserResponse, LoginResponse } from '@platform/core/types'
+import type {
+  ApiResponse,
+  CaptchaResponse,
+  CurrentUserResponse,
+  LoginResponse,
+  SendRegisterCodeRequest,
+} from '@platform/core/types'
 import {
   buildRegisterPayload,
   getRegisterErrorMessage,
+  isRegisterAuthResponse,
   isRegisterSuccess,
   normalizeRegisterForm,
   type RegisterFormModel,
@@ -185,19 +263,121 @@ import {
 const router = useRouter()
 const formRef = ref<FormInstance>()
 const loading = ref(false)
+const sendingCode = ref(false)
+const captchaLoading = ref(false)
+const captchaImage = ref('')
+const emailCodeCooldown = ref(0)
+let emailCodeTimer: ReturnType<typeof setInterval> | null = null
 
 const form = reactive<RegisterFormModel>({
+  registerType: 'USERNAME',
   username: '',
   password: '',
   confirmPassword: '',
+  email: '',
+  emailCode: '',
+  captchaCode: '',
+  captchaKey: '',
   acceptTerms: false,
 })
 
+const submitText = computed(() => (form.registerType === 'EMAIL' ? '邮箱验证注册' : '创建账号'))
+const sendCodeText = computed(() => (emailCodeCooldown.value > 0 ? `${emailCodeCooldown.value}s` : '发送验证码'))
+
+const validateUsername = (_rule: unknown, value: string, callback: (error?: Error) => void) => {
+  if (form.registerType !== 'USERNAME') {
+    callback()
+    return
+  }
+  const username = value.trim()
+  if (!username) {
+    callback(new Error('请输入用户名'))
+  } else if (username.length < 3 || username.length > 50) {
+    callback(new Error('用户名长度需在 3-50 个字符之间'))
+  } else {
+    callback()
+  }
+}
+
+const validatePasswordStrength = (_rule: unknown, value: string, callback: (error?: Error) => void) => {
+  if (form.registerType !== 'USERNAME') {
+    callback()
+    return
+  }
+  const password = value.trim()
+  if (!password) {
+    callback(new Error('请输入密码'))
+    return
+  }
+  if (password.length < 8 || password.length > 100) {
+    callback(new Error('密码长度需在 8-100 个字符之间'))
+    return
+  }
+  const weakPasswords = new Set([
+    'password',
+    '12345678',
+    '123456789',
+    'qwerty123',
+    'admin123',
+    'abc12345',
+    '11111111',
+    'aaaaaaaa',
+    'password1',
+    'pa$$w0rd',
+  ])
+  if (weakPasswords.has(password.toLowerCase())) {
+    callback(new Error('密码过于简单，请使用更复杂的密码'))
+    return
+  }
+  const typeCount = [
+    /[A-Z]/.test(password),
+    /[a-z]/.test(password),
+    /\d/.test(password),
+    /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?`~]/.test(password),
+  ].filter(Boolean).length
+  if (typeCount < 3) {
+    callback(new Error('密码需包含大写字母、小写字母、数字、特殊字符中的至少3种'))
+    return
+  }
+  callback()
+}
+
 const validateConfirmPassword = (_rule: unknown, value: string, callback: (error?: Error) => void) => {
+  if (form.registerType !== 'USERNAME') {
+    callback()
+    return
+  }
   if (!value) {
     callback(new Error('请再次输入密码'))
   } else if (value.trim() !== form.password.trim()) {
     callback(new Error('两次输入的密码不一致'))
+  } else {
+    callback()
+  }
+}
+
+const validateEmail = (_rule: unknown, value: string, callback: (error?: Error) => void) => {
+  if (form.registerType !== 'EMAIL') {
+    callback()
+    return
+  }
+  const email = value.trim()
+  if (!email) {
+    callback(new Error('请输入邮箱地址'))
+  } else if (!/^[\w.+-]+@[\w-]+\.[\w.-]+$/.test(email)) {
+    callback(new Error('邮箱格式不正确'))
+  } else {
+    callback()
+  }
+}
+
+const validateEmailCode = (_rule: unknown, value: string, callback: (error?: Error) => void) => {
+  if (form.registerType !== 'EMAIL') {
+    callback()
+    return
+  }
+  if (!value.trim()) {
+    callback(new Error('请输入邮箱验证码'))
   } else {
     callback()
   }
@@ -212,64 +392,147 @@ const validateTerms = (_rule: unknown, value: boolean, callback: (error?: Error)
 }
 
 const rules = {
-  username: [
-    { required: true, message: '请输入用户名', trigger: 'blur' },
-    { min: 3, max: 50, message: '用户名长度需在 3-50 个字符之间', trigger: 'blur' },
-  ],
-  password: [
-    { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 6, max: 100, message: '密码长度需在 6-100 个字符之间', trigger: 'blur' },
-  ],
-  confirmPassword: [
-    { required: true, message: '请再次输入密码', trigger: 'blur' },
-    { validator: validateConfirmPassword, trigger: 'blur' },
-  ],
+  registerType: [{ required: true, message: '请选择注册方式', trigger: 'change' }],
+  username: [{ validator: validateUsername, trigger: 'blur' }],
+  password: [{ validator: validatePasswordStrength, trigger: 'blur' }],
+  confirmPassword: [{ validator: validateConfirmPassword, trigger: 'blur' }],
+  email: [{ validator: validateEmail, trigger: 'blur' }],
+  emailCode: [{ validator: validateEmailCode, trigger: 'blur' }],
+  captchaCode: [{ required: true, message: '请输入图形验证码', trigger: 'blur' }],
   acceptTerms: [{ validator: validateTerms, trigger: 'change' }],
 }
 
-async function loginAfterRegister(username: string, password: string) {
-  const res = await apiPost<ApiResponse<LoginResponse>>(API_QA.AUTH.LOGIN, { username, password })
-  const auth = res.data.data
-  if (res.data.code !== 200 || !auth?.accessToken) {
-    throw new Error(res.data.message || '自动登录失败')
+async function loadCaptcha() {
+  captchaLoading.value = true
+  try {
+    const res = await apiGet<ApiResponse<CaptchaResponse>>(API_QA.AUTH.CAPTCHA, { _t: Date.now() })
+    const captcha = res.data.data
+    if (res.data.code === 200 && captcha?.captchaKey && captcha?.captchaImage) {
+      form.captchaKey = captcha.captchaKey
+      form.captchaCode = ''
+      captchaImage.value = captcha.captchaImage
+    } else {
+      ElMessage.error(res.data.message || '验证码加载失败')
+    }
+  } catch (error) {
+    ElMessage.error(getRegisterErrorMessage(error, '验证码加载失败，请稍后重试'))
+  } finally {
+    captchaLoading.value = false
   }
+}
 
+function startEmailCodeCooldown() {
+  emailCodeCooldown.value = 60
+  if (emailCodeTimer) clearInterval(emailCodeTimer)
+  emailCodeTimer = setInterval(() => {
+    emailCodeCooldown.value -= 1
+    if (emailCodeCooldown.value <= 0 && emailCodeTimer) {
+      clearInterval(emailCodeTimer)
+      emailCodeTimer = null
+    }
+  }, 1000)
+}
+
+async function sendEmailCode() {
+  if (sendingCode.value || emailCodeCooldown.value > 0) return
+  const valid = await formRef.value?.validateField('email').then(() => true).catch(() => false)
+  if (!valid) return
+
+  sendingCode.value = true
+  try {
+    const payload: SendRegisterCodeRequest = { email: form.email.trim().toLowerCase() }
+    const res = await apiPost<ApiResponse<null>>(API_QA.AUTH.SEND_REGISTER_CODE, payload)
+    if (res.data.code === 200) {
+      ElMessage.success(res.data.message || '验证码已发送')
+      startEmailCodeCooldown()
+    } else {
+      ElMessage.error(res.data.message || '验证码发送失败')
+    }
+  } catch (error) {
+    ElMessage.error(getRegisterErrorMessage(error, '验证码发送失败，请稍后重试'))
+  } finally {
+    sendingCode.value = false
+  }
+}
+
+async function completeAutoLogin(auth: LoginResponse) {
   setAuthTokens(auth)
+
   try {
     const profile = await apiGet<ApiResponse<CurrentUserResponse>>(API_QA.AUTH.ME)
-    setStoredUser(buildUserFromCurrentUser(profile.data.data))
+    if (profile.data.data) {
+      setStoredUser(buildUserFromCurrentUser(profile.data.data))
+      return
+    }
   } catch {
-    setStoredUser(buildUserFromAuthResponse(auth))
+    // 注册后的 token 已可用；资料拉取失败时先用 token 内的基础身份进入系统。
   }
+
+  setStoredUser(buildUserFromAuthResponse(auth))
 }
 
 async function handleRegister() {
   const valid = await formRef.value?.validate().catch(() => false)
   if (!valid) return
+  if (!form.captchaKey) {
+    ElMessage.error('图形验证码加载失败，请刷新后重试')
+    await loadCaptcha()
+    return
+  }
 
   const normalized = normalizeRegisterForm(form)
   loading.value = true
   try {
-    const res = await apiPost<ApiResponse<null>>(API_QA.AUTH.REGISTER, buildRegisterPayload(normalized))
+    const res = await apiPost<ApiResponse<LoginResponse | null>>(API_QA.AUTH.REGISTER, buildRegisterPayload(normalized))
     if (!isRegisterSuccess({ status: res.status, body: res.data })) {
       ElMessage.error(res.data.message || '注册失败')
+      await loadCaptcha()
       return
     }
 
-    try {
-      await loginAfterRegister(normalized.username, normalized.password)
-      ElMessage.success('注册成功，已自动登录')
-      router.push('/')
-    } catch {
-      ElMessage.success('注册成功，请登录')
+    if (!isRegisterAuthResponse(res.data.data)) {
+      ElMessage.warning('注册成功，但后端未返回登录态，请前往登录页登录')
       router.push('/login')
+      return
     }
+
+    await completeAutoLogin(res.data.data)
+
+    if (normalized.registerType === 'EMAIL') {
+      await ElMessageBox.alert(
+        '注册成功，已为你自动登录。初始密码已通过邮箱发送，请在右上角“修改密码”中尽快修改密码。',
+        '注册成功',
+        {
+          confirmButtonText: '进入平台',
+          type: 'success',
+        },
+      ).catch(() => undefined)
+    } else {
+      ElMessage.success('注册成功，已自动登录')
+    }
+    router.push('/')
   } catch (error) {
     ElMessage.error(getRegisterErrorMessage(error))
+    await loadCaptcha()
   } finally {
     loading.value = false
   }
 }
+
+watch(
+  () => form.registerType,
+  () => {
+    formRef.value?.clearValidate()
+  },
+)
+
+onMounted(() => {
+  void loadCaptcha()
+})
+
+onBeforeUnmount(() => {
+  if (emailCodeTimer) clearInterval(emailCodeTimer)
+})
 </script>
 
 <style scoped>
@@ -471,6 +734,79 @@ async function handleRegister() {
   box-shadow: 0 0 0 3px rgba(21, 94, 239, 0.10);
 }
 
+.type-item {
+  margin-bottom: 18px;
+}
+
+.type-item :deep(.el-form-item__content) {
+  display: block;
+}
+
+.register-type {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+}
+
+.register-type :deep(.el-radio-button__inner) {
+  display: grid;
+  width: 100%;
+  height: 42px;
+  place-items: center;
+  font-weight: 700;
+}
+
+.email-code-form-item :deep(.el-form-item__content),
+.captcha-form-item :deep(.el-form-item__content) {
+  display: block;
+}
+
+.email-code-row,
+.captcha-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 118px;
+  gap: 10px;
+}
+
+.send-code-btn {
+  width: 118px;
+  height: 48px;
+  border-radius: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.captcha-button {
+  display: grid;
+  min-width: 0;
+  height: 48px;
+  place-items: center;
+  border: 1px solid var(--border-color);
+  border-radius: 11px;
+  background: #ffffff;
+  color: var(--text-secondary);
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.captcha-button:hover:not(:disabled) {
+  border-color: var(--color-primary-hover);
+  box-shadow: 0 0 0 3px rgba(21, 94, 239, 0.08);
+}
+
+.captcha-button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
+.captcha-button img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 .terms-item {
   margin-bottom: 18px;
 }
@@ -529,6 +865,12 @@ async function handleRegister() {
 
 [data-theme='dark'] .auth-input :deep(.el-input__wrapper:hover) {
   border-color: rgba(110, 168, 255, 0.54);
+}
+
+[data-theme='dark'] .captcha-button {
+  border-color: rgba(148, 163, 184, 0.24);
+  background: #0f172a;
+  color: rgba(226, 232, 240, 0.72);
 }
 
 @media (max-width: 820px) {

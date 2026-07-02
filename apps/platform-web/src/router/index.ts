@@ -19,19 +19,11 @@ const platformOwnedRoutes: RouteRecordRaw[] = [
   },
   {
     path: '/km/resources',
-    name: 'KnowledgeResources',
-    component: () => import('../pages/km/DocumentsPage.vue'),
-    meta: { title: '文档与素材' },
-  },
-  {
-    path: '/km/documents',
-    name: 'KnowledgeDocumentsCompat',
-    component: () => import('../pages/km/DocumentsPage.vue'),
-    meta: { title: '文档与素材' },
+    redirect: '/km/documents',
   },
   {
     path: '/km/materials',
-    redirect: '/km/resources',
+    redirect: '/km/documents',
   },
   {
     path: '/admin/overview',

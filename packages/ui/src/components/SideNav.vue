@@ -4,6 +4,7 @@ import { useRoute } from 'vue-router'
 import { getStoredUser } from '@platform/core'
 import type { UserInfo } from '@platform/core/types'
 import type { Component } from 'vue'
+import { resolveActiveMenuPath } from './side-nav.helpers'
 
 export interface NavItem {
   path: string
@@ -33,9 +34,7 @@ const visibleItems = computed(() =>
 )
 
 const activeMenu = computed(() => {
-  const p = route.path
-  if (p.startsWith('/admin')) return p
-  return p
+  return resolveActiveMenuPath(route.path, visibleItems.value)
 })
 </script>
 

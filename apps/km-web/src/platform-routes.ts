@@ -10,6 +10,12 @@ export const kmPlatformRoutes: RouteRecordRaw[] = [
     meta: { title: '知识库管理' },
   },
   {
+    path: '/km/documents',
+    name: 'KnowledgeDocumentsEntry',
+    component: () => import('./pages/KnowledgeList.vue'),
+    meta: { title: '文档管理', documentEntry: true },
+  },
+  {
     path: '/knowledge',
     name: 'KnowledgeBasesCompat',
     component: () => import('./pages/KnowledgeList.vue'),
@@ -29,6 +35,13 @@ export const kmPlatformRoutes: RouteRecordRaw[] = [
   },
   {
     path: '/km/bases/:kbId/documents',
+    redirect: (to) => ({
+      path: `/km/documents/${String(to.params.kbId)}`,
+      query: to.query,
+    }),
+  },
+  {
+    path: '/km/documents/:kbId',
     name: 'KnowledgeDocumentsByBase',
     component: () => import('./pages/DocumentList.vue'),
     meta: { title: '文档管理' },

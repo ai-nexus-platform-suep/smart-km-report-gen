@@ -42,7 +42,13 @@ const instance: AxiosInstance = axios.create({
 })
 
 function isAuthRequest(url = '') {
-  return [API_QA.AUTH.LOGIN, API_QA.AUTH.REGISTER, API_QA.AUTH.REFRESH].some((path) => url.includes(path))
+  return [
+    API_QA.AUTH.LOGIN,
+    API_QA.AUTH.REGISTER,
+    API_QA.AUTH.CAPTCHA,
+    API_QA.AUTH.SEND_REGISTER_CODE,
+    API_QA.AUTH.REFRESH,
+  ].some((path) => url.includes(path))
 }
 
 function redirectToLogin() {

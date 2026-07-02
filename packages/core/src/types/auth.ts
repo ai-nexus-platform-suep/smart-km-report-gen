@@ -21,11 +21,36 @@ export interface UserInfo {
 export interface LoginRequest {
   username: string
   password: string
+  captchaCode: string
+  captchaKey: string
+  loginType?: 'USERNAME' | 'EMAIL'
 }
 
+export type RegisterType = 'USERNAME' | 'EMAIL'
+
 export interface RegisterRequest {
-  username: string
-  password: string
+  registerType?: RegisterType
+  username?: string
+  password?: string
+  confirmPassword?: string
+  email?: string
+  emailCode?: string
+  captchaCode: string
+  captchaKey: string
+}
+
+export interface CaptchaResponse {
+  captchaKey: string
+  captchaImage: string
+}
+
+export interface SendRegisterCodeRequest {
+  email: string
+}
+
+export interface ChangePasswordRequest {
+  oldPassword: string
+  newPassword: string
 }
 
 export interface LoginResponse {

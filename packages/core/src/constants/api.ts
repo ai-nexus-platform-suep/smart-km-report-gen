@@ -3,9 +3,12 @@ export const API_QA = {
   AUTH: {
     LOGIN: '/api/auth/login',
     REGISTER: '/api/auth/register',
+    CAPTCHA: '/api/auth/captcha',
+    SEND_REGISTER_CODE: '/api/auth/register/send-code',
     REFRESH: '/api/auth/refresh',
     ME: '/api/auth/me',
     LOGOUT: '/api/auth/me/logout',
+    CHANGE_PASSWORD: '/api/auth/me/password',
     PROFILE: '/api/auth/me/profile',
     PERMISSIONS: '/api/auth/me/permissions',
     MENUS: '/api/auth/me/menus',

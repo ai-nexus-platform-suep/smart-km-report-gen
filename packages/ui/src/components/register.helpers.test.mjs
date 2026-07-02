@@ -18,34 +18,92 @@ const {
   buildRegisterPayload,
   getRegisterErrorMessage,
   isRegisterSuccess,
+  isRegisterAuthResponse,
   normalizeRegisterForm,
 } = await import(moduleUrl)
 
 assert.deepEqual(
   normalizeRegisterForm({
+    registerType: 'USERNAME',
     username: '  alice  ',
-    password: '  pass123  ',
-    confirmPassword: '  pass123  ',
+    password: '  Pass123!  ',
+    confirmPassword: '  Pass123!  ',
+    email: '  Alice@Example.COM  ',
+    emailCode: '  123456  ',
+    captchaCode: '  aB12  ',
+    captchaKey: '  captcha-key  ',
   }),
   {
+    registerType: 'USERNAME',
     username: 'alice',
-    password: 'pass123',
-    confirmPassword: 'pass123',
+    password: 'Pass123!',
+    confirmPassword: 'Pass123!',
+    email: 'alice@example.com',
+    emailCode: '123456',
+    captchaCode: 'aB12',
+    captchaKey: 'captcha-key',
   },
 )
 
 assert.deepEqual(
   buildRegisterPayload({
+    registerType: 'USERNAME',
     username: 'alice',
-    password: 'pass123',
-    confirmPassword: 'pass123',
+    password: 'Pass123!',
+    confirmPassword: 'Pass123!',
+    email: '',
+    emailCode: '',
+    captchaCode: 'aB12',
+    captchaKey: 'captcha-key',
   }),
-  { username: 'alice', password: 'pass123' },
+  {
+    registerType: 'USERNAME',
+    username: 'alice',
+    password: 'Pass123!',
+    confirmPassword: 'Pass123!',
+    captchaCode: 'aB12',
+    captchaKey: 'captcha-key',
+  },
+)
+
+assert.deepEqual(
+  buildRegisterPayload({
+    registerType: 'EMAIL',
+    username: '',
+    password: '',
+    confirmPassword: '',
+    email: 'alice@example.com',
+    emailCode: '123456',
+    captchaCode: 'aB12',
+    captchaKey: 'captcha-key',
+  }),
+  {
+    registerType: 'EMAIL',
+    email: 'alice@example.com',
+    emailCode: '123456',
+    captchaCode: 'aB12',
+    captchaKey: 'captcha-key',
+  },
 )
 
 assert.equal(isRegisterSuccess({ status: 201, body: { code: 200 } }), true)
 assert.equal(isRegisterSuccess({ status: 200, body: { code: 200 } }), true)
 assert.equal(isRegisterSuccess({ status: 201, body: { code: 1002 } }), false)
+
+assert.equal(
+  isRegisterAuthResponse({
+    accessToken: 'access-token',
+    refreshToken: 'refresh-token',
+    tokenType: 'Bearer',
+    expiresIn: 900,
+    username: 'alice',
+    roles: ['ROLE_USER'],
+    permissions: [],
+  }),
+  true,
+)
+assert.equal(isRegisterAuthResponse(null), false)
+assert.equal(isRegisterAuthResponse({ accessToken: 'access-token' }), false)
 
 assert.equal(
   getRegisterErrorMessage({ response: { data: { code: 1002, message: '用户已存在' } } }),

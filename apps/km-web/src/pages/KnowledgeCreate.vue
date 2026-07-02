@@ -103,12 +103,14 @@
 
 <script setup lang="ts">
 import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ArrowLeft, FolderOpened, SetUp } from '@element-plus/icons-vue'
 import { createKnowledgeBase, type CreateKnowledgeBaseRequest } from '../api/knowledge'
+import { getKnowledgeBaseListPath } from '../router/navigation.helpers'
 
 const router = useRouter()
+const route = useRoute()
 const formRef = ref()
 const submitting = ref(false)
 
@@ -141,7 +143,7 @@ const rules = {
   docType: [{ required: true, message: '请选择文档类型', trigger: 'change' }],
 }
 
-function goBack() { router.push('/knowledge') }
+function goBack() { router.push(getKnowledgeBaseListPath(route.path)) }
 
 async function handleSubmit() {
   const valid = await formRef.value.validate().catch(() => false)
@@ -151,7 +153,7 @@ async function handleSubmit() {
     const response = await createKnowledgeBase(form) as any
     if (response.data?.code === 200) {
       ElMessage.success('知识库创建成功')
-      router.push('/knowledge')
+      router.push(getKnowledgeBaseListPath(route.path))
     } else {
       ElMessage.error(response.data?.message || '创建失败')
     }
