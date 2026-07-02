@@ -2,6 +2,8 @@ export type ReportType = "SUMMER_PEAK_CHECK" | "COAL_INVENTORY_AUDIT";
 
 export type EntityId = string | number;
 
+export type AssetCategory = "STANDARD_DOC" | "REPORT_DATA" | "OTHER";
+
 export type ReportStatus =
   | "DRAFT"
   | "OUTLINE_READY"
@@ -17,7 +19,8 @@ export type SectionStatus = "PENDING" | "GENERATING" | "GENERATED" | "USER_EDITE
 export interface Report {
   id: EntityId;
   tempId?: string;
-  outlineSource?: "AI" | "LOCAL_TEMPLATE";
+  templateId?: EntityId;
+  outlineSource?: "AI" | "TEMPLATE" | "LOCAL_TEMPLATE";
   outlineExpireSeconds?: number;
   name: string;
   type: ReportType;
@@ -36,6 +39,7 @@ export interface Report {
 }
 
 export interface CreateReportPayload {
+  templateId?: EntityId;
   name: string;
   type: ReportType;
   subject: string;
@@ -53,6 +57,15 @@ export interface OutlineNode {
   number: string;
   title: string;
   promptHint?: string;
+  tables?: OutlineTable[];
+}
+
+export interface OutlineTable {
+  id?: EntityId;
+  caption: string;
+  columns: string[];
+  description?: string;
+  rows?: string[][];
 }
 
 export interface ReportSection {
@@ -62,9 +75,9 @@ export interface ReportSection {
   number: string;
   title: string;
   contentMarkdown: string;
-  tableJson?: TableBlock;
+  tableJson?: OutlineTable[];
   status: SectionStatus;
-  source: "AI" | "USER_EDITED" | "REGENERATED";
+  source: "AI" | "TEMPLATE" | "USER_EDITED" | "REGENERATED";
   version: number;
   errorMessage?: string;
   createdAt: string;
@@ -72,8 +85,10 @@ export interface ReportSection {
 }
 
 export interface TableBlock {
+  caption?: string;
   columns: string[];
-  rows: string[][];
+  rows?: string[][];
+  description?: string;
 }
 
 export interface ReportFile {
@@ -116,9 +131,60 @@ export interface TemplateRecord {
   name: string;
   reportType: ReportType;
   version: string;
+  storageType?: string;
+  filePath?: string;
+  bucketName?: string;
+  objectName?: string;
+  originalFileName?: string;
+  contentType?: string;
+  fileSize?: number;
+  configJson?: string;
   enabled: boolean;
   createdBy: string;
   createdAt: string;
+  updatedAt?: string;
+}
+
+export interface AssetCategoryOption {
+  value: AssetCategory;
+  label: string;
+}
+
+export interface AssetRecord {
+  id: EntityId;
+  name: string;
+  category: AssetCategory;
+  categoryLabel?: string;
+  fileType: string;
+  storageType?: string;
+  filePath?: string;
+  bucketName?: string;
+  objectName?: string;
+  originalFileName: string;
+  contentType?: string;
+  fileSize: number;
+  sha256?: string;
+  description?: string;
+  tags?: string;
+  enabled: boolean;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
+export interface AssetQuery {
+  page: number;
+  size: number;
+  category?: AssetCategory | null;
+  enabled?: boolean | null;
+  keyword?: string;
+}
+
+export interface AssetImportResult {
+  scanned: number;
+  imported: number;
+  skipped: number;
+  errors: string[];
 }
 
 export interface LlmConfig {

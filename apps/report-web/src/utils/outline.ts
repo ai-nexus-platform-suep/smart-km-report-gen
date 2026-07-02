@@ -54,3 +54,73 @@ export function moveOutlineNode(nodes: OutlineNode[], nodeId: EntityId, directio
     })
   );
 }
+
+export function hasChildNodes(nodes: OutlineNode[], nodeId: EntityId) {
+  return nodes.some((node) => sameId(node.parentId, nodeId));
+}
+
+export function isContentOutlineNode(nodes: OutlineNode[], node: OutlineNode) {
+  return node.level > 1 && !hasChildNodes(nodes, node.id);
+}
+
+export function contentOutlineNodes(nodes: OutlineNode[]) {
+  return nodes.filter((node) => isContentOutlineNode(nodes, node));
+}
+
+export function countContentOutlineNodes(nodes: OutlineNode[]) {
+  return contentOutlineNodes(nodes).length;
+}
+
+export function moveOutlineNodeToTarget(nodes: OutlineNode[], dragId: EntityId, targetId: EntityId) {
+  if (sameId(dragId, targetId)) return nodes;
+
+  const dragNode = nodes.find((node) => sameId(node.id, dragId));
+  const targetNode = nodes.find((node) => sameId(node.id, targetId));
+  if (!dragNode || !targetNode) return nodes;
+
+  const descendantIds = new Set<string>();
+  let changed = true;
+  while (changed) {
+    changed = false;
+    nodes.forEach((node) => {
+      const isDirectChild = sameId(node.parentId, dragId);
+      const isNestedChild = node.parentId && descendantIds.has(String(node.parentId));
+      if ((isDirectChild || isNestedChild) && !descendantIds.has(String(node.id))) {
+        descendantIds.add(String(node.id));
+        changed = true;
+      }
+    });
+  }
+  if (descendantIds.has(String(targetId))) return nodes;
+
+  const levelDelta = targetNode.level - dragNode.level;
+
+  return renumberOutline(
+    nodes.map((node) => {
+      if (sameId(node.id, dragId)) {
+        return {
+          ...node,
+          parentId: targetNode.parentId,
+          level: targetNode.level,
+          sortOrder: targetNode.sortOrder - 0.5
+        };
+      }
+
+      if (descendantIds.has(String(node.id))) {
+        return {
+          ...node,
+          level: Math.max(1, node.level + levelDelta)
+        };
+      }
+
+      if (sameId(node.parentId, targetNode.parentId) && node.sortOrder >= targetNode.sortOrder) {
+        return {
+          ...node,
+          sortOrder: node.sortOrder + 1
+        };
+      }
+
+      return node;
+    })
+  );
+}

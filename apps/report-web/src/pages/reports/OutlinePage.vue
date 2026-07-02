@@ -1,13 +1,17 @@
 <template>
-  <div class="page">
+  <div class="page outline-page">
     <PageHeader
       eyebrow="OUTLINE EDITOR"
       title="报告大纲"
-      description="根据固定报告类型生成多级大纲，支持编辑、删除、顺序调整和自动编号。保存后进入正文流式生成。"
+      description="大纲按模板生成，支持章、节、子节等多级结构。表格属于章节内容，不作为独立章节节点。"
     >
-      <el-button :loading="store.loading" @click="generate">生成大纲</el-button>
-      <el-button :disabled="outline.length === 0" @click="save">保存大纲</el-button>
-      <el-button type="primary" :disabled="outline.length === 0" @click="startContent">生成正文</el-button>
+      <el-button class="header-action" :loading="outlineGenerating" :disabled="outlineGenerating || store.loading" @click="generate">重新生成大纲</el-button>
+      <el-button class="header-action" :disabled="outlineGenerating || outline.length === 0" @click="save">
+        保存大纲
+      </el-button>
+      <el-button class="header-action" type="primary" :disabled="outlineGenerating || outline.length === 0" @click="startContent">
+        进入正文生成
+      </el-button>
     </PageHeader>
 
     <div v-if="report" class="terminal-band outline-status">
@@ -15,88 +19,176 @@
         <span class="terminal-label">REPORT / {{ report.id }}</span>
         <strong>{{ report.name }}</strong>
       </div>
-      <StatusBadge :status="report.status" />
+      <StatusBadge :status="displayStatus" />
       <span>{{ report.subject }}</span>
     </div>
 
-    <div v-if="report" class="split-grid">
-      <section class="surface">
+    <div v-if="report" class="outline-workspace">
+      <section class="surface outline-preview-surface">
         <div class="surface-title">
           <div>
-            <span class="eyebrow">TREE STRUCTURE</span>
-            <h2>章节结构</h2>
+            <span class="eyebrow">OUTLINE PREVIEW</span>
+            <h2>大纲预览</h2>
           </div>
-          <el-button size="small" @click="addChapter">新增章节</el-button>
+            <el-button class="outline-action" :disabled="!canEditOutline" @click="addChapter">新增章</el-button>
         </div>
-        <OutlineTree :nodes="outline" :selected-id="selectedId" @select="selectedId = $event" />
+
+        <div class="outline-tools">
+          <el-select v-model="numberingMode" size="small">
+            <el-option label="全局编号（表1，表2）" value="global" />
+            <el-option label="章节编号（表1-1，表2-1）" value="section" />
+          </el-select>
+          <span>拖拽章节可调整顺序；点击箭头可收起子章节；表格会挂在对应章节下方。</span>
+        </div>
+
+        <div class="outline-tree-scroll">
+          <OutlineTree
+            :nodes="outline"
+            :selected-id="selectedId"
+            :table-items="tableDisplayMap"
+            collapsible
+            :draggable="canEditOutline"
+            @select="selectedId = $event"
+            @move="handleMove"
+          />
+        </div>
       </section>
 
-      <section class="surface">
+      <section class="surface outline-config-surface">
         <div class="surface-title">
           <div>
             <span class="eyebrow">NODE CONFIG</span>
             <h2>节点编辑</h2>
           </div>
-          <div class="action-row">
-            <el-button size="small" :disabled="!selectedNode" @click="move(-1)">上移</el-button>
-            <el-button size="small" :disabled="!selectedNode" @click="move(1)">下移</el-button>
-            <el-button size="small" :disabled="!selectedNode" @click="addChild">新增子节</el-button>
-            <el-button size="small" text type="danger" :disabled="!selectedNode" @click="removeNode">删除</el-button>
+          <div class="action-row outline-actions">
+            <el-button class="outline-action" :disabled="!canEditOutline || !selectedNode" @click="addChild">新增子节</el-button>
+            <el-button class="outline-action" :disabled="!canEditOutline || !canAttachTable" @click="addTableToNode">添加表格</el-button>
+            <el-button class="delete-node-button" :disabled="!canEditOutline || !selectedNode" @click="removeNode">删除</el-button>
           </div>
         </div>
-        <div v-if="selectedNode" class="node-form">
+
+        <div v-if="selectedNode" class="node-form node-form-scroll">
+          <el-alert
+            type="info"
+            :closable="false"
+            show-icon
+            title="一级标题只作为目录结构；正文和表格应挂在具体节或子节中。"
+          />
+
           <el-form label-position="top">
             <el-form-item label="章节编号">
               <el-input :model-value="selectedNode.number" readonly />
             </el-form-item>
             <el-form-item label="章节标题">
-              <el-input v-model="selectedNode.title" @input="renumber" />
+              <el-input v-model="selectedNode.title" :disabled="!canEditOutline" @input="renumber" />
             </el-form-item>
             <el-form-item label="生成提示">
-              <el-input v-model="selectedNode.promptHint" type="textarea" :autosize="{ minRows: 6 }" />
+              <el-input v-model="selectedNode.promptHint" :disabled="!canEditOutline" type="textarea" :autosize="{ minRows: 6 }" />
             </el-form-item>
           </el-form>
-          <el-alert type="info" :closable="false" show-icon title="前端会即时预览自动编号，最终编号以后端保存结果为准。" />
+
+          <div v-if="selectedTables.length" class="table-preview">
+            <div class="surface-title mini-title">
+              <div>
+                <span class="eyebrow">TABLE STRUCTURE</span>
+                <h3>本节表格</h3>
+              </div>
+            </div>
+            <el-table :data="selectedTableRows" size="small">
+              <el-table-column prop="label" label="编号" width="100" />
+              <el-table-column prop="name" label="表名" />
+              <el-table-column prop="note" label="说明" />
+            </el-table>
+          </div>
         </div>
-        <el-empty v-else description="请选择左侧章节节点" />
+
+        <el-empty v-else description="请选择左侧大纲节点" />
       </section>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useRoute, useRouter } from 'vue-router'
+import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
 import PageHeader from '@/components/PageHeader.vue'
 import OutlineTree from '@/components/OutlineTree.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { useReportStore } from '@/stores/reports'
-import type { EntityId, OutlineNode } from '@/types/domain'
-import { moveOutlineNode, renumberOutline } from '@/utils/outline'
+import type { EntityId, OutlineNode, OutlineTable } from '@/types/domain'
+import { moveOutlineNodeToTarget, renumberOutline } from '@/utils/outline'
 
 const route = useRoute()
 const router = useRouter()
 const store = useReportStore()
-const reportId = String(route.params.id)
+const reportId = ref(String(route.params.id))
 const outline = ref<OutlineNode[]>([])
 const selectedId = ref<EntityId>()
+const numberingMode = ref<'global' | 'section'>('global')
+const outlineGenerating = ref(false)
 const sameId = (a?: EntityId, b?: EntityId) => String(a) === String(b)
 
 const report = computed(() => store.current)
+const needsOutlineConfirm = computed(() => report.value?.status === 'DRAFT')
+const canEditOutline = computed(() => needsOutlineConfirm.value && !outlineGenerating.value)
+const displayStatus = computed(() => report.value?.status || 'DRAFT')
 const selectedNode = computed(() => outline.value.find((node) => sameId(node.id, selectedId.value)))
+const canAttachTable = computed(() => Boolean(selectedNode.value && selectedNode.value.level > 1))
+const tableDisplayMap = computed(() => buildTableDisplayMap())
+const selectedTables = computed(() => (selectedNode.value ? tableEntriesFor(selectedNode.value) : []))
+const selectedTableRows = computed(() =>
+  selectedTables.value.map((table) => ({
+    label: table.label,
+    name: table.name,
+    note: table.note,
+  })),
+)
 
 onMounted(async () => {
-  const detail = await store.fetchDetail(reportId)
-  outline.value = detail.outline.map((node) => ({ ...node }))
-  selectedId.value = outline.value[0]?.id
+  window.addEventListener('beforeunload', handleBeforeUnload)
+  const detail = await store.fetchDetail(reportId.value)
+  setOutline(detail.outline)
+  if (!outline.value.length && needsOutlineConfirm.value) {
+    await generate(true)
+  }
 })
 
-async function generate() {
-  const detail = await store.generateOutline(reportId)
-  outline.value = detail.outline.map((node) => ({ ...node }))
+onBeforeUnmount(() => {
+  window.removeEventListener('beforeunload', handleBeforeUnload)
+})
+
+onBeforeRouteLeave(() => {
+  if (!outlineGenerating.value) return true
+  ElMessage.warning('大纲正在生成，请等待生成完成后再离开当前页面')
+  return false
+})
+
+function handleBeforeUnload(event: BeforeUnloadEvent) {
+  if (!outlineGenerating.value) return
+  event.preventDefault()
+  event.returnValue = ''
+}
+
+function setOutline(nodes: OutlineNode[]) {
+  outline.value = normalizeOutline(nodes.map((node) => ({ ...node, tables: cloneTables(node.tables) })))
   selectedId.value = outline.value[0]?.id
-  ElMessage.success('大纲已生成')
+}
+
+async function generate(auto = false) {
+  if (!needsOutlineConfirm.value) {
+    ElMessage.warning('只有草稿状态可以重新生成大纲')
+    return
+  }
+  if (outlineGenerating.value) return
+  outlineGenerating.value = true
+  try {
+    const detail = await store.generateOutline(reportId.value)
+    setOutline(detail.outline)
+    ElMessage.success(auto ? '大纲已按模板自动生成' : '大纲已按模板重新生成')
+  } finally {
+    outlineGenerating.value = false
+  }
 }
 
 function renumber() {
@@ -108,9 +200,11 @@ function nextId() {
 }
 
 function addChapter() {
+  if (!canEditOutline.value) return
+  const id = nextId()
   outline.value.push({
-    id: nextId(),
-    reportId,
+    id,
+    reportId: reportId.value,
     level: 1,
     sortOrder: outline.value.filter((node) => !node.parentId).length + 1,
     number: '',
@@ -118,15 +212,17 @@ function addChapter() {
     promptHint: '请补充本章节生成提示。',
   })
   renumber()
-  selectedId.value = outline.value[outline.value.length - 1]?.id
+  selectedId.value = id
 }
 
 function addChild() {
+  if (!canEditOutline.value) return
   if (!selectedNode.value) return
   const parent = selectedNode.value
+  const id = nextId()
   outline.value.push({
-    id: nextId(),
-    reportId,
+    id,
+    reportId: reportId.value,
     parentId: parent.id,
     level: parent.level + 1,
     sortOrder: outline.value.filter((node) => sameId(node.parentId, parent.id)).length + 1,
@@ -135,20 +231,42 @@ function addChild() {
     promptHint: '请补充子章节生成提示。',
   })
   renumber()
-  selectedId.value = outline.value[outline.value.length - 1]?.id
+  selectedId.value = id
 }
 
-function move(direction: -1 | 1) {
-  if (!selectedId.value) return
-  outline.value = moveOutlineNode(outline.value, selectedId.value, direction)
+function addTableToNode() {
+  if (!canEditOutline.value) return
+  if (!selectedNode.value) return
+  if (selectedNode.value.level <= 1) {
+    ElMessage.warning('表格应添加到具体节或子节下，不能直接挂在章标题下')
+    return
+  }
+  const current = selectedNode.value.tables || []
+  const nextIndex = current.length + 1
+  selectedNode.value.tables = [
+    ...current,
+    {
+      id: `table-${Date.now()}-${nextIndex}`,
+      caption: `检查结果 ${nextIndex}`,
+      columns: ['项目', '检查结果', '备注'],
+      description: '',
+    },
+  ]
+}
+
+function handleMove(payload: { dragId: EntityId; targetId: EntityId }) {
+  if (!canEditOutline.value) return
+  outline.value = moveOutlineNodeToTarget(outline.value, payload.dragId, payload.targetId)
+  selectedId.value = payload.dragId
 }
 
 async function removeNode() {
+  if (!canEditOutline.value) return
   if (!selectedNode.value) return
   const node = selectedNode.value
   const childCount = outline.value.filter((item) => sameId(item.parentId, node.id)).length
   await ElMessageBox.confirm(
-    childCount > 0 ? `该章节包含 ${childCount} 个子章节，删除后会一起移除。` : `确认删除「${node.title}」？`,
+    childCount > 0 ? `该章节包含 ${childCount} 个子节点，删除后会一并移除。` : `确认删除“${node.title}”？`,
     '确认删除章节',
     { confirmButtonText: '删除', cancelButtonText: '取消', type: 'warning' },
   )
@@ -168,19 +286,157 @@ async function removeNode() {
 }
 
 async function save() {
-  const saved = await store.saveOutline(reportId, outline.value)
-  ElMessage.success('大纲已确认保存')
-  router.push(`/reports/${saved?.id ?? reportId}/workspace`)
+  if (!needsOutlineConfirm.value) {
+    ElMessage.warning('只有草稿状态的大纲可以保存')
+    return
+  }
+  try {
+    const saved = await store.saveOutlineDraft(reportId.value, outline.value)
+    if (saved?.outline) {
+      outline.value = normalizeOutline(saved.outline.map((node) => ({ ...node })))
+    }
+    ElMessage.success('大纲草稿已保存')
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : '大纲保存失败')
+  }
 }
 
 async function startContent() {
-  const saved = await store.saveOutline(reportId, outline.value)
-  ElMessage.success('大纲已保存')
-  router.push(`/reports/${saved?.id ?? reportId}/workspace`)
+  try {
+    await ElMessageBox.confirm(
+      '进入正文生成后，大纲将无法再次修改，请确认当前大纲无误后继续。',
+      '确认进入正文生成',
+      { confirmButtonText: '确认进入', cancelButtonText: '返回检查', type: 'warning' },
+    )
+  } catch {
+    return
+  }
+
+  if (needsOutlineConfirm.value) {
+    await confirmOutline()
+    ElMessage.success('大纲已确认，进入正文生成')
+  }
+  router.push(`/reports/${reportId.value}/workspace`)
+}
+
+async function confirmOutline() {
+  const saved = await store.saveOutline(reportId.value, outline.value)
+  if (saved?.id) {
+    reportId.value = String(saved.id)
+    outline.value = normalizeOutline(saved.outline.map((node) => ({ ...node })))
+    if (String(route.params.id) !== reportId.value) router.replace(`/reports/${reportId.value}/outline`)
+  }
+  return saved
+}
+
+function normalizeOutline(nodes: OutlineNode[]) {
+  const next: OutlineNode[] = []
+  const pendingTables = new Map<string, OutlineTable[]>()
+
+  nodes.forEach((node) => {
+    if (isLegacyTableNode(node) && node.parentId) {
+      const key = String(node.parentId)
+      const list = pendingTables.get(key) ?? []
+      list.push(makeTablePlan(cleanLegacyTableName(node.title), list.length + 1))
+      pendingTables.set(key, list)
+      return
+    }
+    next.push({ ...node, tables: cloneTables(node.tables) })
+  })
+
+  return renumberOutline(
+    next.map((node) => {
+      const additions = pendingTables.get(String(node.id)) ?? []
+      const hintedTables = tablePlansFromPrompt(node.promptHint)
+      const tables = dedupeTables([...(node.tables || []), ...hintedTables, ...additions])
+      if (!tables.length) return { ...node, tables: [] }
+      return {
+        ...node,
+        tables,
+      }
+    }),
+  )
+}
+
+function isLegacyTableNode(node: OutlineNode) {
+  return /^表格项[:：]?/.test(node.title) || /^TABLE\s+/i.test(node.title)
+}
+
+function cleanLegacyTableName(title: string) {
+  return title.replace(/^表格项[:：]?/, '').replace(/^TABLE\s+/i, '').trim() || '检查结果'
+}
+
+function tablePlansFromPrompt(promptHint = '') {
+  return promptHint
+    .split(/\r?\n/)
+    .map((line) => /^表格[:：]\s*(.+)$/.exec(line.trim())?.[1]?.trim())
+    .filter(Boolean)
+    .map((caption, index) => makeTablePlan(caption, index + 1))
+}
+
+function makeTablePlan(caption: string, index: number): OutlineTable {
+  return {
+    id: `legacy-table-${Date.now()}-${index}`,
+    caption,
+    columns: ['项目', '检查结果', '备注'],
+    description: '',
+  }
+}
+
+function cloneTables(tables?: OutlineTable[]) {
+  return (tables || []).map((table) => ({
+    ...table,
+    columns: [...table.columns],
+    rows: table.rows?.map((row) => [...row]),
+  }))
+}
+
+function dedupeTables(tables: OutlineTable[]) {
+  const seen = new Set<string>()
+  return tables.filter((table) => {
+    const caption = table.caption.trim()
+    if (!caption || !table.columns.length || seen.has(caption)) return false
+    seen.add(caption)
+    return true
+  })
+}
+
+function buildTableDisplayMap() {
+  const result: Record<string, string[]> = {}
+  let globalIndex = 0
+
+  outline.value.forEach((node) => {
+    const tables = node.tables || []
+    if (!tables.length) return
+    result[String(node.id)] = tables.map((table, index) => {
+      globalIndex += 1
+      const label = numberingMode.value === 'global' ? `表${globalIndex}` : `表${node.number}-${index + 1}`
+      return `${label} ${table.caption}`
+    })
+  })
+
+  return result
+}
+
+function tableEntriesFor(node: OutlineNode) {
+  return (tableDisplayMap.value[String(node.id)] ?? []).map((label) => {
+    const match = /^(表[\d.-]+)\s+(.+)$/.exec(label)
+    const name = match?.[2] || label
+    const table = (node.tables || []).find((item) => item.caption === name)
+    return {
+      label: match?.[1] || '表',
+      name,
+      note: table?.description || table?.columns.join('、') || '生成正文时作为本节内部表格输出，不作为独立章节',
+    }
+  })
 }
 </script>
 
 <style scoped>
+.outline-page {
+  min-height: 100%;
+}
+
 .outline-status {
   display: grid;
   grid-template-columns: minmax(260px, 1fr) auto minmax(300px, 0.8fr);
@@ -196,9 +452,96 @@ async function startContent() {
   margin-top: 6px;
 }
 
+.outline-workspace {
+  display: grid;
+  grid-template-columns: minmax(420px, 0.9fr) minmax(520px, 1.1fr);
+  align-items: start;
+  gap: 16px;
+}
+
+.outline-preview-surface,
+.outline-config-surface {
+  max-height: calc(100vh - 230px);
+}
+
+.outline-tools {
+  display: grid;
+  grid-template-columns: minmax(220px, 320px) minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.outline-tools span {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.outline-tree-scroll,
+.node-form-scroll {
+  max-height: calc(100vh - 345px);
+  overflow: auto;
+}
+
+.outline-config-surface {
+  position: sticky;
+  top: 12px;
+  align-self: start;
+}
+
 .node-form {
   display: grid;
   gap: 14px;
   padding: 20px;
+}
+
+.outline-actions {
+  gap: 12px;
+}
+
+.header-action,
+.outline-action,
+.delete-node-button {
+  min-height: 38px;
+  padding: 0 18px;
+  font-weight: 800;
+}
+
+.delete-node-button {
+  border: 1px solid rgba(220, 38, 38, 0.34);
+  border-radius: 999px;
+  color: #ffffff;
+  background:
+    linear-gradient(135deg, rgba(248, 113, 113, 0.9), rgba(220, 38, 38, 0.96)),
+    #dc2626;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.22),
+    0 12px 24px rgba(220, 38, 38, 0.18);
+}
+
+.delete-node-button:hover {
+  border-color: rgba(220, 38, 38, 0.58);
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 16px 30px rgba(220, 38, 38, 0.24);
+}
+
+.delete-node-button.is-disabled {
+  color: rgba(255, 255, 255, 0.72);
+  opacity: 0.45;
+}
+
+.table-preview {
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+}
+
+.mini-title {
+  min-height: 48px;
+  padding: 12px 14px 8px;
 }
 </style>

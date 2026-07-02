@@ -77,24 +77,44 @@ export const useReportStore = defineStore("reports", () => {
     return current.value;
   }
 
+  async function saveOutlineDraft(id: EntityId, outline: OutlineNode[]) {
+    current.value = await reportApi.saveOutlineDraft(id, outline);
+    return current.value;
+  }
+
   async function startGenerate(id: EntityId) {
     stopStream();
     await reportApi.startGenerate(id);
     if (!current.value || !sameId(current.value.id, id)) await fetchDetail(id);
     if (current.value) current.value.status = "CONTENT_GENERATING";
+    connectStream(id);
+  }
+
+  function connectStream(id: EntityId, resetSectionId?: EntityId) {
     streaming.value = true;
     streamMessage.value = "SSE CONNECTED";
+    let generationCompleted = false;
     streamController = reportApi.createGenerateStream(
       id,
       (event) => {
         lastEvent.value = event;
+        if (resetSectionId && event.type === "section_started" && sameId(event.sectionId, resetSectionId) && current.value) {
+          const section = current.value.sections.find((item) => sameId(item.id, resetSectionId));
+          if (section) section.contentMarkdown = "";
+        }
         if (current.value) reportApi.applyStreamEvent(current.value, event);
         if (event.type === "section_started") streamMessage.value = `AI WRITING / ${event.number}`;
-        if (event.type === "task_completed") streamMessage.value = "GENERATION COMPLETE";
+        if (event.type === "task_completed") {
+          generationCompleted = true;
+          streamMessage.value = "GENERATION COMPLETE";
+        }
         if (event.type === "error") streamMessage.value = event.message;
       },
       () => {
         streaming.value = false;
+        if (generationCompleted) {
+          void fetchDetail(id).catch(() => undefined);
+        }
       }
     );
   }
@@ -106,7 +126,8 @@ export const useReportStore = defineStore("reports", () => {
   }
 
   async function saveSection(reportId: EntityId, sectionId: EntityId, content: string) {
-    const section = await reportApi.saveSection(reportId, sectionId, content);
+    const currentSection = current.value?.sections.find((item) => sameId(item.id, sectionId));
+    const section = await reportApi.saveSection(reportId, sectionId, content, currentSection?.tableJson);
     if (current.value) {
       const index = current.value.sections.findIndex((item) => sameId(item.id, sectionId));
       if (index >= 0) current.value.sections[index] = section;
@@ -114,11 +135,20 @@ export const useReportStore = defineStore("reports", () => {
   }
 
   async function regenerateSection(reportId: EntityId, sectionId: EntityId) {
-    const section = await reportApi.regenerateSection(reportId, sectionId);
+    stopStream();
+    await reportApi.regenerateSection(reportId, sectionId);
     if (current.value) {
       const index = current.value.sections.findIndex((item) => sameId(item.id, sectionId));
-      if (index >= 0) current.value.sections[index] = section;
+      if (index >= 0) {
+        current.value.sections[index] = {
+          ...current.value.sections[index],
+          contentMarkdown: "",
+          status: "GENERATING",
+          updatedAt: new Date().toISOString()
+        };
+      }
     }
+    connectStream(reportId, sectionId);
   }
 
   async function exportDocx(reportId: EntityId) {
@@ -160,6 +190,7 @@ export const useReportStore = defineStore("reports", () => {
     remove,
     generateOutline,
     saveOutline,
+    saveOutlineDraft,
     startGenerate,
     stopStream,
     saveSection,

@@ -3,8 +3,8 @@
     <div class="page dashboard-page" v-loading="loading">
       <PageHeader
         eyebrow="ADMIN TREND MONITOR"
-        title="趋势统计"
-        description="系统运行状态、报告生成质量和报告生成模块任务趋势。"
+        title="趋势监控"
+        description="系统运行状态、报告生成质量和 C 组报告任务趋势。"
       >
         <el-radio-group v-model="days" size="small" @change="load">
           <el-radio-button :label="7">7 天</el-radio-button>
@@ -45,37 +45,69 @@
       </section>
 
       <section class="trend-grid">
-        <div v-for="trend in trends" :key="trend.key" class="surface trend-card">
+        <div v-if="primaryTrend" class="surface trend-card">
           <div class="surface-title compact-title">
             <div>
               <span class="eyebrow">TIME DISTRIBUTION</span>
-              <h2>{{ trend.title }}</h2>
+              <h2>{{ primaryTrend.title }}</h2>
             </div>
-            <strong :style="{ color: trend.color }">{{ trendTotal(trend) }}</strong>
+            <strong :style="{ color: primaryTrend.color }">{{ trendTotal(primaryTrend) }}</strong>
           </div>
-          <svg class="trend-chart" viewBox="0 0 520 210" role="img" :aria-label="trend.title">
+          <svg class="trend-chart" viewBox="0 0 1000 280" role="img" :aria-label="primaryTrend.title">
             <defs>
-              <linearGradient :id="`area-${trend.key}`" x1="0" x2="0" y1="0" y2="1">
-                <stop offset="0%" :stop-color="trend.color" stop-opacity="0.32" />
-                <stop offset="100%" :stop-color="trend.color" stop-opacity="0.02" />
+              <linearGradient :id="`area-${primaryTrend.key}`" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" :stop-color="primaryTrend.color" stop-opacity="0.32" />
+                <stop offset="100%" :stop-color="primaryTrend.color" stop-opacity="0.02" />
               </linearGradient>
             </defs>
-            <line v-for="line in chartGrid" :key="line" x1="24" x2="500" :y1="line" :y2="line" class="chart-grid-line" />
-            <polyline :points="areaPoints(trend)" :fill="`url(#area-${trend.key})`" stroke="none" />
-            <polyline :points="linePoints(trend)" fill="none" :stroke="trend.color" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+            <line v-for="line in chartGrid" :key="line" :x1="chartLeft" :x2="chartRight" :y1="line" :y2="line" class="chart-grid-line" />
+            <polyline :points="areaPoints(primaryTrend)" :fill="`url(#area-${primaryTrend.key})`" stroke="none" />
+            <polyline :points="linePoints(primaryTrend)" fill="none" :stroke="primaryTrend.color" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" />
             <circle
-              v-for="(point, index) in trend.points"
-              :key="`${trend.key}-${point.date}`"
-              :cx="pointX(index, trend.points.length)"
-              :cy="pointY(point.count, trend)"
-              r="3.5"
-              :fill="trend.color"
+              v-for="(point, index) in primaryTrend.points"
+              :key="`${primaryTrend.key}-${point.date}`"
+              :cx="pointX(index, primaryTrend.points.length)"
+              :cy="pointY(point.count, primaryTrend)"
+              r="5"
+              :fill="primaryTrend.color"
               class="trend-point"
             />
-            <text x="24" y="202" class="chart-label">{{ trend.points[0]?.date }}</text>
-            <text x="448" y="202" class="chart-label">{{ trend.points[trend.points.length - 1]?.date }}</text>
+            <text :x="chartLeft" :y="chartLabelY" class="chart-label">{{ primaryTrend.points[0]?.date }}</text>
+            <text :x="chartRight - 92" :y="chartLabelY" class="chart-label">{{ primaryTrend.points[primaryTrend.points.length - 1]?.date }}</text>
           </svg>
         </div>
+
+        <aside class="surface trend-side-card">
+          <div class="surface-title compact-title">
+            <div>
+              <span class="eyebrow">RUNNING SNAPSHOT</span>
+              <h2>运行速览</h2>
+            </div>
+            <strong :class="hasDanger ? 'danger-text' : 'success-text'">{{ successRate }}%</strong>
+          </div>
+
+          <div class="snapshot-grid">
+            <div v-for="item in snapshotStats" :key="item.label" class="snapshot-item" :class="`snapshot-${item.tone}`">
+              <span>{{ item.label }}</span>
+              <strong>{{ formatNumber(item.value) }}</strong>
+            </div>
+          </div>
+
+          <div class="trend-insight-list">
+            <div class="insight-row">
+              <span>最近任务</span>
+              <strong>{{ latestTask?.name || '暂无任务' }}</strong>
+            </div>
+            <div class="insight-row">
+              <span>任务状态</span>
+              <strong>{{ latestTask ? statusLabel(latestTask.status) : '-' }}</strong>
+            </div>
+            <div class="insight-row">
+              <span>告警摘要</span>
+              <strong>{{ alerts.length ? alerts[0].title : '无异常告警' }}</strong>
+            </div>
+          </div>
+        </aside>
       </section>
 
       <div class="dashboard-main">
@@ -108,13 +140,18 @@
           </div>
         </section>
 
-        <section class="surface">
+        <section class="surface health-surface">
           <div class="surface-title">
             <div>
               <span class="eyebrow">SERVICE HEALTH</span>
               <h2>接口健康</h2>
             </div>
+            <div class="health-toolbar">
+              <span>{{ healthRefreshing ? '刷新中' : `每秒刷新 · ${healthUpdatedText}` }}</span>
+              <el-button size="small" :loading="healthRefreshing" @click="refreshHealth">刷新</el-button>
+            </div>
           </div>
+          <el-alert v-if="healthError" class="health-error" type="warning" :closable="false" :title="healthError" />
           <div class="health-list">
             <div v-for="item in health" :key="item.name" class="health-row">
               <span class="status-dot" :class="healthTone(item.status)" />
@@ -179,23 +216,36 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import AuthGuard from '@platform/ui/src/components/AuthGuard.vue'
 import PageHeader from '@/components/PageHeader.vue'
-import { fetchDashboardData, type ActivityTrend, type DashboardData, type DistributionItem, type HealthStatus } from '@/api/admin'
+import { fetchDashboardData, fetchStatsHealth, type ActivityTrend, type DashboardData, type DistributionItem, type HealthItem, type HealthStatus } from '@/api/admin'
 
 const days = ref(30)
 const loading = ref(false)
+const healthRefreshing = ref(false)
+const healthItems = ref<HealthItem[]>([])
+const healthUpdatedAt = ref('')
+const healthError = ref('')
 const data = ref<DashboardData>()
-const chartGrid = [40, 82, 124, 166]
+const chartLeft = 56
+const chartRight = 944
+const chartTop = 38
+const chartBottom = 222
+const chartLabelY = 264
+const chartGrid = [54, 104, 154, 204]
+let healthTimer: number | undefined
 
 const metrics = computed(() => data.value?.metrics ?? [])
 const trends = computed(() => data.value?.trends ?? [])
+const primaryTrend = computed(() => trends.value[0])
 const distributions = computed(() => data.value?.distributions ?? [])
-const health = computed(() => data.value?.health ?? [])
+const health = computed(() => (healthItems.value.length ? healthItems.value : data.value?.health ?? []))
 const alerts = computed(() => data.value?.alerts ?? [])
 const recentTasks = computed(() => data.value?.recentTasks ?? [])
+const latestTask = computed(() => recentTasks.value[0])
 const updatedText = computed(() => (data.value ? new Date(data.value.updatedAt).toLocaleString() : '-'))
+const healthUpdatedText = computed(() => (healthUpdatedAt.value ? new Date(healthUpdatedAt.value).toLocaleTimeString() : '-'))
 const hasDanger = computed(() => alerts.value.some((item) => item.level === 'danger'))
 const successRate = computed(() => {
   const total = metricValue('reportGenerations')
@@ -203,20 +253,58 @@ const successRate = computed(() => {
   if (!total) return 100
   return Math.max(0, Math.round(((total - failed) / total) * 100))
 })
+const runningReports = computed(() => metricValue('generatingReports') || taskCount(['CONTENT_GENERATING']))
+const readyReports = computed(() => metricValue('contentReadyReports') || taskCount(['CONTENT_READY']))
+const exportedReports = computed(() => metricValue('exportedReports') || taskCount(['EXPORTED']))
+const snapshotStats = computed(() => [
+  { label: '报告总数', value: metricValue('reportGenerations'), tone: 'pink' },
+  { label: '生成中', value: runningReports.value, tone: 'cyan' },
+  { label: '就绪/导出', value: readyReports.value + exportedReports.value, tone: 'green' },
+  { label: '失败任务', value: metricValue('failedTasks'), tone: 'red' },
+])
 
-onMounted(load)
+onMounted(() => {
+  void load()
+  healthTimer = window.setInterval(() => void refreshHealth(), 1000)
+})
+
+onBeforeUnmount(() => {
+  if (healthTimer) window.clearInterval(healthTimer)
+})
 
 async function load() {
   loading.value = true
   try {
-    data.value = await fetchDashboardData(days.value)
+    const nextData = await fetchDashboardData(days.value)
+    data.value = nextData
+    healthItems.value = nextData.health
+    healthUpdatedAt.value = nextData.updatedAt
+    healthError.value = ''
   } finally {
     loading.value = false
   }
 }
 
+async function refreshHealth() {
+  if (healthRefreshing.value) return
+  healthRefreshing.value = true
+  try {
+    healthItems.value = await fetchStatsHealth()
+    healthUpdatedAt.value = new Date().toISOString()
+    healthError.value = ''
+  } catch (error) {
+    healthError.value = error instanceof Error ? error.message : '接口健康刷新失败'
+  } finally {
+    healthRefreshing.value = false
+  }
+}
+
 function metricValue(key: string) {
   return metrics.value.find((item) => item.key === key)?.value ?? 0
+}
+
+function taskCount(statuses: string[]) {
+  return recentTasks.value.filter((item) => statuses.includes(item.status)).length
 }
 
 function formatNumber(value: number) {
@@ -232,12 +320,12 @@ function trendMax(trend: ActivityTrend) {
 }
 
 function pointX(index: number, total: number) {
-  if (total <= 1) return 24
-  return 24 + (index / (total - 1)) * 476
+  if (total <= 1) return chartLeft
+  return chartLeft + (index / (total - 1)) * (chartRight - chartLeft)
 }
 
 function pointY(count: number, trend: ActivityTrend) {
-  return 176 - (count / trendMax(trend)) * 136
+  return chartBottom - (count / trendMax(trend)) * (chartBottom - chartTop)
 }
 
 function linePoints(trend: ActivityTrend) {
@@ -245,7 +333,7 @@ function linePoints(trend: ActivityTrend) {
 }
 
 function areaPoints(trend: ActivityTrend) {
-  return `24,176 ${linePoints(trend)} 500,176`
+  return `${chartLeft},${chartBottom} ${linePoints(trend)} ${chartRight},${chartBottom}`
 }
 
 function distributionTotal(items: DistributionItem[]) {
@@ -316,7 +404,7 @@ function statusTag(status: string) {
 
 .metric-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 14px;
 }
 
@@ -403,8 +491,14 @@ function statusTag(status: string) {
 
 .trend-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1.12fr) minmax(360px, 0.88fr);
   gap: 16px;
+  align-items: stretch;
+}
+
+.trend-card,
+.trend-side-card {
+  min-height: 440px;
 }
 
 .compact-title {
@@ -419,8 +513,87 @@ function statusTag(status: string) {
 .trend-chart {
   display: block;
   width: 100%;
-  height: 230px;
-  padding: 10px 14px 14px;
+  height: auto;
+  aspect-ratio: 1000 / 280;
+  padding: 0 18px 18px;
+  box-sizing: border-box;
+}
+
+.trend-side-card {
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.snapshot-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  padding: 16px 16px 10px;
+}
+
+.snapshot-item {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+  padding: 4px 0 10px 12px;
+  border-left: 3px solid currentColor;
+}
+
+.snapshot-item span {
+  overflow: hidden;
+  color: var(--text-secondary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.snapshot-item strong {
+  font-family: var(--font-display);
+  font-size: 30px;
+  line-height: 1;
+}
+
+.snapshot-cyan {
+  color: var(--accent-cyan);
+}
+
+.snapshot-green {
+  color: var(--state-success);
+}
+
+.snapshot-pink {
+  color: #ec5da5;
+}
+
+.snapshot-red {
+  color: var(--state-danger);
+}
+
+.trend-insight-list {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding: 8px 16px 16px;
+}
+
+.insight-row {
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  min-height: 42px;
+  border-top: 1px solid var(--border-default);
+}
+
+.insight-row span {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.insight-row strong {
+  overflow: hidden;
+  color: var(--text-primary);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .chart-grid-line {
@@ -585,6 +758,19 @@ function statusTag(status: string) {
   font-style: normal;
 }
 
+.health-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.health-error {
+  margin: 12px 16px 0;
+}
+
 .alert-row {
   display: grid;
   grid-template-columns: 82px minmax(0, 1fr) 150px;
@@ -630,5 +816,35 @@ function statusTag(status: string) {
 .recent-table :deep(small) {
   margin-top: 4px;
   color: var(--text-muted);
+}
+
+@media (max-width: 1280px) {
+  .metric-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .trend-grid,
+  .dashboard-main,
+  .lower-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 760px) {
+  .dashboard-band,
+  .metric-grid,
+  .snapshot-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .donut-panel,
+  .alert-row {
+    grid-template-columns: 1fr;
+  }
+
+  .health-toolbar {
+    align-items: flex-start;
+    flex-direction: column;
+  }
 }
 </style>

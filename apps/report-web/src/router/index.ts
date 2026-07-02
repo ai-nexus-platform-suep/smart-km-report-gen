@@ -31,28 +31,34 @@ const moduleRoutes: RouteRecordRaw[] = [
     meta: { title: "正文工作台" }
   },
   {
+    path: "/reports/:id/view",
+    name: "ReportView",
+    component: () => import("../pages/reports/ReportViewPage.vue"),
+    meta: { title: "报告正文查看" }
+  },
+  {
     path: "/reports/:id/export",
     name: "ReportExport",
     component: () => import("../pages/reports/ExportPage.vue"),
     meta: { title: "报告导出" }
   },
   {
-    path: "/reports/dashboard",
-    name: "ReportDashboard",
-    component: () => import("../pages/admin/AdminDashboardPage.vue"),
-    meta: { title: "趋势统计", admin: true }
-  },
-  {
     path: "/admin/dashboard",
-    name: "AdminDashboardCompat",
+    name: "AdminDashboard",
     component: () => import("../pages/admin/AdminDashboardPage.vue"),
-    meta: { title: "趋势统计", admin: true }
+    meta: { title: "趋势监控", admin: true }
   },
   {
     path: "/admin/templates",
     name: "TemplateAdmin",
     component: () => import("../pages/admin/TemplateAdminPage.vue"),
     meta: { title: "模板管理", admin: true }
+  },
+  {
+    path: "/admin/assets",
+    name: "AssetAdmin",
+    component: () => import("../pages/admin/AssetAdminPage.vue"),
+    meta: { title: "素材管理", admin: true }
   },
   {
     path: "/admin/llm-configs",

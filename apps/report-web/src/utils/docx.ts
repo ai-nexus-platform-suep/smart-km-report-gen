@@ -1,4 +1,4 @@
-import type { ReportDetail, ReportSection, TableBlock } from "@/types/domain";
+import type { OutlineTable, ReportDetail, ReportSection, TableBlock } from "@/types/domain";
 
 export const DOCX_MIME = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
@@ -82,7 +82,7 @@ function sectionToXml(section: ReportSection) {
     });
   }
 
-  if (section.tableJson) parts.push(table(section.tableJson));
+  section.tableJson?.forEach((block) => parts.push(table(block)));
   return parts;
 }
 
@@ -91,8 +91,8 @@ function paragraph(text: string, style?: "Title" | "Heading1" | "Heading2") {
   return `<w:p>${styleXml}<w:r><w:t xml:space="preserve">${escapeXml(text)}</w:t></w:r></w:p>`;
 }
 
-function table(block: TableBlock) {
-  const rows = [block.columns, ...block.rows]
+function table(block: TableBlock | OutlineTable) {
+  const rows = [block.columns, ...(block.rows || [])]
     .map(
       (row) =>
         `<w:tr>${row
