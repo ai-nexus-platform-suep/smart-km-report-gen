@@ -21,8 +21,8 @@ import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
-import javax.servlet.http.HttpServletResponse;
-import javax.validation.Valid;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.Valid;
 
 /**
  * 文档管理控制器
@@ -146,10 +146,10 @@ public class DocumentController {
     }
 
     public static class DocumentUploadForm {
-        @Schema(description = "上传文件", type = "string", format = "binary", required = true)
+        @Schema(description = "上传文件", type = "string", format = "binary", requiredMode = Schema.RequiredMode.REQUIRED)
         public MultipartFile file;
 
-        @Schema(description = "标签 JSON 字符串", type = "string", required = false)
+        @Schema(description = "标签 JSON 字符串", type = "string", requiredMode = Schema.RequiredMode.NOT_REQUIRED)
         public String tags;
     }
 }

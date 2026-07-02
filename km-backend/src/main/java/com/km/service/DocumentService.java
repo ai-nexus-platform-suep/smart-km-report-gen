@@ -10,7 +10,7 @@ import com.km.vo.ChunkVO;
 import com.km.vo.DocumentVO;
 import org.springframework.web.multipart.MultipartFile;
 
-import javax.servlet.http.HttpServletResponse;
+import jakarta.servlet.http.HttpServletResponse;
 import java.util.Map;
 
 /**

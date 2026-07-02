@@ -1,6 +1,6 @@
 package com.km.dto.request;
 
-import javax.validation.constraints.Size;
+import jakarta.validation.constraints.Size;
 import java.util.Map;
 
 public class UpdateKnowledgeBaseRequest {
