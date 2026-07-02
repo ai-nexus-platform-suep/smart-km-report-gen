@@ -6,8 +6,7 @@
       description="按叶子章节流式生成正文，目录级标题只作为结构导航。生成后可直接在线编辑 Markdown，并预览表格排版。"
     >
       <el-button :disabled="contentGenerating" @click="backToOutline">返回大纲</el-button>
-      <el-button :disabled="contentGenerating" @click="startGenerate('TEMPLATE')">模板生成正文</el-button>
-      <el-button type="primary" :loading="contentGenerating" @click="startGenerate('AI')">AI 生成正文</el-button>
+      <el-button type="primary" :loading="contentGenerating" @click="startGenerate">AI 按大纲生成正文</el-button>
       <el-button :disabled="contentGenerating || !canExport" @click="$router.push(`/reports/${reportId}/export`)">导出 DOCX</el-button>
     </PageHeader>
 
@@ -164,7 +163,6 @@ import PageHeader from '@/components/PageHeader.vue'
 import OutlineTree from '@/components/OutlineTree.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { useReportStore } from '@/stores/reports'
-import type { GenerationMode } from '@/api/reports'
 import type { EntityId, OutlineNode, ReportSection } from '@/types/domain'
 import { contentOutlineNodes, isContentOutlineNode } from '@/utils/outline'
 import { renderMarkdownHtml } from '@/utils/markdown'
@@ -308,12 +306,12 @@ function selectSectionBySectionId(sectionId: EntityId) {
   }
 }
 
-async function startGenerate(generationMode: GenerationMode) {
+async function startGenerate() {
   if (contentGenerating.value) return
   generationStarting.value = true
   try {
-    await store.startGenerate(reportId, generationMode)
-    ElMessage.info(generationMode === 'TEMPLATE' ? '模板正文生成任务已启动' : 'AI 正文生成任务已启动')
+    await store.startGenerate(reportId)
+    ElMessage.info('AI 正文生成任务已启动，将按当前大纲逐节生成')
   } finally {
     generationStarting.value = false
   }

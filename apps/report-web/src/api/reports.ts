@@ -143,6 +143,7 @@ export interface ExportDocxOptions {
 
 const sameId = (a?: EntityId, b?: EntityId) => String(a) === String(b);
 const wait = (ms = 300) => new Promise((resolve) => window.setTimeout(resolve, ms));
+const outlineTableCache = new Map<string, OutlineNode[]>();
 
 function parseSseJson<T>(data: string): T | undefined {
   try {
@@ -187,36 +188,86 @@ function reportTypeOf(record: Pick<BackendReportRecord, "type" | "reportType">) 
   return record.type || record.reportType || "SUMMER_PEAK_CHECK";
 }
 
+function tableArray(value: unknown): unknown[] {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    try {
+      return tableArray(JSON.parse(value));
+    } catch {
+      return [];
+    }
+  }
+  if (typeof value !== "object") return [];
+
+  const record = value as Record<string, unknown>;
+  if (Array.isArray(record.tables)) return record.tables;
+  if (Array.isArray(record.tableJson)) return record.tableJson;
+  if (Array.isArray(record.tablePlans)) return record.tablePlans;
+  if (Array.isArray(record.items)) return record.items;
+  return [value];
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" || typeof value === "number" ? String(value).trim() : "";
+}
+
+function normalizeColumns(columns: unknown): string[] {
+  if (Array.isArray(columns)) {
+    return columns
+      .map((column) => {
+        if (typeof column === "object" && column) {
+          const record = column as Record<string, unknown>;
+          return stringValue(record.label) || stringValue(record.name) || stringValue(record.title) || stringValue(record.key);
+        }
+        return stringValue(column);
+      })
+      .filter(Boolean);
+  }
+
+  if (typeof columns === "string") {
+    return columns
+      .split(/[|｜,，、\n]/)
+      .map((column) => column.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+}
+
+function normalizeRows(rows: unknown) {
+  if (!Array.isArray(rows)) return undefined;
+  return rows
+    .map((row) => {
+      if (Array.isArray(row)) return row.map(String);
+      if (row && typeof row === "object") return Object.values(row as Record<string, unknown>).map((cell) => String(cell ?? ""));
+      return undefined;
+    })
+    .filter(Boolean) as string[][];
+}
+
 function normalizeTables(tables: unknown): OutlineTable[] {
-  if (!Array.isArray(tables)) return [];
-  return tables
+  return tableArray(tables)
     .map((table, index) => {
       if (!table || typeof table !== "object") return undefined;
-      const item = table as Partial<BackendOutlineTable>;
-      const columns = Array.isArray(item.columns) ? item.columns.map(String).filter(Boolean) : [];
-      const caption = String(item.caption || "").trim();
+      const item = table as Partial<BackendOutlineTable> & Record<string, unknown>;
+      const columns = normalizeColumns(item.columns);
+      const caption = stringValue(item.caption) || stringValue(item.name) || stringValue(item.title) || stringValue(item.label) || `表${index + 1}`;
       if (!caption || !columns.length) return undefined;
       return {
-        id: item.id || `table-${index + 1}`,
+        id: item.id || stringValue(item.tableId) || `table-${index + 1}`,
         caption,
         columns,
-        description: item.description,
-        rows: Array.isArray(item.rows)
-          ? item.rows.filter(Array.isArray).map((row) => row.map(String))
-          : undefined
+        description: stringValue(item.description) || stringValue(item.note) || undefined,
+        rows: normalizeRows(item.rows || item.data)
       } satisfies OutlineTable;
     })
     .filter(Boolean) as OutlineTable[];
 }
 
-function parseTableJson(value: BackendSection["tableJson"]) {
+function parseTableJson(value: unknown) {
   if (!value) return [];
-  if (Array.isArray(value)) return normalizeTables(value);
-  try {
-    return normalizeTables(JSON.parse(value));
-  } catch {
-    return [];
-  }
+  return normalizeTables(value);
 }
 
 function outlineTables(node: BackendOutlineNode) {
@@ -235,6 +286,70 @@ function cloneTables(tables?: OutlineTable[]) {
     columns: [...table.columns],
     rows: table.rows?.map((row) => [...row])
   }));
+}
+
+function cloneOutline(outline?: OutlineNode[], reportId?: EntityId) {
+  return (outline || []).map((node) => ({
+    ...node,
+    reportId: reportId ?? node.reportId,
+    tables: cloneTables(node.tables)
+  }));
+}
+
+function hasOutlineTables(outline?: OutlineNode[]) {
+  return Boolean(outline?.some((node) => node.tables?.length));
+}
+
+function findOutlineTableSource(sources: OutlineNode[] = [], target: OutlineNode) {
+  return (
+    sources.find((node) => sameId(node.id, target.id)) ||
+    sources.find((node) => node.number === target.number && node.title === target.title)
+  );
+}
+
+function mergeMissingOutlineTables(outline: OutlineNode[], tableSource?: OutlineNode[]) {
+  return outline.map((node) => {
+    if (node.tables?.length) return { ...node, tables: cloneTables(node.tables) };
+    const source = findOutlineTableSource(tableSource, node);
+    return { ...node, tables: cloneTables(source?.tables) };
+  });
+}
+
+function cacheOutlineTables(reportId?: EntityId, outline?: OutlineNode[]) {
+  if (!reportId || !hasOutlineTables(outline)) return;
+  outlineTableCache.set(String(reportId), cloneOutline(outline));
+}
+
+function replaceCachedOutlineTables(reportId?: EntityId, outline?: OutlineNode[]) {
+  if (!reportId) return;
+  if (!hasOutlineTables(outline)) {
+    outlineTableCache.delete(String(reportId));
+    return;
+  }
+  outlineTableCache.set(String(reportId), cloneOutline(outline));
+}
+
+function cachedOutlineTables(ids: Array<EntityId | undefined>) {
+  for (const id of ids) {
+    if (!id) continue;
+    const outline = outlineTableCache.get(String(id));
+    if (hasOutlineTables(outline)) return outline;
+  }
+  return undefined;
+}
+
+function restoreCachedOutlineTables(detail: ReportDetail, aliases: Array<EntityId | undefined> = []) {
+  const cached = cachedOutlineTables([detail.id, detail.tempId, ...aliases]);
+  if (!cached) return detail;
+  return ensureReportSections({ ...detail, outline: mergeMissingOutlineTables(detail.outline, cached) });
+}
+
+function rememberReportTables(detail: ReportDetail, aliases: Array<EntityId | undefined> = []) {
+  const restored = restoreCachedOutlineTables(detail, aliases);
+  cacheOutlineTables(restored.id, restored.outline);
+  cacheOutlineTables(restored.tempId, restored.outline);
+  aliases.forEach((id) => cacheOutlineTables(id, restored.outline));
+  return restored;
 }
 
 function flattenOutline(nodes: BackendOutlineNode[] = [], reportId: EntityId, parentId?: EntityId): OutlineNode[] {
@@ -259,15 +374,20 @@ function buildOutlineTree(nodes: OutlineNode[], parentId?: EntityId): BackendOut
   return nodes
     .filter((node) => (parentId ? sameId(node.parentId, parentId) : !node.parentId))
     .sort((a, b) => a.sortOrder - b.sortOrder)
-    .map((node) => ({
-      id: String(node.id).startsWith("local-") ? undefined : String(node.id),
-      number: node.number,
-      title: node.title,
-      level: node.level,
-      promptHint: node.promptHint,
-      tables: normalizeTables(node.tables),
-      children: buildOutlineTree(nodes, node.id)
-    }));
+    .map((node) => {
+      const tables = normalizeTables(node.tables);
+      return {
+        id: String(node.id).startsWith("local-") ? undefined : String(node.id),
+        number: node.number,
+        title: node.title,
+        level: node.level,
+        promptHint: node.promptHint,
+        tables,
+        tableJson: tables.length ? JSON.stringify(tables) : undefined,
+        tablePlans: tables,
+        children: buildOutlineTree(nodes, node.id)
+      };
+    });
 }
 
 function mapReport(record: BackendReportRecord): Report {
@@ -380,7 +500,10 @@ function mapDetail(record: BackendReportRecord): ReportDetail {
 }
 
 function mapOutlineDraft(record: OutlineDraftResponse, base?: Partial<ReportDetail>): ReportDetail {
-  const outline = flattenOutline(record.outline || [], record.reportId);
+  const flattenedOutline = flattenOutline(record.outline || [], record.reportId);
+  const outline = flattenedOutline.length
+    ? mergeMissingOutlineTables(flattenedOutline, base?.outline)
+    : cloneOutline(base?.outline, record.reportId);
   const now = new Date().toISOString();
   return ensureReportSections({
     id: record.reportId,
@@ -404,6 +527,15 @@ function mapOutlineDraft(record: OutlineDraftResponse, base?: Partial<ReportDeta
     sections: base?.sections || [],
     files: base?.files || []
   });
+}
+
+function hasReportTables(report: ReportDetail) {
+  return report.outline.some((node) => node.tables?.length) || report.sections.some((section) => section.tableJson?.length);
+}
+
+function mergeOutlineTables(detail: ReportDetail, tableSource: ReportDetail) {
+  const outline = mergeMissingOutlineTables(detail.outline, tableSource.outline);
+  return ensureReportSections({ ...detail, outline });
 }
 
 function mapFile(file: ExportDocxResponse): ReportFile {
@@ -504,9 +636,9 @@ export async function createReport(payload: CreateReportPayload) {
   const transientDraft = makeDraft(payload, result);
   const savedDraft = await apiRequest<OutlineDraftResponse>("/api/reports/outline/draft", {
     method: "POST",
-    body: JSON.stringify(outlinePersistPayload(transientDraft, result.outline || [], result.tempId))
+    body: JSON.stringify(outlinePersistPayload(transientDraft, buildOutlineTree(transientDraft.outline), result.tempId))
   });
-  return mapOutlineDraft(savedDraft, transientDraft);
+  return rememberReportTables(mapOutlineDraft(savedDraft, transientDraft), [transientDraft.id, result.tempId]);
 }
 
 export async function generateFixedOutline(reportType: Report["type"]) {
@@ -525,15 +657,20 @@ export async function getReport(id: EntityId) {
   if (enableMock) return mockGetReport(id);
 
   const detail = await apiRequest<BackendReportRecord>(`/api/reports/history/${id}`);
-  const report = mapDetail(detail);
-  if (report.status === "DRAFT" || !report.outline.length) {
+  let report = mapDetail(detail);
+  if (report.status === "DRAFT" || !report.outline.length || !hasReportTables(report)) {
     try {
-      return await getSavedOutlineReport(id, report);
+      const savedOutline = restoreCachedOutlineTables(await getSavedOutlineReport(id, report), [id]);
+      if (report.status === "DRAFT" || !report.outline.length) return rememberReportTables(savedOutline, [id]);
+      if (!hasReportTables(report) && hasReportTables(savedOutline)) {
+        return rememberReportTables(mergeOutlineTables(report, savedOutline), [id]);
+      }
+      report = mergeOutlineTables(report, savedOutline);
     } catch (error) {
       if (report.status === "DRAFT") throw error;
     }
   }
-  return report;
+  return rememberReportTables(report, [id]);
 }
 
 async function getSavedOutlineReport(id: EntityId, base?: Partial<ReportDetail>) {
@@ -556,16 +693,21 @@ export async function generateOutline(id: EntityId) {
     method: "POST",
     body: JSON.stringify(reportPayload(draft, generationMode))
   });
+  const generatedOutline = flattenOutline(result.outline || [], draft.id);
+  replaceCachedOutlineTables(id, generatedOutline);
+  replaceCachedOutlineTables(draft.id, generatedOutline);
+  replaceCachedOutlineTables(result.tempId, generatedOutline);
   const savedDraft = await apiRequest<OutlineDraftResponse>(`/api/reports/${id}/outline/draft`, {
     method: "PUT",
-    body: JSON.stringify(outlinePersistPayload(draft, result.outline || [], result.tempId))
+    body: JSON.stringify(outlinePersistPayload(draft, buildOutlineTree(generatedOutline), result.tempId))
   });
-  return mapOutlineDraft(savedDraft, {
+  return rememberReportTables(mapOutlineDraft(savedDraft, {
     ...draft,
     tempId: result.tempId,
     outlineSource: result.source,
-    outlineExpireSeconds: result.expireSeconds
-  });
+    outlineExpireSeconds: result.expireSeconds,
+    outline: generatedOutline
+  }), [id, result.tempId]);
 }
 
 export async function saveOutline(id: EntityId, outline: OutlineNode[]) {
@@ -573,6 +715,11 @@ export async function saveOutline(id: EntityId, outline: OutlineNode[]) {
 
   const draft = await getReport(id);
   if (draft.status !== "DRAFT") throw new Error("只有草稿状态的大纲可以确认保存");
+  const submittedOutline = renumberOutline(outline);
+  const submittedTree = buildOutlineTree(submittedOutline);
+  replaceCachedOutlineTables(id, submittedOutline);
+  replaceCachedOutlineTables(draft.id, submittedOutline);
+  replaceCachedOutlineTables(draft.tempId, submittedOutline);
   const result = await apiRequest<ConfirmOutlineResponse>("/api/reports/outline/confirm", {
     method: "POST",
     body: JSON.stringify({
@@ -584,12 +731,15 @@ export async function saveOutline(id: EntityId, outline: OutlineNode[]) {
       specialty: draft.specialty,
       powerPlant: draft.powerPlant,
       reportYear: draft.reportYear,
-      outline: buildOutlineTree(renumberOutline(outline))
+      outline: submittedTree
     })
   });
 
-  const confirmedOutline = flattenOutline(result.outline || buildOutlineTree(outline), result.reportId);
-  return ensureReportSections({
+  const confirmedOutline = mergeMissingOutlineTables(
+    flattenOutline(result.outline?.length ? result.outline : submittedTree, result.reportId),
+    submittedOutline
+  );
+  return rememberReportTables(ensureReportSections({
     ...draft,
     id: result.reportId,
     tempId: undefined,
@@ -599,7 +749,7 @@ export async function saveOutline(id: EntityId, outline: OutlineNode[]) {
     outline: confirmedOutline,
     totalSections: countContentOutlineNodes(confirmedOutline),
     updatedAt: new Date().toISOString()
-  });
+  }), [id, draft.id, draft.tempId]);
 }
 
 export async function saveOutlineDraft(id: EntityId, outline: OutlineNode[]) {
@@ -608,18 +758,21 @@ export async function saveOutlineDraft(id: EntityId, outline: OutlineNode[]) {
   const draft = await getReport(id);
   if (draft.status !== "DRAFT") throw new Error("只有草稿状态的大纲可以保存");
   const nextOutline = renumberOutline(outline);
+  replaceCachedOutlineTables(id, nextOutline);
+  replaceCachedOutlineTables(draft.id, nextOutline);
+  replaceCachedOutlineTables(draft.tempId, nextOutline);
   const savedDraft = await apiRequest<OutlineDraftResponse>(`/api/reports/${id}/outline/draft`, {
     method: "PUT",
     body: JSON.stringify(outlinePersistPayload(draft, buildOutlineTree(nextOutline), draft.tempId))
   });
-  return mapOutlineDraft(savedDraft, { ...draft, outline: nextOutline });
+  return rememberReportTables(mapOutlineDraft(savedDraft, { ...draft, outline: nextOutline }), [id, draft.id, draft.tempId]);
 }
 
-export async function startGenerate(id: EntityId, generationMode: GenerationMode = "AI") {
+export async function startGenerate(id: EntityId) {
   if (enableMock) return mockStartGenerate(id);
   await apiRequest(`/api/reports/${id}/sections/generate`, {
     method: "POST",
-    body: JSON.stringify({ generationMode })
+    body: JSON.stringify({ generationMode: "AI" })
   });
 }
 

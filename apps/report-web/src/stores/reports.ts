@@ -1,7 +1,6 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import * as reportApi from "@/api/reports";
-import type { GenerationMode } from "@/api/reports";
 import type { CreateReportPayload, EntityId, GenerateStreamEvent, OutlineNode, PageResult, Report, ReportDetail, ReportQuery } from "@/types/domain";
 import { assertValidDocxBlob, normalizeDocxFileName } from "@/utils/docx";
 
@@ -83,9 +82,9 @@ export const useReportStore = defineStore("reports", () => {
     return current.value;
   }
 
-  async function startGenerate(id: EntityId, generationMode: GenerationMode = "AI") {
+  async function startGenerate(id: EntityId) {
     stopStream();
-    await reportApi.startGenerate(id, generationMode);
+    await reportApi.startGenerate(id);
     if (!current.value || !sameId(current.value.id, id)) await fetchDetail(id);
     if (current.value) current.value.status = "CONTENT_GENERATING";
     connectStream(id);

@@ -118,8 +118,16 @@ interface AdminDashboardDto {
     createdAt: string;
     updatedAt: string;
   }>;
-  health?: Array<{ metric: string; label: string; status: string; value: number; unit?: string }>;
+  health?: HealthMetricDto[];
   alerts?: Array<{ type: string; level: string; message: string; count: number }>;
+}
+
+interface HealthMetricDto {
+  metric: string;
+  label: string;
+  status: string;
+  value: number;
+  unit?: string;
 }
 
 interface TemplatePageDto {
@@ -399,12 +407,7 @@ export async function fetchDashboardData(days = 30): Promise<DashboardData> {
       duration: `${Math.max(1, task.completedSections)}/${Math.max(1, task.totalSections)}`,
       time: new Date(task.updatedAt || task.createdAt).toLocaleString()
     })),
-    health: (data.health || []).map((item) => ({
-      name: item.label || item.metric,
-      status: mapHealthStatus(item.status),
-      latencyMs: Number(item.value || 0),
-      detail: `${item.metric} ${item.value}${item.unit || ""}`
-    })),
+    health: mapHealthItems(data.health),
     alerts: (data.alerts || []).map((item, index) => ({
       id: item.type || `ALERT-${index + 1}`,
       level: mapAlertLevel(item.level),
@@ -456,7 +459,7 @@ export async function fetchRecentTasks(limit = 10) {
 
 export async function fetchStatsHealth() {
   if (enableMock) return buildMockDashboard(30, "mock").health;
-  return apiRequest<NonNullable<AdminDashboardDto["health"]>>("/api/admin/stats/health");
+  return mapHealthItems(await apiRequest<HealthMetricDto[]>("/api/admin/stats/health"));
 }
 
 export async function fetchStatsAlerts() {
@@ -486,6 +489,15 @@ function mapHealthStatus(status: string): HealthStatus {
   if (status === "NORMAL" || status === "ONLINE" || status === "UP") return "ONLINE";
   if (status === "WARN" || status === "DEGRADED") return "DEGRADED";
   return "OFFLINE";
+}
+
+function mapHealthItems(items: HealthMetricDto[] = []): HealthItem[] {
+  return items.map((item) => ({
+    name: item.label || item.metric,
+    status: mapHealthStatus(item.status),
+    latencyMs: Number(item.value || 0),
+    detail: `${item.metric} ${item.value}${item.unit || ""}`
+  }));
 }
 
 function mapAlertLevel(level: string): AlertLevel {

@@ -23,11 +23,18 @@ function renderInline(value: string) {
 }
 
 function isTableSeparator(line: string) {
-  return /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(line);
+  const normalized = line.replace(/｜/g, "|");
+  return /^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(normalized);
+}
+
+function isTableRow(line: string) {
+  const normalized = line.replace(/｜/g, "|").trim();
+  return normalized.includes("|") && !isTableSeparator(normalized);
 }
 
 function splitTableRow(line: string) {
   return line
+    .replace(/｜/g, "|")
     .trim()
     .replace(/^\|/, "")
     .replace(/\|$/, "")
@@ -49,11 +56,11 @@ export function renderMarkdownHtml(markdown: string) {
       continue;
     }
 
-    if (line.trim().startsWith("|") && isTableSeparator(lines[index + 1] || "")) {
+    if (isTableRow(line) && isTableSeparator(lines[index + 1] || "")) {
       const headers = splitTableRow(line);
       const rows: string[][] = [];
       index += 2;
-      while (index < lines.length && lines[index].trim().startsWith("|")) {
+      while (index < lines.length && isTableRow(lines[index])) {
         rows.push(splitTableRow(lines[index]));
         index += 1;
       }
@@ -75,7 +82,7 @@ export function renderMarkdownHtml(markdown: string) {
 
     const paragraph: string[] = [line.trim()];
     index += 1;
-    while (index < lines.length && lines[index].trim() && !lines[index].trim().startsWith("|") && !/^(#{1,4})\s+/.test(lines[index])) {
+    while (index < lines.length && lines[index].trim() && !isTableRow(lines[index]) && !/^(#{1,4})\s+/.test(lines[index])) {
       paragraph.push(lines[index].trim());
       index += 1;
     }

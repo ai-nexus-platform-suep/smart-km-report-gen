@@ -302,6 +302,16 @@ async function save() {
 }
 
 async function startContent() {
+  try {
+    await ElMessageBox.confirm(
+      '进入正文生成后，大纲将无法再次修改，请确认当前大纲无误后继续。',
+      '确认进入正文生成',
+      { confirmButtonText: '确认进入', cancelButtonText: '返回检查', type: 'warning' },
+    )
+  } catch {
+    return
+  }
+
   if (needsOutlineConfirm.value) {
     await confirmOutline()
     ElMessage.success('大纲已确认，进入正文生成')
