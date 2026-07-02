@@ -5,9 +5,10 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>com.km</groupId>
-        <artifactId>km-platform</artifactId>
-        <version>1.0.0-SNAPSHOT</version>
+        <groupId>com.myenglish</groupId>
+        <artifactId>smart-km-report-gen</artifactId>
+        <version>0.0.1-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
     </parent>
 
     <artifactId>km-common</artifactId>
