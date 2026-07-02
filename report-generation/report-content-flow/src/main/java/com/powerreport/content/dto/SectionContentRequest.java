@@ -11,5 +11,10 @@ public class SectionContentRequest {
      */
     @NotNull
     private String contentMarkdown;
+
+    /**
+     * Optional structured table plan or frontend-edited table data.
+     */
+    private String tableJson;
 }
 

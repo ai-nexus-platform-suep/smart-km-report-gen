@@ -75,6 +75,8 @@ def build_section_messages(payload: dict[str, Any], regenerate: bool = False) ->
         "sectionLevel": payload.get("sectionLevel", 2),
         "promptHint": payload.get("promptHint", ""),
         "outlineContext": payload.get("outlineContext", ""),
+        "allowTables": payload.get("allowTables", False),
+        "tablePlansJson": payload.get("tablePlans") or [],
     }
     return [
         {"role": "system", "content": system},
