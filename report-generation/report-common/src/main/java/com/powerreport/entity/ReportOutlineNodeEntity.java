@@ -1,5 +1,6 @@
 package com.powerreport.entity;
 
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import java.time.LocalDateTime;
@@ -19,5 +20,8 @@ public class ReportOutlineNodeEntity {
     private String number;
     private String title;
     private String promptHint;
+
+    @TableField(exist = false)
+    private String tableJson;
     private LocalDateTime createdAt;
 }
