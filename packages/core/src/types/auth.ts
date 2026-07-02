@@ -10,8 +10,11 @@ export interface UserInfo {
   email: string | null
   phone: string | null
   avatar: string | null
+  realName?: string | null
+  gender?: 0 | 1 | 2 | number | null
   role: Role
   roles?: BackendRole[]
+  permissions?: string[]
   status: 0 | 1
 }
 
@@ -23,8 +26,6 @@ export interface LoginRequest {
 export interface RegisterRequest {
   username: string
   password: string
-  nickname?: string
-  email?: string
 }
 
 export interface LoginResponse {
@@ -34,6 +35,7 @@ export interface LoginResponse {
   expiresIn: number
   username: string
   roles: BackendRole[]
+  permissions?: string[]
 }
 
 export interface RefreshTokenRequest {
@@ -43,6 +45,14 @@ export interface RefreshTokenRequest {
 export type RefreshTokenResponse = LoginResponse
 
 export interface CurrentUserResponse {
+  id: number
   username: string
+  nickname?: string | null
+  realName?: string | null
+  email?: string | null
+  phone?: string | null
+  avatar?: string | null
+  gender?: 0 | 1 | 2 | number | null
   roles: BackendRole[]
+  permissions?: string[]
 }

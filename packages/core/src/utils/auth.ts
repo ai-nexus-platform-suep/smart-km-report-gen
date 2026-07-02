@@ -1,4 +1,4 @@
-import type { BackendRole, LoginResponse, Role, UserInfo } from '../types/auth'
+import type { BackendRole, CurrentUserResponse, LoginResponse, Role, UserInfo } from '../types/auth'
 
 const TOKEN_KEY = 'tsp_token'
 const REFRESH_TOKEN_KEY = 'tsp_refresh_token'
@@ -43,6 +43,10 @@ export function isLoggedIn(): boolean {
   return !!getToken()
 }
 
+export function getTokenExpiresAt(): number {
+  return Number(localStorage.getItem(TOKEN_EXPIRES_AT_KEY) || 0)
+}
+
 export function getStoredUser<T = Record<string, unknown>>(): T | null {
   const raw = localStorage.getItem(USER_KEY)
   if (!raw) return null
@@ -62,7 +66,7 @@ export function normalizeRole(roles: BackendRole[] = []): Role {
   return roles.some((role) => role === 'ROLE_ADMIN' || role === 'ADMIN') ? 'ADMIN' : 'USER'
 }
 
-export function buildUserFromAuthResponse(auth: Pick<LoginResponse, 'username' | 'roles'>): UserInfo {
+export function buildUserFromAuthResponse(auth: Pick<LoginResponse, 'username' | 'roles' | 'permissions'>): UserInfo {
   return {
     id: 0,
     username: auth.username,
@@ -72,6 +76,24 @@ export function buildUserFromAuthResponse(auth: Pick<LoginResponse, 'username' |
     avatar: null,
     role: normalizeRole(auth.roles),
     roles: auth.roles,
+    permissions: auth.permissions ?? [],
+    status: 1,
+  }
+}
+
+export function buildUserFromCurrentUser(profile: CurrentUserResponse): UserInfo {
+  return {
+    id: profile.id,
+    username: profile.username,
+    nickname: profile.nickname ?? profile.username,
+    realName: profile.realName ?? null,
+    email: profile.email ?? null,
+    phone: profile.phone ?? null,
+    avatar: profile.avatar ?? null,
+    gender: profile.gender ?? 0,
+    role: normalizeRole(profile.roles),
+    roles: profile.roles,
+    permissions: profile.permissions ?? [],
     status: 1,
   }
 }

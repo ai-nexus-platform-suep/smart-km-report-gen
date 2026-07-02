@@ -78,7 +78,6 @@ export interface ThinkingStep {
 export interface ChatTestRequest {
   question: string
   selected_kb_ids?: number[]
-  user_id?: number | null
   messages?: Array<{
     role: MessageRole
     content: string
@@ -88,7 +87,6 @@ export interface ChatTestRequest {
 export interface ChatStreamRequest {
   conversation_id: string
   question: string
-  user_id?: number | null
   selected_kb_ids?: number[]
 }
 

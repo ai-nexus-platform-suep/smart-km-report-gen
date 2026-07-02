@@ -11,11 +11,11 @@ import router from './router'
 async function bootstrap() {
   if (import.meta.env.DEV && import.meta.env.VITE_ENABLE_MOCK !== 'false') {
     const { startWorker } = await import('@platform/mock')
-    const modules = (import.meta.env.VITE_MOCK_MODULES || 'auth,km,report')
+    const modules = (import.meta.env.VITE_MOCK_MODULES || '')
       .split(',')
       .map((item) => item.trim())
       .filter(Boolean)
-    await startWorker(modules)
+    if (modules.length) await startWorker(modules)
   }
 
   const app = createApp(App)

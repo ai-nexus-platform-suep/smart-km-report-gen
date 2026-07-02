@@ -166,7 +166,7 @@ function finishGeneration(message: ChatMessageView, finalCitations = message.cit
 async function loadConversations(targetConversationId = activeConversationId.value) {
   loadingConversations.value = true
   try {
-    const result = await listConversations({ page: 1, size: 20, user_id: 1 })
+    const result = await listConversations({ page: 1, size: 20 })
     conversations.value = result.items
 
     if (result.items.length) {
@@ -317,7 +317,6 @@ async function sendMessage(extraText = '') {
       {
         conversation_id: conversationId,
         question: text,
-        user_id: 1,
         selected_kb_ids: [],
       },
       {

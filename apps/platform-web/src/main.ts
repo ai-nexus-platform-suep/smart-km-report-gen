@@ -12,10 +12,14 @@ import App from './App.vue'
 import router from './router'
 
 async function bootstrap() {
-  if (import.meta.env.DEV) {
+  if (import.meta.env.DEV && import.meta.env.VITE_ENABLE_MOCK === 'true') {
     try {
       const { startWorker } = await import('@platform/mock')
-      await startWorker()
+      const modules = (import.meta.env.VITE_MOCK_MODULES || '')
+        .split(',')
+        .map((item) => item.trim())
+        .filter(Boolean)
+      if (modules.length) await startWorker(modules)
     } catch (error) {
       console.warn('[platform-web] mock worker unavailable, continue without MSW.', error)
     }

@@ -5,9 +5,7 @@ import { resolve } from 'path'
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  const apiTarget = env.VITE_API_PROXY_TARGET || env.VITE_API_BASE || env.VITE_API_BASE_URL || 'http://127.0.0.1:8088'
-  const qaAgentTarget = env.VITE_QA_AGENT_TARGET || 'http://localhost:8000'
-  const qaServiceTarget = env.VITE_QA_SERVICE_TARGET || 'http://localhost:8082'
+  const gatewayTarget = env.VITE_API_PROXY_TARGET || env.VITE_GATEWAY_BASE_URL || env.VITE_API_BASE || env.VITE_API_BASE_URL || 'http://localhost:8080'
 
   return {
     plugins: [vue(), ElementPlus()],
@@ -30,24 +28,8 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 5176,
       proxy: {
-        '/api/conversations': {
-          target: qaAgentTarget,
-          changeOrigin: true,
-        },
-        '/api/chat': {
-          target: qaAgentTarget,
-          changeOrigin: true,
-        },
-        '/api/model-configs': {
-          target: qaServiceTarget,
-          changeOrigin: true,
-        },
-        '/api/stats/qa': {
-          target: qaServiceTarget,
-          changeOrigin: true,
-        },
         '/api': {
-          target: apiTarget,
+          target: gatewayTarget,
           changeOrigin: true,
         },
       },

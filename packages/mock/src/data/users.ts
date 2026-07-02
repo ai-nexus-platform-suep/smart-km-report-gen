@@ -43,6 +43,10 @@ export function buildLoginResponse(user: UserInfo): LoginResponse {
     expiresIn: 900,
     username: user.username,
     roles,
+    permissions:
+      user.role === 'USER'
+        ? ['chat:conversation:use', 'chat:model:view', 'chat:stats:view']
+        : ['chat:conversation:use', 'chat:model:view', 'chat:model:manage', 'chat:stats:view'],
   }
 }
 

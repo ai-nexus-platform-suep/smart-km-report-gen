@@ -285,7 +285,6 @@ export const qaHandlers = [
       conversation_id: string
       question: string
       selected_kb_ids?: number[]
-      user_id?: number | null
     }
     const answer = buildAnswer(body.question)
     appendChatMessages(body.conversation_id, body.question, answer)

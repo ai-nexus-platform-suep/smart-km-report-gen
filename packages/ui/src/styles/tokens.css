@@ -13,13 +13,16 @@
   --color-warning: #f79009;
   --color-error: #f04438;
 
-  /* 侧边栏 (深色) */
-  --sidebar-bg: #1b1c20;
-  --sidebar-text: rgba(255, 255, 255, 0.60);
+  /* 侧边栏 */
+  --sidebar-bg: #08111e;
+  --sidebar-border: rgba(148, 163, 184, 0.13);
+  --sidebar-text: rgba(226, 232, 240, 0.70);
+  --sidebar-text-muted: rgba(203, 213, 225, 0.52);
   --sidebar-text-active: #ffffff;
-  --sidebar-item-hover: rgba(255, 255, 255, 0.06);
-  --sidebar-item-active: rgba(21, 94, 239, 0.15);
-  --sidebar-logo-border: rgba(255, 255, 255, 0.08);
+  --sidebar-item-hover: rgba(148, 163, 184, 0.09);
+  --sidebar-item-active: rgba(37, 99, 235, 0.16);
+  --sidebar-indicator: #4f8cff;
+  --sidebar-logo-border: rgba(148, 163, 184, 0.12);
 
   /* 页面 / 容器 */
   --bg-page: #f5f7fa;
@@ -75,7 +78,7 @@
   --shadow-xl: 0 20px 32px rgba(16, 24, 40, 0.10), 0 8px 16px rgba(16, 24, 40, 0.04);
 
   /* 布局 */
-  --sidebar-width: 240px;
+  --sidebar-width: 236px;
   --sidebar-collapsed-width: 64px;
   --header-height: 56px;
   --bg-surface: var(--bg-container);
@@ -107,25 +110,33 @@
 
 /* 深色模式 — 整体页面 */
 [data-theme='dark'] {
-  --bg-page: #0f0f12;
-  --bg-container: #1a1a1f;
-  --bg-surface: #1a1a1f;
-  --bg-hover: #222228;
+  --bg-page: #0b1220;
+  --bg-container: #111827;
+  --bg-surface: #111827;
+  --bg-hover: #1e293b;
   --bg-mask: rgba(0, 0, 0, 0.65);
-  --bg-subtle: #101827;
+  --bg-subtle: #172033;
   --bg-terminal: #09111f;
   --bg-terminal-soft: #101827;
 
-  --text-primary: rgba(255, 255, 255, 0.85);
-  --text-secondary: rgba(255, 255, 255, 0.55);
-  --text-tertiary: rgba(255, 255, 255, 0.35);
+  --text-primary: rgba(248, 250, 252, 0.92);
+  --text-secondary: rgba(203, 213, 225, 0.72);
+  --text-tertiary: rgba(148, 163, 184, 0.72);
   --text-muted: rgba(203, 213, 225, 0.58);
 
-  --border-color: #2a2a32;
-  --border-color-light: #222228;
+  --border-color: rgba(148, 163, 184, 0.22);
+  --border-color-light: rgba(148, 163, 184, 0.14);
   --border-default: rgba(148, 163, 184, 0.22);
   --border-strong: rgba(148, 163, 184, 0.3);
   --grid-line: rgba(148, 163, 184, 0.18);
+  --sidebar-bg: #08111e;
+  --sidebar-border: rgba(148, 163, 184, 0.16);
+  --sidebar-text: rgba(203, 213, 225, 0.72);
+  --sidebar-text-muted: rgba(148, 163, 184, 0.68);
+  --sidebar-item-hover: rgba(148, 163, 184, 0.10);
+  --sidebar-item-active: rgba(96, 165, 250, 0.16);
+  --sidebar-indicator: #73a7ff;
+  --sidebar-logo-border: rgba(148, 163, 184, 0.16);
   --platform-text: var(--text-primary);
   --platform-text-strong: rgba(248, 250, 252, 0.95);
   --platform-text-muted: rgba(203, 213, 225, 0.62);

@@ -101,7 +101,7 @@ export const authHandlers = [
   }),
 
   // 获取当前用户信息
-  http.get(API_QA.AUTH.PROFILE, async ({ request }) => {
+  http.get(API_QA.AUTH.ME, async ({ request }) => {
     await delay(300)
     const auth = request.headers.get('Authorization')
     if (!auth || !auth.includes(mockToken)) {
@@ -115,9 +115,22 @@ export const authHandlers = [
       code: 200,
       message: '操作成功',
       data: {
+        id: admin.id,
         username: admin.username,
+        nickname: admin.nickname,
+        realName: null,
+        email: admin.email,
+        phone: admin.phone,
+        avatar: admin.avatar,
+        gender: 0,
         roles: ['ROLE_ADMIN', 'ROLE_USER'],
+        permissions: ['chat:conversation:use', 'chat:model:view', 'chat:model:manage', 'chat:stats:view'],
       },
     })
+  }),
+
+  http.post(API_QA.AUTH.LOGOUT, async () => {
+    await delay(200)
+    return HttpResponse.json({ code: 200, message: '退出成功', data: null })
   }),
 ]

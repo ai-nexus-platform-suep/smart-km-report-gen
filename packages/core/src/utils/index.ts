@@ -1,9 +1,11 @@
 export {
   buildUserFromAuthResponse,
+  buildUserFromCurrentUser,
   clearToken,
   getRefreshToken,
   getStoredUser,
   getToken,
+  getTokenExpiresAt,
   getTokenType,
   isLoggedIn,
   normalizeRole,
