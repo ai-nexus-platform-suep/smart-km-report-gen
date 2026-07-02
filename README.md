@@ -12,7 +12,7 @@ km-platform/
 ├── km-frontend/        # Vue 3 管理后台 + 前台检索（各组前端另有独立分支）
 ├── km-ai-service/      # Python AI 服务占位（EPIC-04 管线，端口 8092）
 ├── docs/               # PRD、api-contract.yaml、目录规范
-├── docker-compose.yml  # MySQL / Redis / RabbitMQ / MinIO / Milvus
+├── docker-compose.yml  # MySQL / Redis / RabbitMQ / MinIO / Qdrant
 ├── scripts/            # 本地开发脚本
 └── .github/workflows/  # CI（Maven verify）
 ```
@@ -42,7 +42,7 @@ docker compose up -d
 |------|------|------|
 | RabbitMQ | http://localhost:15672 | km / km123456 |
 | MinIO Console | http://localhost:9001 | minioadmin / minioadmin |
-| Milvus | localhost:19530 | — |
+| Qdrant | http://localhost:6333 | — |
 
 ### 2. 启动后端
 
@@ -82,7 +82,7 @@ npm run dev
 
 复制 `.env.example` 为 `.env`（勿提交），主要配置：
 
-- `MYSQL_*` / `REDIS_*` / `RABBITMQ_*` / `MINIO_*` / `MILVUS_*`
+- `MYSQL_*` / `REDIS_*` / `RABBITMQ_*` / `MINIO_*` / `QDRANT_*`
 - `SILICONFLOW_API_KEY`（嵌入/重排，Python 服务使用）
 - `JWT_SECRET`
 
@@ -146,7 +146,7 @@ mvn -B clean verify
 | 项 | 状态 |
 |----|------|
 | 仓库目录结构（km-common / km-backend / km-frontend） | ✅ |
-| Docker Compose（MySQL、Redis、RabbitMQ、MinIO、**Milvus**） | ✅ |
+| Docker Compose（MySQL、Redis、RabbitMQ、MinIO、**Qdrant**） | ✅ |
 | Flyway 初始化 `V1__init_km.sql` + 配置种子 `V2__` | ✅ |
 | 统一响应 `ApiResponse` + 全局异常处理 | ✅ |
 | 健康检查 `GET /api/health` | ✅ |

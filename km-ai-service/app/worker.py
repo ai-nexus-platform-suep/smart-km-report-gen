@@ -4,11 +4,18 @@ import argparse
 from concurrent.futures import ThreadPoolExecutor
 import json
 import logging
+from pathlib import Path
+import sys
 
 import pika
 
-from .processor import DocumentProcessJob, DocumentProcessor
-from .settings import Settings
+if __package__ in {None, ""}:
+    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+    from app.processor import DocumentProcessJob, DocumentProcessor
+    from app.settings import Settings
+else:
+    from .processor import DocumentProcessJob, DocumentProcessor
+    from .settings import Settings
 
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -80,7 +87,11 @@ def run_worker() -> None:
         channel.start_consuming()
     finally:
         executor.shutdown(wait=True)
-        connection.close()
+        if connection.is_open:
+            try:
+                connection.close()
+            except pika.exceptions.ConnectionWrongStateError:
+                logger.debug("RabbitMQ connection already closed during worker shutdown")
 
 
 def main() -> None:

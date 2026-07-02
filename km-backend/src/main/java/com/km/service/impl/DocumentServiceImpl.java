@@ -4,9 +4,12 @@ import com.km.common.constant.DocumentStatus;
 import com.km.common.dto.PageResult;
 import com.km.common.exception.BusinessException;
 import com.km.common.exception.ErrorCode;
+import com.km.dto.request.ReplaceDocumentChunksRequest;
 import com.km.dto.response.DocumentBatchDeleteResponse;
 import com.km.dto.response.DocumentDeleteResponse;
 import com.km.dto.response.DocumentUploadResponse;
+import com.km.dto.response.ReplaceDocumentChunksResponse;
+import com.km.entity.Chunk;
 import com.km.entity.Document;
 import com.km.entity.KnowledgeBase;
 import com.km.repository.ChunkMapper;
@@ -299,6 +302,42 @@ public class DocumentServiceImpl implements DocumentService {
         }
     }
 
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public ReplaceDocumentChunksResponse replaceChunks(String docId, ReplaceDocumentChunksRequest request) {
+        Document doc = documentMapper.getById(docId);
+        if (doc == null) {
+            throw new BusinessException(ErrorCode.KM_DOC_001);
+        }
+        if (request.getKbId() != null && !request.getKbId().trim().isEmpty() && !request.getKbId().equals(doc.getKbId())) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "documentId does not belong to kbId");
+        }
+
+        List<ReplaceDocumentChunksRequest.ChunkItem> items = request.getChunks();
+        if (items == null || items.isEmpty()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "chunks cannot be empty");
+        }
+
+        List<Chunk> chunks = new ArrayList<>(items.size());
+        for (int i = 0; i < items.size(); i++) {
+            ReplaceDocumentChunksRequest.ChunkItem item = items.get(i);
+            validateReplaceChunkItem(item, i);
+            Chunk chunk = new Chunk();
+            chunk.setId(item.getId().trim());
+            chunk.setDocId(docId);
+            chunk.setContent(item.getContent().trim());
+            chunk.setChapterPath(item.getChapterPath() == null ? null : item.getChapterPath().trim());
+            chunk.setChunkIndex(item.getChunkIndex());
+            chunk.setChunkType(item.getChunkType().trim());
+            chunk.setVectorId(item.getVectorId().trim());
+            chunks.add(chunk);
+        }
+
+        chunkMapper.deleteByDocId(docId);
+        chunkMapper.insertBatch(chunks);
+        return new ReplaceDocumentChunksResponse(docId, chunks.size());
+    }
+
     private static final List<String> ALLOWED_STATUSES = Arrays.asList(
             DocumentStatus.UPLOADED,
             DocumentStatus.PARSING,
@@ -306,6 +345,27 @@ public class DocumentServiceImpl implements DocumentService {
             DocumentStatus.EMBEDDING,
             DocumentStatus.READY,
             DocumentStatus.FAILED);
+
+    private void validateReplaceChunkItem(ReplaceDocumentChunksRequest.ChunkItem item, int expectedIndex) {
+        if (item == null) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "chunk cannot be null");
+        }
+        if (item.getChunkIndex() == null || item.getChunkIndex() != expectedIndex) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "chunkIndex must be zero-based and contiguous");
+        }
+        if (item.getId() == null || item.getId().trim().isEmpty()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "chunk id cannot be blank");
+        }
+        if (item.getContent() == null || item.getContent().trim().isEmpty()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "chunk content cannot be blank");
+        }
+        if (item.getChunkType() == null || item.getChunkType().trim().isEmpty()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "chunkType cannot be blank");
+        }
+        if (item.getVectorId() == null || item.getVectorId().trim().isEmpty()) {
+            throw new BusinessException(ErrorCode.BAD_REQUEST, "vectorId cannot be blank");
+        }
+    }
 
     private void validatePage(int page, int pageSize) {
         if (page < 1) {

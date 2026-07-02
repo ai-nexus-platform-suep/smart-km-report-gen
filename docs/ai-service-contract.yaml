@@ -5,7 +5,7 @@ info:
     Java `km-backend` ↔ Python `km-ai-service` 内部契约。
     - **chunk 切分、embedding、rerank** 均由本服务提供
     - 路径前缀 `/internal`，不对外暴露；经 Gateway 时仅内网可达
-    - 向量库：**Milvus**
+    - 向量库：**Qdrant**
     - 统一响应：`{ "code": 0, "message": "ok", "data": ... }`（联调前与大组确认是否改为 200）
   version: 1.0.0
   contact:
@@ -20,11 +20,11 @@ servers:
 tags:
   - name: health
   - name: process
-    description: 文档处理（解析+chunk+embed+写Milvus）
+    description: 文档处理（解析+chunk+embed+写Qdrant）
   - name: embed
   - name: rerank
   - name: search
-    description: 向量检索（可选，若 Java 不直连 Milvus）
+    description: Qdrant 向量检索
 
 paths:
   /internal/health:
@@ -45,7 +45,7 @@ paths:
       tags: [process]
       summary: 处理单个文档（异步推荐）
       description: |
-        完整管线：读 MinIO → 解析 → chunk → embed → 写 Milvus → 回写 chunk 元数据。
+        完整管线：读 MinIO → 解析 → chunk → 回写 MySQL chunk 元数据 → embed → 写 Qdrant。
         可由 RabbitMQ 消费者内部调用；也可 Java 直接 HTTP 触发。
         处理过程中通过回调更新 Java 侧 document.status。
       operationId: processDocument
@@ -104,9 +104,9 @@ paths:
   /internal/search:
     post:
       tags: [search]
-      summary: Milvus 向量检索（可选）
+      summary: Qdrant 向量检索
       description: |
-        若 Java 不直连 Milvus SDK，由本接口完成向量检索。
+        由本接口完成 query embedding、Qdrant 向量检索和知识库过滤。
         km-backend 的 `/api/search` 编排本接口 + `/internal/rerank`。
       operationId: vectorSearch
       requestBody:
@@ -221,7 +221,7 @@ components:
             type: string
         model:
           type: string
-          description: 可选，默认读 Nacos/环境变量
+          description: 可选，默认读取 Java `/internal/config/embedding` 配置
 
     EmbedResult:
       type: object
