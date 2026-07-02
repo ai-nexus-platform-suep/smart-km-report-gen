@@ -27,8 +27,11 @@ public class AuthTokenService {
         List<String> roles = authorities.getRoles().isEmpty() ? List.of("ROLE_USER") : authorities.getRoles();
         List<String> permissions = authorities.getPermissions();
 
+        // 确保 tokenVersion 不为 null，首次登录兜底为 0
+        Long tokenVersion = user.getTokenVersion() != null ? user.getTokenVersion() : 0L;
+
         String accessToken = jwtTokenProvider.generateAccessToken(
-                user.getId(), user.getUsername(), roles, permissions);
+                user.getId(), user.getUsername(), roles, permissions, tokenVersion);
         String refreshToken = jwtTokenProvider.generateRefreshToken(user.getUsername());
 
         saveRefreshToken(user.getId(), refreshToken);

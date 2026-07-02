@@ -29,7 +29,7 @@ public class UserContextAutoConfiguration implements WebMvcConfigurer {
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(userContextInterceptor())
-                .addPathPatterns("/api/**")
+                .addPathPatterns("/api/**", "/internal/**")
                 .order(1);
     }
 }

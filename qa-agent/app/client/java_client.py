@@ -1,8 +1,12 @@
 """调用 Java 服务拉取模型配置 (人员 A 独占)"""
 
+import logging
+
 import httpx
 
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def _local_llm_config() -> dict:
@@ -25,7 +29,14 @@ async def _fetch_json(path: str) -> dict | None:
             response = await client.get(url)
             response.raise_for_status()
             payload = response.json()
-    except (httpx.HTTPError, ValueError):
+    except httpx.ConnectError as e:
+        logger.error("连接 Java 服务失败 %s: %s", url, e)
+        return None
+    except httpx.HTTPStatusError as e:
+        logger.error("Java 服务返回错误 %s -> HTTP %s %s", url, e.response.status_code, e.response.text[:200])
+        return None
+    except ValueError as e:
+        logger.error("Java 服务返回非 JSON 响应 %s: %s", url, e)
         return None
 
     if isinstance(payload, dict) and isinstance(payload.get("data"), dict):

@@ -7,4 +7,8 @@
         DELETE FROM sys_user_role WHERE user_id = #{userId}
     </delete>
 
+    <select id="selectUserIdsByRoleId" resultType="long">
+        SELECT DISTINCT user_id FROM sys_user_role WHERE role_id = #{roleId}
+    </select>
+
 </mapper>

@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS sys_user (
     deleted         TINYINT(1)   NOT NULL DEFAULT 0 COMMENT '逻辑删除 0=正常 1=已删除',
     last_login_at   DATETIME              DEFAULT NULL COMMENT '最后登录时间',
     last_login_ip   VARCHAR(50)           DEFAULT NULL COMMENT '最后登录 IP',
+    token_version   BIGINT       NOT NULL DEFAULT 0 COMMENT 'Token 版本号，权限变更时递增，旧JWT失效',
     created_by      BIGINT                DEFAULT NULL COMMENT '创建人 user_id',
     updated_by      BIGINT                DEFAULT NULL COMMENT '更新人 user_id',
     created_at      DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -309,6 +310,20 @@ INSERT INTO sys_permission (parent_id, perm_code, perm_name, perm_type, module, 
 SELECT p.id, 'chat:model:delete', '删除模型配置', 'BUTTON', 'chat', 207 FROM sys_permission p WHERE p.perm_code = 'chat:model:manage'
   AND NOT EXISTS (SELECT 1 FROM sys_permission WHERE perm_code = 'chat:model:delete');
 
+-- 菜单页面对应的细粒度权限码（用于前端菜单可见性控制，对齐 sys_menu.perm_code）
+INSERT INTO sys_permission (parent_id, perm_code, perm_name, perm_type, module, sort_order)
+SELECT p.id, 'qa:settings:view', '查看问答配置页', 'BUTTON', 'chat', 210 FROM sys_permission p WHERE p.perm_code = 'chat'
+  AND NOT EXISTS (SELECT 1 FROM sys_permission WHERE perm_code = 'qa:settings:view');
+INSERT INTO sys_permission (parent_id, perm_code, perm_name, perm_type, module, sort_order)
+SELECT p.id, 'qa:retrieval-test:view', '查看检索测试页', 'BUTTON', 'chat', 211 FROM sys_permission p WHERE p.perm_code = 'chat'
+  AND NOT EXISTS (SELECT 1 FROM sys_permission WHERE perm_code = 'qa:retrieval-test:view');
+INSERT INTO sys_permission (parent_id, perm_code, perm_name, perm_type, module, sort_order)
+SELECT p.id, 'qa:llm:view', '查看LLM配置页', 'BUTTON', 'chat', 212 FROM sys_permission p WHERE p.perm_code = 'chat'
+  AND NOT EXISTS (SELECT 1 FROM sys_permission WHERE perm_code = 'qa:llm:view');
+INSERT INTO sys_permission (parent_id, perm_code, perm_name, perm_type, module, sort_order)
+SELECT p.id, 'model:config:view', '查看模型总配置页', 'BUTTON', 'chat', 215 FROM sys_permission p WHERE p.perm_code = 'chat'
+  AND NOT EXISTS (SELECT 1 FROM sys_permission WHERE perm_code = 'model:config:view');
+
 -- km 模块
 INSERT INTO sys_permission (parent_id, perm_code, perm_name, perm_type, http_method, api_path, module, sort_order)
 SELECT 0, 'km', '知识库', 'API', NULL, NULL, 'km', 300 FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM sys_permission WHERE perm_code = 'km');
@@ -330,6 +345,9 @@ SELECT p.id, 'km:search:use', '知识检索', 'API', 'POST', '/api/search', 'km'
 INSERT INTO sys_permission (parent_id, perm_code, perm_name, perm_type, http_method, api_path, module, sort_order)
 SELECT p.id, 'km:stats:view', '知识库统计', 'API', 'GET', '/api/stats/summary', 'km', 306 FROM sys_permission p WHERE p.perm_code = 'km'
   AND NOT EXISTS (SELECT 1 FROM sys_permission WHERE perm_code = 'km:stats:view');
+INSERT INTO sys_permission (parent_id, perm_code, perm_name, perm_type, module, sort_order)
+SELECT p.id, 'km:settings:view', '查看知识库配置页', 'BUTTON', 'km', 307 FROM sys_permission p WHERE p.perm_code = 'km'
+  AND NOT EXISTS (SELECT 1 FROM sys_permission WHERE perm_code = 'km:settings:view');
 
 -- report 模块
 INSERT INTO sys_permission (parent_id, perm_code, perm_name, perm_type, http_method, api_path, module, sort_order)
@@ -343,6 +361,31 @@ SELECT p.id, 'report:manage', '管理报告', 'API', '*', '/api/reports/**', 're
 INSERT INTO sys_permission (parent_id, perm_code, perm_name, perm_type, http_method, api_path, module, sort_order)
 SELECT p.id, 'report:admin', '报告后台管理', 'API', '*', '/api/admin/**', 'report', 403 FROM sys_permission p WHERE p.perm_code = 'report'
   AND NOT EXISTS (SELECT 1 FROM sys_permission WHERE perm_code = 'report:admin');
+
+-- 报告模块菜单页面对应的细粒度权限码
+INSERT INTO sys_permission (parent_id, perm_code, perm_name, perm_type, module, sort_order)
+SELECT p.id, 'reports:dashboard:view', '查看报告仪表盘页', 'BUTTON', 'report', 410 FROM sys_permission p WHERE p.perm_code = 'report'
+  AND NOT EXISTS (SELECT 1 FROM sys_permission WHERE perm_code = 'reports:dashboard:view');
+INSERT INTO sys_permission (parent_id, perm_code, perm_name, perm_type, module, sort_order)
+SELECT p.id, 'reports:templates:view', '查看报告模板页', 'BUTTON', 'report', 411 FROM sys_permission p WHERE p.perm_code = 'report'
+  AND NOT EXISTS (SELECT 1 FROM sys_permission WHERE perm_code = 'reports:templates:view');
+INSERT INTO sys_permission (parent_id, perm_code, perm_name, perm_type, module, sort_order)
+SELECT p.id, 'reports:materials:view', '查看素材映射页', 'BUTTON', 'report', 412 FROM sys_permission p WHERE p.perm_code = 'report'
+  AND NOT EXISTS (SELECT 1 FROM sys_permission WHERE perm_code = 'reports:materials:view');
+
+-- 系统管理菜单页面对应的细粒度权限码
+INSERT INTO sys_permission (parent_id, perm_code, perm_name, perm_type, module, sort_order)
+SELECT p.id, 'system:manage', '系统管理入口', 'BUTTON', 'auth', 112 FROM sys_permission p WHERE p.perm_code = 'auth'
+  AND NOT EXISTS (SELECT 1 FROM sys_permission WHERE perm_code = 'system:manage');
+INSERT INTO sys_permission (parent_id, perm_code, perm_name, perm_type, module, sort_order)
+SELECT p.id, 'system:overview:view', '查看总览统计页', 'BUTTON', 'auth', 113 FROM sys_permission p WHERE p.perm_code = 'auth'
+  AND NOT EXISTS (SELECT 1 FROM sys_permission WHERE perm_code = 'system:overview:view');
+INSERT INTO sys_permission (parent_id, perm_code, perm_name, perm_type, module, sort_order)
+SELECT p.id, 'system:user:view', '查看用户管理页', 'BUTTON', 'auth', 114 FROM sys_permission p WHERE p.perm_code = 'auth'
+  AND NOT EXISTS (SELECT 1 FROM sys_permission WHERE perm_code = 'system:user:view');
+INSERT INTO sys_permission (parent_id, perm_code, perm_name, perm_type, module, sort_order)
+SELECT p.id, 'system:role:view', '查看角色权限页', 'BUTTON', 'auth', 115 FROM sys_permission p WHERE p.perm_code = 'auth'
+  AND NOT EXISTS (SELECT 1 FROM sys_permission WHERE perm_code = 'system:role:view');
 
 -- ============================================================
 -- 五、菜单树（parent_id + ancestors + level）
@@ -409,32 +452,45 @@ ON DUPLICATE KEY UPDATE
 ALTER TABLE sys_menu AUTO_INCREMENT = 11000;
 
 -- ============================================================
--- 六、三角色授权
+-- 六、三角色授权（先清空再重建，保证幂等）
 -- 超管=全部 | 管理员=业务+用户/日志 | 普通用户=基础只读
 -- ============================================================
 
--- 超级管理员
-INSERT IGNORE INTO sys_role_permission (role_id, permission_id)
+-- 6.1 先清空旧的权限/菜单关联数据（使用 JOIN 避免 MySQL 同表子查询限制）
+DELETE rp FROM sys_role_permission rp
+INNER JOIN sys_role r ON rp.role_id = r.id
+WHERE r.role_code IN ('ROLE_SUPER_ADMIN','ROLE_ADMIN','ROLE_USER');
+
+DELETE rm FROM sys_role_menu rm
+INNER JOIN sys_role r ON rm.role_id = r.id
+WHERE r.role_code IN ('ROLE_SUPER_ADMIN','ROLE_ADMIN','ROLE_USER');
+
+-- 6.2 超级管理员 = 全部权限 + 全部菜单
+INSERT INTO sys_role_permission (role_id, permission_id)
 SELECT r.id, p.id FROM sys_role r CROSS JOIN sys_permission p
 WHERE r.role_code = 'ROLE_SUPER_ADMIN' AND p.enabled = 1 AND p.perm_type IN ('API', 'BUTTON');
 
-INSERT IGNORE INTO sys_role_menu (role_id, menu_id)
+INSERT INTO sys_role_menu (role_id, menu_id)
 SELECT r.id, m.id FROM sys_role r CROSS JOIN sys_menu m
 WHERE r.role_code = 'ROLE_SUPER_ADMIN' AND m.enabled = 1;
 
--- 管理员
-INSERT IGNORE INTO sys_role_permission (role_id, permission_id)
+-- 6.3 管理员 = 用户管理 + 全业务模块 + 管理菜单可见
+INSERT INTO sys_role_permission (role_id, permission_id)
 SELECT r.id, p.id FROM sys_role r
 INNER JOIN sys_permission p ON p.perm_code IN (
     'auth:user:list','auth:user:create','auth:user:update','auth:user:delete',
     'auth:role:list','auth:role:assign','auth:log:list',
     'chat:conversation:use','chat:model:view','chat:model:manage',
     'chat:model:create','chat:model:edit','chat:model:delete','chat:stats:view',
-    'km:base:view','km:base:manage','km:doc:view','km:doc:manage','km:search:use','km:stats:view',
-    'report:view','report:manage','report:admin'
+    'qa:settings:view','qa:retrieval-test:view','qa:llm:view','model:config:view',
+    'km:base:view','km:base:manage','km:doc:view','km:doc:manage','km:search:use',
+    'km:stats:view','km:settings:view',
+    'report:view','report:manage','report:admin',
+    'reports:dashboard:view','reports:templates:view','reports:materials:view',
+    'system:manage','system:overview:view','system:user:view','system:role:view'
 ) WHERE r.role_code = 'ROLE_ADMIN';
 
-INSERT IGNORE INTO sys_role_menu (role_id, menu_id)
+INSERT INTO sys_role_menu (role_id, menu_id)
 SELECT r.id, m.id FROM sys_role r
 INNER JOIN sys_menu m ON m.menu_code IN (
     'platform:dashboard',
@@ -447,20 +503,22 @@ INNER JOIN sys_menu m ON m.menu_code IN (
     'platform:admin','platform:admin:overview','platform:admin:users','platform:admin:roles'
 ) WHERE r.role_code = 'ROLE_ADMIN';
 
--- 普通用户
-INSERT IGNORE INTO sys_role_permission (role_id, permission_id)
+-- 6.4 普通用户 = 基础业务只读 + 模型配置查看
+INSERT INTO sys_role_permission (role_id, permission_id)
 SELECT r.id, p.id FROM sys_role r
 INNER JOIN sys_permission p ON p.perm_code IN (
     'chat:conversation:use','chat:model:view','chat:stats:view',
-    'km:base:view','km:doc:view','km:search:use','report:view'
+    'km:base:view','km:doc:view','km:search:use','report:view',
+    'qa:llm:view','model:config:view'
 ) WHERE r.role_code = 'ROLE_USER';
 
-INSERT IGNORE INTO sys_role_menu (role_id, menu_id)
+INSERT INTO sys_role_menu (role_id, menu_id)
 SELECT r.id, m.id FROM sys_role r
 INNER JOIN sys_menu m ON m.menu_code IN (
     'platform:dashboard',
     'platform:km','platform:km:bases','platform:km:resources','platform:km:search',
     'platform:qa','platform:qa:chat','platform:qa:conversations',
-    'platform:reports','platform:reports:list','platform:reports:new'
+    'platform:reports','platform:reports:list','platform:reports:new',
+    'platform:model-config','platform:model-config:km','platform:model-config:llm'
 ) WHERE r.role_code = 'ROLE_USER';
 
