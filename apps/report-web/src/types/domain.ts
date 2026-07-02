@@ -20,7 +20,7 @@ export interface Report {
   id: EntityId;
   tempId?: string;
   templateId?: EntityId;
-  outlineSource?: "AI" | "LOCAL_TEMPLATE";
+  outlineSource?: "AI" | "TEMPLATE" | "LOCAL_TEMPLATE";
   outlineExpireSeconds?: number;
   name: string;
   type: ReportType;
@@ -57,6 +57,15 @@ export interface OutlineNode {
   number: string;
   title: string;
   promptHint?: string;
+  tables?: OutlineTable[];
+}
+
+export interface OutlineTable {
+  id?: EntityId;
+  caption: string;
+  columns: string[];
+  description?: string;
+  rows?: string[][];
 }
 
 export interface ReportSection {
@@ -66,9 +75,9 @@ export interface ReportSection {
   number: string;
   title: string;
   contentMarkdown: string;
-  tableJson?: TableBlock;
+  tableJson?: OutlineTable[];
   status: SectionStatus;
-  source: "AI" | "USER_EDITED" | "REGENERATED";
+  source: "AI" | "TEMPLATE" | "USER_EDITED" | "REGENERATED";
   version: number;
   errorMessage?: string;
   createdAt: string;
@@ -76,8 +85,10 @@ export interface ReportSection {
 }
 
 export interface TableBlock {
+  caption?: string;
   columns: string[];
-  rows: string[][];
+  rows?: string[][];
+  description?: string;
 }
 
 export interface ReportFile {

@@ -1,6 +1,7 @@
 import { defineStore } from "pinia";
 import { computed, ref } from "vue";
 import * as reportApi from "@/api/reports";
+import type { GenerationMode } from "@/api/reports";
 import type { CreateReportPayload, EntityId, GenerateStreamEvent, OutlineNode, PageResult, Report, ReportDetail, ReportQuery } from "@/types/domain";
 import { assertValidDocxBlob, normalizeDocxFileName } from "@/utils/docx";
 
@@ -82,9 +83,9 @@ export const useReportStore = defineStore("reports", () => {
     return current.value;
   }
 
-  async function startGenerate(id: EntityId) {
+  async function startGenerate(id: EntityId, generationMode: GenerationMode = "AI") {
     stopStream();
-    await reportApi.startGenerate(id);
+    await reportApi.startGenerate(id, generationMode);
     if (!current.value || !sameId(current.value.id, id)) await fetchDetail(id);
     if (current.value) current.value.status = "CONTENT_GENERATING";
     connectStream(id);
@@ -121,7 +122,8 @@ export const useReportStore = defineStore("reports", () => {
   }
 
   async function saveSection(reportId: EntityId, sectionId: EntityId, content: string) {
-    const section = await reportApi.saveSection(reportId, sectionId, content);
+    const currentSection = current.value?.sections.find((item) => sameId(item.id, sectionId));
+    const section = await reportApi.saveSection(reportId, sectionId, content, currentSection?.tableJson);
     if (current.value) {
       const index = current.value.sections.findIndex((item) => sameId(item.id, sectionId));
       if (index >= 0) current.value.sections[index] = section;

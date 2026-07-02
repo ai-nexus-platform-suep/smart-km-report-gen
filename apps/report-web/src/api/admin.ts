@@ -172,12 +172,25 @@ interface TemplateConfigPayload {
   configJson: string;
 }
 
+interface HeaderFooterConfig {
+  enabled?: boolean;
+  text?: string;
+}
+
+export interface TemplateVisualTable {
+  id?: string;
+  caption: string;
+  columns: string[];
+  description?: string;
+}
+
 export interface TemplateVisualOutlineNode {
   id?: string;
   number: string;
   title: string;
   level: number;
   promptHint?: string;
+  tables?: TemplateVisualTable[];
   children?: TemplateVisualOutlineNode[];
 }
 
@@ -205,8 +218,10 @@ export interface TemplateVisualConfig {
     tableNumberingMode?: "GLOBAL" | "SECTION";
   };
   outline?: TemplateVisualOutlineNode[];
-  header?: string;
-  footer?: string;
+  preferTemplateHeaderFooter?: boolean;
+  renderReportHeader?: boolean;
+  header?: string | HeaderFooterConfig;
+  footer?: string | HeaderFooterConfig;
 }
 
 interface AssetPageDto {
@@ -269,13 +284,31 @@ const defaultTemplateOutline: TemplateVisualOutlineNode[] = [
 function cloneTemplateOutline(outline: TemplateVisualOutlineNode[]) {
   return outline.map((node) => ({
     ...node,
+    tables: node.tables?.map((table) => ({ ...table, columns: [...table.columns] })),
     children: cloneTemplateOutline(node.children || [])
   }));
+}
+
+function visualText(value?: string | HeaderFooterConfig) {
+  if (!value) return "";
+  return typeof value === "string" ? value : value.text || "";
+}
+
+function visualHeaderFooter(value?: string | HeaderFooterConfig, fallback?: string | HeaderFooterConfig): HeaderFooterConfig {
+  const fallbackObject = fallback && typeof fallback === "object" ? fallback : {};
+  const text = typeof value === "string" ? value : value?.text ?? visualText(fallback);
+  return {
+    ...fallbackObject,
+    enabled: Boolean(text),
+    text: text || ""
+  };
 }
 
 function ensureTemplateVisualConfig(config: TemplateVisualConfig = {}): TemplateVisualConfig {
   return {
     ...config,
+    preferTemplateHeaderFooter: config.preferTemplateHeaderFooter ?? true,
+    renderReportHeader: config.renderReportHeader ?? true,
     outline: Array.isArray(config.outline) && config.outline.length ? config.outline : cloneTemplateOutline(defaultTemplateOutline)
   };
 }
@@ -285,8 +318,8 @@ function visualToTemplateStyle(config: TemplateVisualConfig = {}): TemplateStyle
     titleSize: config.fonts?.titleSize || config.fonts?.heading1Size || defaultTemplateConfig.titleSize,
     bodySize: config.fonts?.bodySize || defaultTemplateConfig.bodySize,
     lineHeight: config.paragraph?.lineSpacing || defaultTemplateConfig.lineHeight,
-    header: config.header || defaultTemplateConfig.header,
-    footer: config.footer || defaultTemplateConfig.footer
+    header: visualText(config.header) || defaultTemplateConfig.header,
+    footer: visualText(config.footer) || defaultTemplateConfig.footer
   };
 }
 
@@ -308,8 +341,8 @@ function templateStyleToVisual(config: TemplateStyleConfig, base: TemplateVisual
       figureNumberingMode: base.caption?.figureNumberingMode || "GLOBAL",
       tableNumberingMode: base.caption?.tableNumberingMode || "GLOBAL"
     },
-    header: config.header,
-    footer: config.footer
+    header: visualHeaderFooter(config.header, base.header),
+    footer: visualHeaderFooter(config.footer, base.footer)
   });
 }
 

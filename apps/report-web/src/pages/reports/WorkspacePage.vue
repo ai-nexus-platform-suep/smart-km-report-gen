@@ -6,7 +6,8 @@
       description="按叶子章节流式生成正文，目录级标题只作为结构导航。生成后可直接在线编辑 Markdown，并预览表格排版。"
     >
       <el-button @click="backToOutline">返回大纲</el-button>
-      <el-button type="primary" :loading="store.streaming" @click="startGenerate">启动正文生成</el-button>
+      <el-button :disabled="store.streaming" @click="startGenerate('TEMPLATE')">模板生成正文</el-button>
+      <el-button type="primary" :loading="store.streaming" @click="startGenerate('AI')">AI 生成正文</el-button>
       <el-button :disabled="!canExport" @click="$router.push(`/reports/${reportId}/export`)">导出 DOCX</el-button>
     </PageHeader>
 
@@ -74,21 +75,23 @@
             type="textarea"
             :disabled="selectedSection.status === 'GENERATING'"
             :autosize="false"
-            placeholder="这里编辑当前章节 Markdown 正文。表格请使用 Markdown 表格语法，预览模式会自动识别。"
+            placeholder="这里编辑当前章节 Markdown 正文。表格按大纲中的结构化表格计划生成；没有表格计划的章节不会生成表格。"
             @input="dirty = true"
           />
 
           <article v-show="mode === 'preview'" class="markdown-reader" v-html="previewHtml" />
 
-          <div v-if="tableColumns.length" class="table-inspector">
+          <div v-if="plannedTables.length" class="table-inspector">
             <div class="surface-title mini-title">
               <div>
-                <span class="eyebrow">TABLE DATA</span>
-                <h3>识别到的结构化表格</h3>
+                <span class="eyebrow">TABLE PLAN</span>
+                <h3>结构化表格计划</h3>
               </div>
             </div>
-            <el-table :data="tableRows" size="small">
-              <el-table-column v-for="column in tableColumns" :key="column" :prop="column" :label="column" />
+            <el-table :data="plannedTableRows" size="small">
+              <el-table-column prop="caption" label="表名" min-width="150" />
+              <el-table-column prop="columns" label="列" min-width="220" />
+              <el-table-column prop="description" label="说明" />
             </el-table>
           </div>
         </div>
@@ -152,6 +155,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import OutlineTree from '@/components/OutlineTree.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { useReportStore } from '@/stores/reports'
+import type { GenerationMode } from '@/api/reports'
 import type { EntityId, OutlineNode, ReportSection } from '@/types/domain'
 import { contentOutlineNodes, isContentOutlineNode } from '@/utils/outline'
 import { renderMarkdownHtml } from '@/utils/markdown'
@@ -177,11 +181,16 @@ const selectedSection = computed(() => {
 const streamSection = computed(() => report.value?.sections.find((section) => sameId(section.id, streamSectionId.value)))
 const previewHtml = computed(() => renderMarkdownHtml(draft.value || ''))
 const canExport = computed(() => report.value?.status === 'CONTENT_READY' || report.value?.status === 'EXPORTED')
-const tableColumns = computed(() => selectedSection.value?.tableJson?.columns ?? [])
-const tableRows = computed(() =>
-  (selectedSection.value?.tableJson?.rows ?? []).map((row, index) =>
-    Object.fromEntries([['__id', index], ...tableColumns.value.map((column, columnIndex) => [column, row[columnIndex] || ''])]),
-  ),
+const plannedTables = computed(() => {
+  if (selectedSection.value?.tableJson?.length) return selectedSection.value.tableJson
+  return selectedOutlineNode.value?.tables || []
+})
+const plannedTableRows = computed(() =>
+  plannedTables.value.map((table) => ({
+    caption: table.caption,
+    columns: table.columns.join('、'),
+    description: table.description || '-',
+  })),
 )
 const tableDisplayMap = computed(() => buildTableDisplayMap())
 const childContentNodes = computed(() => {
@@ -233,33 +242,9 @@ function isDescendantOf(node: OutlineNode, ancestorId: EntityId) {
   return false
 }
 
-function rawTableNames(node: OutlineNode) {
-  return (node.promptHint || '')
-    .split(/\r?\n/)
-    .map((line) => /^表格[:：]\s*(.+)$/.exec(line.trim())?.[1]?.trim())
-    .filter(Boolean) as string[]
-}
-
-function markdownTableNames(markdown = '') {
-  const lines = markdown.split(/\r?\n/)
-  const tables: string[] = []
-
-  lines.forEach((line, index) => {
-    if (!line.trim().startsWith('|') || !/^\s*\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?\s*$/.test(lines[index + 1] || '')) return
-    const previous = [...lines.slice(0, index)].reverse().find((item) => item.trim())
-    const title = /^表[：:]\s*(.+)$/.exec(previous?.trim() || '')?.[1]?.trim()
-    tables.push(title || 'Markdown 表格')
-  })
-
-  return tables
-}
-
 function sectionTableNames(node: OutlineNode, section?: ReportSection) {
-  const names = new Set<string>()
-  rawTableNames(node).forEach((name) => names.add(name))
-  markdownTableNames(section?.contentMarkdown).forEach((name) => names.add(name))
-  if (section?.tableJson && !names.size) names.add(`${section.title || node.title}数据表`)
-  return Array.from(names)
+  const plans = section?.tableJson?.length ? section.tableJson : node.tables || []
+  return plans.map((table) => table.caption).filter(Boolean)
 }
 
 function buildTableDisplayMap() {
@@ -295,9 +280,9 @@ function selectSectionBySectionId(sectionId: EntityId) {
   }
 }
 
-async function startGenerate() {
-  await store.startGenerate(reportId)
-  ElMessage.info('正文生成任务已启动')
+async function startGenerate(generationMode: GenerationMode) {
+  await store.startGenerate(reportId, generationMode)
+  ElMessage.info(generationMode === 'TEMPLATE' ? '模板正文生成任务已启动' : 'AI 正文生成任务已启动')
 }
 
 function backToOutline() {

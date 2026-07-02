@@ -96,16 +96,7 @@ function outlineToSections(outline: OutlineNode[]): ReportSection[] {
     number: node.number,
     title: node.title,
     contentMarkdown: "",
-    tableJson:
-      node.level === 1
-        ? {
-            columns: ["检查项", "状态", "建议"],
-            rows: [
-              [node.title, "待生成", "等待 AI 补充"],
-              ["资料完整性", "待核验", "生成后由用户复核"]
-            ]
-          }
-        : undefined,
+    tableJson: node.tables?.length ? node.tables : undefined,
     status: "PENDING",
     source: "AI",
     version: 1,

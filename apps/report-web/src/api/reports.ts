@@ -4,6 +4,7 @@ import type {
   CreateReportPayload,
   EntityId,
   GenerateStreamEvent,
+  OutlineTable,
   OutlineNode,
   PageResult,
   Report,
@@ -33,27 +34,25 @@ interface BackendOutlineNode {
   title: string;
   level: number;
   promptHint?: string;
+  tables?: BackendOutlineTable[];
   children?: BackendOutlineNode[];
 }
 
+interface BackendOutlineTable {
+  id?: string;
+  caption: string;
+  columns: string[];
+  description?: string;
+  rows?: string[][];
+}
+
+export type GenerationMode = "AI" | "TEMPLATE";
+
 interface GenerateOutlineResponse {
   tempId: string;
-  source: "AI" | "LOCAL_TEMPLATE";
+  source: "AI" | "TEMPLATE" | "LOCAL_TEMPLATE";
   expireSeconds: number;
   outline: BackendOutlineNode[];
-}
-
-interface TemplateOutlineNode {
-  id?: string;
-  number?: string;
-  title?: string;
-  level?: number;
-  promptHint?: string;
-  children?: TemplateOutlineNode[];
-}
-
-interface TemplateVisualOutlineConfig {
-  outline?: TemplateOutlineNode[];
 }
 
 interface ConfirmOutlineResponse {
@@ -104,6 +103,7 @@ interface BackendSection {
   number: string;
   title: string;
   contentMarkdown: string;
+  tableJson?: string | BackendOutlineTable[] | null;
   status: ReportSection["status"];
   source?: ReportSection["source"];
   version: number;
@@ -150,15 +150,17 @@ function parseSseJson<T>(data: string): T | undefined {
   }
 }
 
-function reportPayload(payload: CreateReportPayload) {
+function reportPayload(payload: CreateReportPayload, generationMode: GenerationMode = payload.templateId ? "TEMPLATE" : "AI") {
   return {
+    generationMode,
     templateId: payload.templateId,
     reportType: payload.type,
     subject: payload.subject,
     name: payload.name,
     specialty: payload.specialty,
     powerPlant: payload.powerPlant,
-    reportYear: payload.reportYear
+    reportYear: payload.reportYear,
+    context: {}
   };
 }
 
@@ -183,31 +185,36 @@ function reportTypeOf(record: Pick<BackendReportRecord, "type" | "reportType">) 
   return record.type || record.reportType || "SUMMER_PEAK_CHECK";
 }
 
-function normalizeTemplateOutline(nodes: TemplateOutlineNode[] = [], parentNumber = "", parentLevel = 0): BackendOutlineNode[] {
-  return nodes
-    .map((node, index) => {
-      const title = (node.title || "").trim();
-      if (!title) return undefined;
-      const number = node.number || (parentNumber ? `${parentNumber}.${index + 1}` : String(index + 1));
-      const level = node.level || parentLevel + 1 || 1;
+function normalizeTables(tables: unknown): OutlineTable[] {
+  if (!Array.isArray(tables)) return [];
+  return tables
+    .map((table, index) => {
+      if (!table || typeof table !== "object") return undefined;
+      const item = table as Partial<BackendOutlineTable>;
+      const columns = Array.isArray(item.columns) ? item.columns.map(String).filter(Boolean) : [];
+      const caption = String(item.caption || "").trim();
+      if (!caption || !columns.length) return undefined;
       return {
-        number,
-        title,
-        level,
-        promptHint: node.promptHint || "",
-        children: normalizeTemplateOutline(node.children || [], number, level)
-      };
+        id: item.id || `table-${index + 1}`,
+        caption,
+        columns,
+        description: item.description,
+        rows: Array.isArray(item.rows)
+          ? item.rows.filter(Array.isArray).map((row) => row.map(String))
+          : undefined
+      } satisfies OutlineTable;
     })
-    .filter(Boolean) as BackendOutlineNode[];
+    .filter(Boolean) as OutlineTable[];
 }
 
-async function loadTemplateOutline(templateId: EntityId) {
-  const config = await apiRequest<TemplateVisualOutlineConfig>(`/api/admin/templates/${templateId}/visual-config`);
-  const outlineTree = normalizeTemplateOutline(config.outline || []);
-  if (!outlineTree.length) {
-    throw new Error("当前模板未配置大纲结构，请先在模板管理中配置模板大纲");
+function parseTableJson(value: BackendSection["tableJson"]) {
+  if (!value) return [];
+  if (Array.isArray(value)) return normalizeTables(value);
+  try {
+    return normalizeTables(JSON.parse(value));
+  } catch {
+    return [];
   }
-  return outlineTree;
 }
 
 function flattenOutline(nodes: BackendOutlineNode[] = [], reportId: EntityId, parentId?: EntityId): OutlineNode[] {
@@ -221,7 +228,8 @@ function flattenOutline(nodes: BackendOutlineNode[] = [], reportId: EntityId, pa
       sortOrder: index + 1,
       number: node.number,
       title: node.title,
-      promptHint: node.promptHint
+      promptHint: node.promptHint,
+      tables: normalizeTables(node.tables)
     };
     return [current, ...flattenOutline(node.children || [], reportId, id)];
   });
@@ -237,6 +245,7 @@ function buildOutlineTree(nodes: OutlineNode[], parentId?: EntityId): BackendOut
       title: node.title,
       level: node.level,
       promptHint: node.promptHint,
+      tables: normalizeTables(node.tables),
       children: buildOutlineTree(nodes, node.id)
     }));
 }
@@ -273,6 +282,7 @@ function mapSection(section: BackendSection): ReportSection {
     status: section.status,
     source: section.source || "AI",
     version: section.version,
+    tableJson: parseTableJson(section.tableJson),
     errorMessage: section.errorMessage || undefined,
     createdAt: section.createdAt || section.updatedAt,
     updatedAt: section.updatedAt
@@ -353,31 +363,6 @@ function makeDraft(payload: CreateReportPayload, result: GenerateOutlineResponse
   };
 }
 
-function makeDraftFromOutline(payload: CreateReportPayload, outlineTree: BackendOutlineNode[]): ReportDetail {
-  const id = `template-${Date.now()}`;
-  const outline = flattenOutline(outlineTree, id);
-  return {
-    id,
-    templateId: payload.templateId,
-    outlineSource: "LOCAL_TEMPLATE",
-    name: payload.name,
-    type: payload.type,
-    subject: payload.subject,
-    specialty: payload.specialty,
-    powerPlant: payload.powerPlant,
-    reportYear: payload.reportYear,
-    status: "DRAFT",
-    ownerId: 0,
-    totalSections: countContentOutlineNodes(outline),
-    completedSections: 0,
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    outline,
-    sections: [],
-    files: []
-  };
-}
-
 export async function listReports(query: ReportQuery): Promise<PageResult<Report>> {
   if (enableMock) return mockListReports(query);
 
@@ -429,32 +414,10 @@ export async function listReportTypeOptions() {
 export async function createReport(payload: CreateReportPayload) {
   if (enableMock) return mockCreateReport(payload);
 
-  if (payload.templateId) {
-    const outlineTree = await loadTemplateOutline(payload.templateId);
-    const templateDraft = makeDraftFromOutline(payload, outlineTree);
-    const savedDraft = await apiRequest<OutlineDraftResponse>("/api/reports/outline/draft", {
-      method: "POST",
-      body: JSON.stringify(outlinePersistPayload(templateDraft, outlineTree))
-    });
-    return mapOutlineDraft(savedDraft, templateDraft);
-  }
-
-  if (draft.templateId) {
-    const outlineTree = await loadTemplateOutline(draft.templateId);
-    const savedDraft = await apiRequest<OutlineDraftResponse>(`/api/reports/${id}/outline/draft`, {
-      method: "PUT",
-      body: JSON.stringify(outlinePersistPayload(draft, outlineTree))
-    });
-    return mapOutlineDraft(savedDraft, {
-      ...draft,
-      outlineSource: "LOCAL_TEMPLATE",
-      outlineExpireSeconds: undefined
-    });
-  }
-
+  const generationMode: GenerationMode = payload.templateId ? "TEMPLATE" : "AI";
   const result = await apiRequest<GenerateOutlineResponse>("/api/reports/outline/generate", {
     method: "POST",
-    body: JSON.stringify(reportPayload(payload))
+    body: JSON.stringify(reportPayload(payload, generationMode))
   });
   const transientDraft = makeDraft(payload, result);
   const savedDraft = await apiRequest<OutlineDraftResponse>("/api/reports/outline/draft", {
@@ -506,9 +469,10 @@ export async function generateOutline(id: EntityId) {
 
   const draft = await getReport(id);
   if (draft.status !== "DRAFT") throw new Error("只有草稿状态可以重新生成大纲");
+  const generationMode: GenerationMode = draft.templateId ? "TEMPLATE" : "AI";
   const result = await apiRequest<GenerateOutlineResponse>("/api/reports/outline/generate", {
     method: "POST",
-    body: JSON.stringify(reportPayload(draft))
+    body: JSON.stringify(reportPayload(draft, generationMode))
   });
   const savedDraft = await apiRequest<OutlineDraftResponse>(`/api/reports/${id}/outline/draft`, {
     method: "PUT",
@@ -569,9 +533,12 @@ export async function saveOutlineDraft(id: EntityId, outline: OutlineNode[]) {
   return mapOutlineDraft(savedDraft, { ...draft, outline: nextOutline });
 }
 
-export async function startGenerate(id: EntityId) {
+export async function startGenerate(id: EntityId, generationMode: GenerationMode = "AI") {
   if (enableMock) return mockStartGenerate(id);
-  await apiRequest(`/api/reports/${id}/sections/generate`, { method: "POST" });
+  await apiRequest(`/api/reports/${id}/sections/generate`, {
+    method: "POST",
+    body: JSON.stringify({ generationMode })
+  });
 }
 
 export function createGenerateStream(
@@ -691,11 +658,18 @@ export function createGenerateStream(
   };
 }
 
-export async function saveSection(reportId: EntityId, sectionId: EntityId, contentMarkdown: string) {
+export async function saveSection(
+  reportId: EntityId,
+  sectionId: EntityId,
+  contentMarkdown: string,
+  tableJson?: OutlineTable[]
+) {
   if (enableMock) return mockSaveSection(reportId, sectionId, contentMarkdown);
+  const body: { contentMarkdown: string; tableJson?: string } = { contentMarkdown };
+  if (tableJson) body.tableJson = JSON.stringify(tableJson);
   const section = await apiRequest<BackendSection>(`/api/reports/${reportId}/sections/${sectionId}`, {
     method: "PUT",
-    body: JSON.stringify({ contentMarkdown })
+    body: JSON.stringify(body)
   });
   return mapSection(section);
 }
@@ -762,6 +736,7 @@ export function applyStreamEvent(detail: ReportDetail, event: GenerateStreamEven
         number: event.number,
         title: event.title,
         contentMarkdown: "",
+        tableJson: outline?.tables || [],
         status: "GENERATING",
         source: "AI",
         version: 1,
@@ -944,7 +919,17 @@ function mockCreateGenerateStream(
     }, delay));
     delay += 260;
 
-    [`## ${section.number} ${section.title}\n\n`, `本节依据报告主题和模板结构，对“${section.title}”进行业务化分析。`, "\n\n| 项目 | 当前判断 | 后续措施 |\n| --- | --- | --- |\n", `| ${section.title} | 已完成初稿 | 用户复核并补充现场数据 |\n`].forEach((delta) => {
+    const deltas = [`## ${section.number} ${section.title}\n\n`, `本节依据报告主题和模板结构，对“${section.title}”进行业务化分析。`];
+    const plan = section.tableJson?.[0];
+    if (plan?.columns.length) {
+      deltas.push(
+        `\n\n| ${plan.columns.join(" | ")} |\n`,
+        `| ${plan.columns.map(() => "---").join(" | ")} |\n`,
+        `| ${plan.columns.map((column, columnIndex) => (columnIndex === 0 ? section.title : "待补充")).join(" | ")} |\n`
+      );
+    }
+
+    deltas.forEach((delta) => {
       timers.push(window.setTimeout(() => {
         if (closed) return;
         section.contentMarkdown += delta;

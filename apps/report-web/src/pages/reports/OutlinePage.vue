@@ -116,7 +116,7 @@ import PageHeader from '@/components/PageHeader.vue'
 import OutlineTree from '@/components/OutlineTree.vue'
 import StatusBadge from '@/components/StatusBadge.vue'
 import { useReportStore } from '@/stores/reports'
-import type { EntityId, OutlineNode } from '@/types/domain'
+import type { EntityId, OutlineNode, OutlineTable } from '@/types/domain'
 import { moveOutlineNodeToTarget, renumberOutline } from '@/utils/outline'
 
 const route = useRoute()
@@ -140,7 +140,7 @@ const selectedTableRows = computed(() =>
   selectedTables.value.map((table) => ({
     label: table.label,
     name: table.name,
-    note: '生成正文时作为本节内部表格输出，不作为独立章节',
+    note: table.note,
   })),
 )
 
@@ -153,7 +153,7 @@ onMounted(async () => {
 })
 
 function setOutline(nodes: OutlineNode[]) {
-  outline.value = normalizeOutline(nodes.map((node) => ({ ...node })))
+  outline.value = normalizeOutline(nodes.map((node) => ({ ...node, tables: cloneTables(node.tables) })))
   selectedId.value = outline.value[0]?.id
 }
 
@@ -215,8 +215,17 @@ function addTableToNode() {
     ElMessage.warning('表格应添加到具体节或子节下，不能直接挂在章标题下')
     return
   }
-  const nextIndex = rawTableNames(selectedNode.value).length + 1
-  selectedNode.value.promptHint = appendTableHint(selectedNode.value.promptHint, `检查结果 ${nextIndex}`)
+  const current = selectedNode.value.tables || []
+  const nextIndex = current.length + 1
+  selectedNode.value.tables = [
+    ...current,
+    {
+      id: `table-${Date.now()}-${nextIndex}`,
+      caption: `检查结果 ${nextIndex}`,
+      columns: ['项目', '检查结果', '备注'],
+      description: '',
+    },
+  ]
 }
 
 function handleMove(payload: { dragId: EntityId; targetId: EntityId }) {
@@ -286,26 +295,28 @@ async function confirmOutline() {
 
 function normalizeOutline(nodes: OutlineNode[]) {
   const next: OutlineNode[] = []
-  const pendingTables = new Map<string, string[]>()
+  const pendingTables = new Map<string, OutlineTable[]>()
 
   nodes.forEach((node) => {
     if (isLegacyTableNode(node) && node.parentId) {
       const key = String(node.parentId)
       const list = pendingTables.get(key) ?? []
-      list.push(cleanLegacyTableName(node.title))
+      list.push(makeTablePlan(cleanLegacyTableName(node.title), list.length + 1))
       pendingTables.set(key, list)
       return
     }
-    next.push(node)
+    next.push({ ...node, tables: cloneTables(node.tables) })
   })
 
   return renumberOutline(
     next.map((node) => {
       const additions = pendingTables.get(String(node.id)) ?? []
-      if (!additions.length) return node
+      const hintedTables = tablePlansFromPrompt(node.promptHint)
+      const tables = dedupeTables([...(node.tables || []), ...hintedTables, ...additions])
+      if (!tables.length) return { ...node, tables: [] }
       return {
         ...node,
-        promptHint: additions.reduce((hint, table) => appendTableHint(hint, table), node.promptHint || ''),
+        tables,
       }
     }),
   )
@@ -319,17 +330,39 @@ function cleanLegacyTableName(title: string) {
   return title.replace(/^表格项[:：]?/, '').replace(/^TABLE\s+/i, '').trim() || '检查结果'
 }
 
-function rawTableNames(node: OutlineNode) {
-  return (node.promptHint || '')
+function tablePlansFromPrompt(promptHint = '') {
+  return promptHint
     .split(/\r?\n/)
     .map((line) => /^表格[:：]\s*(.+)$/.exec(line.trim())?.[1]?.trim())
-    .filter(Boolean) as string[]
+    .filter(Boolean)
+    .map((caption, index) => makeTablePlan(caption, index + 1))
 }
 
-function appendTableHint(promptHint = '', tableName: string) {
-  const current = promptHint.trim()
-  if (rawTableNames({ promptHint } as OutlineNode).includes(tableName)) return promptHint
-  return `${current}${current ? '\n' : ''}表格：${tableName}`
+function makeTablePlan(caption: string, index: number): OutlineTable {
+  return {
+    id: `legacy-table-${Date.now()}-${index}`,
+    caption,
+    columns: ['项目', '检查结果', '备注'],
+    description: '',
+  }
+}
+
+function cloneTables(tables?: OutlineTable[]) {
+  return (tables || []).map((table) => ({
+    ...table,
+    columns: [...table.columns],
+    rows: table.rows?.map((row) => [...row]),
+  }))
+}
+
+function dedupeTables(tables: OutlineTable[]) {
+  const seen = new Set<string>()
+  return tables.filter((table) => {
+    const caption = table.caption.trim()
+    if (!caption || !table.columns.length || seen.has(caption)) return false
+    seen.add(caption)
+    return true
+  })
 }
 
 function buildTableDisplayMap() {
@@ -337,12 +370,12 @@ function buildTableDisplayMap() {
   let globalIndex = 0
 
   outline.value.forEach((node) => {
-    const raw = rawTableNames(node)
-    if (!raw.length) return
-    result[String(node.id)] = raw.map((name, index) => {
+    const tables = node.tables || []
+    if (!tables.length) return
+    result[String(node.id)] = tables.map((table, index) => {
       globalIndex += 1
       const label = numberingMode.value === 'global' ? `表${globalIndex}` : `表${node.number}-${index + 1}`
-      return `${label} ${name}`
+      return `${label} ${table.caption}`
     })
   })
 
@@ -352,7 +385,13 @@ function buildTableDisplayMap() {
 function tableEntriesFor(node: OutlineNode) {
   return (tableDisplayMap.value[String(node.id)] ?? []).map((label) => {
     const match = /^(表[\d.-]+)\s+(.+)$/.exec(label)
-    return { label: match?.[1] || '表', name: match?.[2] || label }
+    const name = match?.[2] || label
+    const table = (node.tables || []).find((item) => item.caption === name)
+    return {
+      label: match?.[1] || '表',
+      name,
+      note: table?.description || table?.columns.join('、') || '生成正文时作为本节内部表格输出，不作为独立章节',
+    }
   })
 }
 </script>

@@ -97,8 +97,10 @@ function hasChildren(nodeId: EntityId) {
 
 function hasTable(nodeId: EntityId) {
   if (tableItemsFor(nodeId).length > 0) return true;
+  const node = props.nodes.find((item) => sameId(item.id, nodeId));
+  if (node?.tables?.length) return true;
   if (props.tableNodeIds?.some((id) => sameId(id, nodeId))) return true;
-  return Boolean(props.sections?.find((item) => sameId(item.outlineNodeId, nodeId) && item.tableJson));
+  return Boolean(props.sections?.find((item) => sameId(item.outlineNodeId, nodeId) && item.tableJson?.length));
 }
 
 function toggleCollapse(nodeId: EntityId) {
