@@ -5,7 +5,7 @@
       title="导出与下载"
       description="基于已保存报告数据生成 Word 文档，不重新执行 AI 生成；导出前检查空章节、失败章节与未保存内容。"
     >
-      <el-button @click="$router.push(`/reports/${reportId}/workspace`)">返回工作台</el-button>
+      <el-button @click="$router.push('/reports')">返回历史记录</el-button>
       <el-button type="primary" :loading="exporting" :disabled="!report" @click="exportFile">导出 DOCX</el-button>
     </PageHeader>
 

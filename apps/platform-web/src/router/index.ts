@@ -34,16 +34,6 @@ const platformOwnedRoutes: RouteRecordRaw[] = [
     redirect: '/km/resources',
   },
   {
-    path: '/reports/materials',
-    name: 'ReportMaterials',
-    component: () => import('../pages/PlaceholderPage.vue'),
-    meta: {
-      title: '素材映射',
-      description: '素材映射将在报告生成页面骨架完成后并入统一入口。',
-      admin: true,
-    },
-  },
-  {
     path: '/admin/overview',
     name: 'AdminOverview',
     component: () => import('../pages/admin/SystemOverviewPage.vue'),

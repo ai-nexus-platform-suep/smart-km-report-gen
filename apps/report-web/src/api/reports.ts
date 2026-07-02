@@ -4,6 +4,7 @@ import type {
   CreateReportPayload,
   EntityId,
   GenerateStreamEvent,
+  OutlineTable,
   OutlineNode,
   PageResult,
   Report,
@@ -13,7 +14,7 @@ import type {
   ReportSection
 } from "@/types/domain";
 import { createReportDocxBlob, normalizeDocxFileName } from "@/utils/docx";
-import { renumberOutline } from "@/utils/outline";
+import { contentOutlineNodes, countContentOutlineNodes, isContentOutlineNode, renumberOutline } from "@/utils/outline";
 
 interface BackendPage<T> {
   records: T[];
@@ -22,18 +23,36 @@ interface BackendPage<T> {
   size: number;
 }
 
+export interface CodeLabelOption<T extends string = string> {
+  code: T;
+  label: string;
+}
+
 interface BackendOutlineNode {
   id?: string;
   number: string;
   title: string;
   level: number;
   promptHint?: string;
+  tables?: BackendOutlineTable[];
+  tableJson?: string | BackendOutlineTable[] | null;
+  tablePlans?: BackendOutlineTable[];
   children?: BackendOutlineNode[];
 }
 
+interface BackendOutlineTable {
+  id?: string;
+  caption: string;
+  columns: string[];
+  description?: string;
+  rows?: string[][];
+}
+
+export type GenerationMode = "AI" | "TEMPLATE";
+
 interface GenerateOutlineResponse {
   tempId: string;
-  source: "AI" | "LOCAL_TEMPLATE";
+  source: "AI" | "TEMPLATE" | "LOCAL_TEMPLATE";
   expireSeconds: number;
   outline: BackendOutlineNode[];
 }
@@ -45,10 +64,27 @@ interface ConfirmOutlineResponse {
   outline: BackendOutlineNode[];
 }
 
+interface OutlineDraftResponse {
+  reportId: string;
+  templateId?: EntityId;
+  status: Report["status"];
+  name: string;
+  reportType: Report["type"];
+  subject: string;
+  specialty: string;
+  powerPlant: string;
+  reportYear: number;
+  outlineCount: number;
+  outline: BackendOutlineNode[];
+}
+
 interface BackendReportRecord {
   reportId: string;
+  tempId?: string;
+  templateId?: EntityId;
   name: string;
-  type: Report["type"];
+  type?: Report["type"];
+  reportType?: Report["type"];
   subject: string;
   specialty: string;
   powerPlant: string;
@@ -69,12 +105,23 @@ interface BackendSection {
   number: string;
   title: string;
   contentMarkdown: string;
+  tableJson?: string | BackendOutlineTable[] | null;
   status: ReportSection["status"];
   source?: ReportSection["source"];
   version: number;
   errorMessage?: string | null;
   createdAt?: string;
   updatedAt: string;
+}
+
+interface SectionTaskResponse {
+  taskId: string;
+  reportId: string;
+  sectionId: string | null;
+  status: string;
+  totalSections: number | null;
+  completedSections: number | null;
+  message: string;
 }
 
 interface ExportDocxResponse {
@@ -86,9 +133,17 @@ interface ExportDocxResponse {
   downloadUrl?: string;
 }
 
-const DRAFT_PREFIX = "report-web:outline-draft:";
+export interface ExportDocxOptions {
+  templateId?: EntityId;
+  useTemplate?: boolean;
+  figureNumberingMode?: "GLOBAL" | "SECTION";
+  tableNumberingMode?: "GLOBAL" | "SECTION";
+  includeEmptySections?: boolean;
+}
+
 const sameId = (a?: EntityId, b?: EntityId) => String(a) === String(b);
 const wait = (ms = 300) => new Promise((resolve) => window.setTimeout(resolve, ms));
+const outlineTableCache = new Map<string, OutlineNode[]>();
 
 function parseSseJson<T>(data: string): T | undefined {
   try {
@@ -98,33 +153,203 @@ function parseSseJson<T>(data: string): T | undefined {
   }
 }
 
-function draftKey(id: EntityId) {
-  return `${DRAFT_PREFIX}${id}`;
-}
-
-function readDraft(id: EntityId): ReportDetail | undefined {
-  const raw = sessionStorage.getItem(draftKey(id));
-  if (!raw) return undefined;
-  return JSON.parse(raw) as ReportDetail;
-}
-
-function writeDraft(report: ReportDetail) {
-  sessionStorage.setItem(draftKey(report.id), JSON.stringify(report));
-}
-
-function removeDraft(id: EntityId) {
-  sessionStorage.removeItem(draftKey(id));
-}
-
-function reportPayload(payload: CreateReportPayload) {
+function reportPayload(payload: CreateReportPayload, generationMode: GenerationMode = payload.templateId ? "TEMPLATE" : "AI") {
   return {
+    generationMode,
+    templateId: payload.templateId,
     reportType: payload.type,
     subject: payload.subject,
     name: payload.name,
     specialty: payload.specialty,
     powerPlant: payload.powerPlant,
-    reportYear: payload.reportYear
+    reportYear: payload.reportYear,
+    context: {}
   };
+}
+
+function outlinePersistPayload(
+  report: Pick<Report, "name" | "type" | "subject" | "specialty" | "powerPlant" | "reportYear" | "tempId">,
+  outline: BackendOutlineNode[],
+  tempId = report.tempId
+) {
+  return {
+    tempId,
+    name: report.name,
+    reportType: report.type,
+    subject: report.subject,
+    specialty: report.specialty,
+    powerPlant: report.powerPlant,
+    reportYear: report.reportYear,
+    outline
+  };
+}
+
+function reportTypeOf(record: Pick<BackendReportRecord, "type" | "reportType">) {
+  return record.type || record.reportType || "SUMMER_PEAK_CHECK";
+}
+
+function tableArray(value: unknown): unknown[] {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    try {
+      return tableArray(JSON.parse(value));
+    } catch {
+      return [];
+    }
+  }
+  if (typeof value !== "object") return [];
+
+  const record = value as Record<string, unknown>;
+  if (Array.isArray(record.tables)) return record.tables;
+  if (Array.isArray(record.tableJson)) return record.tableJson;
+  if (Array.isArray(record.tablePlans)) return record.tablePlans;
+  if (Array.isArray(record.items)) return record.items;
+  return [value];
+}
+
+function stringValue(value: unknown) {
+  return typeof value === "string" || typeof value === "number" ? String(value).trim() : "";
+}
+
+function normalizeColumns(columns: unknown): string[] {
+  if (Array.isArray(columns)) {
+    return columns
+      .map((column) => {
+        if (typeof column === "object" && column) {
+          const record = column as Record<string, unknown>;
+          return stringValue(record.label) || stringValue(record.name) || stringValue(record.title) || stringValue(record.key);
+        }
+        return stringValue(column);
+      })
+      .filter(Boolean);
+  }
+
+  if (typeof columns === "string") {
+    return columns
+      .split(/[|｜,，、\n]/)
+      .map((column) => column.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+}
+
+function normalizeRows(rows: unknown) {
+  if (!Array.isArray(rows)) return undefined;
+  return rows
+    .map((row) => {
+      if (Array.isArray(row)) return row.map(String);
+      if (row && typeof row === "object") return Object.values(row as Record<string, unknown>).map((cell) => String(cell ?? ""));
+      return undefined;
+    })
+    .filter(Boolean) as string[][];
+}
+
+function normalizeTables(tables: unknown): OutlineTable[] {
+  return tableArray(tables)
+    .map((table, index) => {
+      if (!table || typeof table !== "object") return undefined;
+      const item = table as Partial<BackendOutlineTable> & Record<string, unknown>;
+      const columns = normalizeColumns(item.columns);
+      const caption = stringValue(item.caption) || stringValue(item.name) || stringValue(item.title) || stringValue(item.label) || `表${index + 1}`;
+      if (!caption || !columns.length) return undefined;
+      return {
+        id: item.id || stringValue(item.tableId) || `table-${index + 1}`,
+        caption,
+        columns,
+        description: stringValue(item.description) || stringValue(item.note) || undefined,
+        rows: normalizeRows(item.rows || item.data)
+      } satisfies OutlineTable;
+    })
+    .filter(Boolean) as OutlineTable[];
+}
+
+function parseTableJson(value: unknown) {
+  if (!value) return [];
+  return normalizeTables(value);
+}
+
+function outlineTables(node: BackendOutlineNode) {
+  const tables = normalizeTables(node.tables);
+  if (tables.length) return tables;
+
+  const tableJson = parseTableJson(node.tableJson);
+  if (tableJson.length) return tableJson;
+
+  return normalizeTables(node.tablePlans);
+}
+
+function cloneTables(tables?: OutlineTable[]) {
+  return (tables || []).map((table) => ({
+    ...table,
+    columns: [...table.columns],
+    rows: table.rows?.map((row) => [...row])
+  }));
+}
+
+function cloneOutline(outline?: OutlineNode[], reportId?: EntityId) {
+  return (outline || []).map((node) => ({
+    ...node,
+    reportId: reportId ?? node.reportId,
+    tables: cloneTables(node.tables)
+  }));
+}
+
+function hasOutlineTables(outline?: OutlineNode[]) {
+  return Boolean(outline?.some((node) => node.tables?.length));
+}
+
+function findOutlineTableSource(sources: OutlineNode[] = [], target: OutlineNode) {
+  return (
+    sources.find((node) => sameId(node.id, target.id)) ||
+    sources.find((node) => node.number === target.number && node.title === target.title)
+  );
+}
+
+function mergeMissingOutlineTables(outline: OutlineNode[], tableSource?: OutlineNode[]) {
+  return outline.map((node) => {
+    if (node.tables?.length) return { ...node, tables: cloneTables(node.tables) };
+    const source = findOutlineTableSource(tableSource, node);
+    return { ...node, tables: cloneTables(source?.tables) };
+  });
+}
+
+function cacheOutlineTables(reportId?: EntityId, outline?: OutlineNode[]) {
+  if (!reportId || !hasOutlineTables(outline)) return;
+  outlineTableCache.set(String(reportId), cloneOutline(outline));
+}
+
+function replaceCachedOutlineTables(reportId?: EntityId, outline?: OutlineNode[]) {
+  if (!reportId) return;
+  if (!hasOutlineTables(outline)) {
+    outlineTableCache.delete(String(reportId));
+    return;
+  }
+  outlineTableCache.set(String(reportId), cloneOutline(outline));
+}
+
+function cachedOutlineTables(ids: Array<EntityId | undefined>) {
+  for (const id of ids) {
+    if (!id) continue;
+    const outline = outlineTableCache.get(String(id));
+    if (hasOutlineTables(outline)) return outline;
+  }
+  return undefined;
+}
+
+function restoreCachedOutlineTables(detail: ReportDetail, aliases: Array<EntityId | undefined> = []) {
+  const cached = cachedOutlineTables([detail.id, detail.tempId, ...aliases]);
+  if (!cached) return detail;
+  return ensureReportSections({ ...detail, outline: mergeMissingOutlineTables(detail.outline, cached) });
+}
+
+function rememberReportTables(detail: ReportDetail, aliases: Array<EntityId | undefined> = []) {
+  const restored = restoreCachedOutlineTables(detail, aliases);
+  cacheOutlineTables(restored.id, restored.outline);
+  cacheOutlineTables(restored.tempId, restored.outline);
+  aliases.forEach((id) => cacheOutlineTables(id, restored.outline));
+  return restored;
 }
 
 function flattenOutline(nodes: BackendOutlineNode[] = [], reportId: EntityId, parentId?: EntityId): OutlineNode[] {
@@ -138,7 +363,8 @@ function flattenOutline(nodes: BackendOutlineNode[] = [], reportId: EntityId, pa
       sortOrder: index + 1,
       number: node.number,
       title: node.title,
-      promptHint: node.promptHint
+      promptHint: node.promptHint,
+      tables: outlineTables(node)
     };
     return [current, ...flattenOutline(node.children || [], reportId, id)];
   });
@@ -148,21 +374,29 @@ function buildOutlineTree(nodes: OutlineNode[], parentId?: EntityId): BackendOut
   return nodes
     .filter((node) => (parentId ? sameId(node.parentId, parentId) : !node.parentId))
     .sort((a, b) => a.sortOrder - b.sortOrder)
-    .map((node) => ({
-      id: String(node.id).startsWith("local-") ? undefined : String(node.id),
-      number: node.number,
-      title: node.title,
-      level: node.level,
-      promptHint: node.promptHint,
-      children: buildOutlineTree(nodes, node.id)
-    }));
+    .map((node) => {
+      const tables = normalizeTables(node.tables);
+      return {
+        id: String(node.id).startsWith("local-") ? undefined : String(node.id),
+        number: node.number,
+        title: node.title,
+        level: node.level,
+        promptHint: node.promptHint,
+        tables,
+        tableJson: tables.length ? JSON.stringify(tables) : undefined,
+        tablePlans: tables,
+        children: buildOutlineTree(nodes, node.id)
+      };
+    });
 }
 
 function mapReport(record: BackendReportRecord): Report {
   return {
     id: record.reportId,
+    tempId: record.tempId,
+    templateId: record.templateId,
     name: record.name,
-    type: record.type,
+    type: reportTypeOf(record),
     subject: record.subject,
     specialty: record.specialty,
     powerPlant: record.powerPlant,
@@ -181,25 +415,127 @@ function mapSection(section: BackendSection): ReportSection {
   return {
     id: section.sectionId,
     reportId: section.reportId,
-    outlineNodeId: section.outlineNodeId,
+    outlineNodeId: section.outlineNodeId || section.sectionId,
     number: section.number,
     title: section.title,
     contentMarkdown: section.contentMarkdown || "",
     status: section.status,
     source: section.source || "AI",
     version: section.version,
+    tableJson: parseTableJson(section.tableJson),
     errorMessage: section.errorMessage || undefined,
     createdAt: section.createdAt || section.updatedAt,
     updatedAt: section.updatedAt
   };
 }
 
-function mapDetail(record: BackendReportRecord): ReportDetail {
+function findOutlineForSection(outline: OutlineNode[], section: ReportSection) {
+  return (
+    outline.find((node) => sameId(node.id, section.outlineNodeId)) ||
+    outline.find((node) => node.number === section.number && node.title === section.title)
+  );
+}
+
+function ensureReportSections(detail: ReportDetail): ReportDetail {
+  const outline = detail.outline.map((node) => ({ ...node, tables: cloneTables(node.tables) }));
+  const sections = detail.sections.map((section) => ({ ...section, tableJson: cloneTables(section.tableJson) }));
+  const now = new Date().toISOString();
+
+  sections.forEach((section) => {
+    const node = findOutlineForSection(outline, section);
+    if (!node) return;
+
+    if ((!node.tables || node.tables.length === 0) && section.tableJson?.length) {
+      node.tables = cloneTables(section.tableJson);
+    }
+    if ((!section.tableJson || section.tableJson.length === 0) && node.tables?.length) {
+      section.tableJson = cloneTables(node.tables);
+    }
+    section.outlineNodeId = node.id;
+    section.number = section.number || node.number;
+    section.title = section.title || node.title;
+  });
+
+  contentOutlineNodes(outline).forEach((node) => {
+    const existing = sections.find((section) => sameId(section.outlineNodeId, node.id));
+    if (existing) {
+      if ((!existing.tableJson || existing.tableJson.length === 0) && node.tables?.length) {
+        existing.tableJson = cloneTables(node.tables);
+      }
+      existing.number = node.number;
+      existing.title = node.title;
+      return;
+    }
+
+    sections.push({
+      id: `outline-${node.id}-section`,
+      reportId: detail.id,
+      outlineNodeId: node.id,
+      number: node.number,
+      title: node.title,
+      contentMarkdown: "",
+      tableJson: cloneTables(node.tables),
+      status: "PENDING",
+      source: "AI",
+      version: 1,
+      createdAt: detail.updatedAt || now,
+      updatedAt: detail.updatedAt || now
+    });
+  });
+
   return {
+    ...detail,
+    outline,
+    sections,
+    totalSections: detail.totalSections || countContentOutlineNodes(outline)
+  };
+}
+
+function mapDetail(record: BackendReportRecord): ReportDetail {
+  return ensureReportSections({
     ...mapReport(record),
     outline: flattenOutline(record.outline || [], record.reportId),
     sections: (record.sections || []).map(mapSection)
-  };
+  });
+}
+
+function mapOutlineDraft(record: OutlineDraftResponse, base?: Partial<ReportDetail>): ReportDetail {
+  const flattenedOutline = flattenOutline(record.outline || [], record.reportId);
+  const outline = flattenedOutline.length
+    ? mergeMissingOutlineTables(flattenedOutline, base?.outline)
+    : cloneOutline(base?.outline, record.reportId);
+  const now = new Date().toISOString();
+  return ensureReportSections({
+    id: record.reportId,
+    tempId: base?.tempId,
+    templateId: record.templateId ?? base?.templateId,
+    outlineSource: base?.outlineSource,
+    outlineExpireSeconds: base?.outlineExpireSeconds,
+    name: record.name || base?.name || "",
+    type: record.reportType || base?.type || "SUMMER_PEAK_CHECK",
+    subject: record.subject || base?.subject || "",
+    specialty: record.specialty || base?.specialty || "",
+    powerPlant: record.powerPlant || base?.powerPlant || "",
+    reportYear: record.reportYear || base?.reportYear || new Date().getFullYear(),
+    status: record.status,
+    ownerId: base?.ownerId || 0,
+    totalSections: countContentOutlineNodes(outline),
+    completedSections: base?.completedSections || 0,
+    createdAt: base?.createdAt || now,
+    updatedAt: now,
+    outline,
+    sections: base?.sections || [],
+    files: base?.files || []
+  });
+}
+
+function hasReportTables(report: ReportDetail) {
+  return report.outline.some((node) => node.tables?.length) || report.sections.some((section) => section.tableJson?.length);
+}
+
+function mergeOutlineTables(detail: ReportDetail, tableSource: ReportDetail) {
+  const outline = mergeMissingOutlineTables(detail.outline, tableSource.outline);
+  return ensureReportSections({ ...detail, outline });
 }
 
 function mapFile(file: ExportDocxResponse): ReportFile {
@@ -216,9 +552,11 @@ function mapFile(file: ExportDocxResponse): ReportFile {
 
 function makeDraft(payload: CreateReportPayload, result: GenerateOutlineResponse, idOverride?: EntityId): ReportDetail {
   const id = idOverride || result.tempId || `temp-${Date.now()}`;
+  const outline = flattenOutline(result.outline, id);
   return {
     id,
     tempId: result.tempId,
+    templateId: payload.templateId,
     outlineSource: result.source,
     outlineExpireSeconds: result.expireSeconds,
     name: payload.name,
@@ -227,13 +565,13 @@ function makeDraft(payload: CreateReportPayload, result: GenerateOutlineResponse
     specialty: payload.specialty,
     powerPlant: payload.powerPlant,
     reportYear: payload.reportYear,
-    status: "OUTLINE_READY",
+    status: "DRAFT",
     ownerId: 0,
-    totalSections: flattenOutline(result.outline, id).length,
+    totalSections: countContentOutlineNodes(outline),
     completedSections: 0,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    outline: flattenOutline(result.outline, id),
+    outline,
     sections: [],
     files: []
   };
@@ -262,26 +600,82 @@ export async function listReports(query: ReportQuery): Promise<PageResult<Report
   };
 }
 
+export async function listReportStatusOptions() {
+  if (enableMock) {
+    return [
+      { code: "DRAFT", label: "草稿" },
+      { code: "OUTLINE_READY", label: "大纲就绪" },
+      { code: "CONTENT_GENERATING", label: "正文生成中" },
+      { code: "CONTENT_INCOMPLETE", label: "正文待补全" },
+      { code: "CONTENT_READY", label: "正文就绪" },
+      { code: "EXPORTED", label: "已导出" },
+      { code: "FAILED", label: "生成失败" }
+    ] satisfies CodeLabelOption<Report["status"]>[];
+  }
+  return apiRequest<Array<CodeLabelOption<Report["status"]>>>("/api/reports/history/status-options");
+}
+
+export async function listReportTypeOptions() {
+  if (enableMock) {
+    return [
+      { code: "SUMMER_PEAK_CHECK", label: "迎峰度夏检查报告" },
+      { code: "COAL_INVENTORY_AUDIT", label: "煤库存审计报告" }
+    ] satisfies CodeLabelOption<Report["type"]>[];
+  }
+  return apiRequest<Array<CodeLabelOption<Report["type"]>>>("/api/reports/history/report-type-options");
+}
+
 export async function createReport(payload: CreateReportPayload) {
   if (enableMock) return mockCreateReport(payload);
 
+  const generationMode: GenerationMode = payload.templateId ? "TEMPLATE" : "AI";
   const result = await apiRequest<GenerateOutlineResponse>("/api/reports/outline/generate", {
     method: "POST",
-    body: JSON.stringify(reportPayload(payload))
+    body: JSON.stringify(reportPayload(payload, generationMode))
   });
-  const draft = makeDraft(payload, result);
-  writeDraft(draft);
-  return draft;
+  const transientDraft = makeDraft(payload, result);
+  const savedDraft = await apiRequest<OutlineDraftResponse>("/api/reports/outline/draft", {
+    method: "POST",
+    body: JSON.stringify(outlinePersistPayload(transientDraft, buildOutlineTree(transientDraft.outline), result.tempId))
+  });
+  return rememberReportTables(mapOutlineDraft(savedDraft, transientDraft), [transientDraft.id, result.tempId]);
+}
+
+export async function generateFixedOutline(reportType: Report["type"]) {
+  if (enableMock) {
+    const id = `fixed-${Date.now()}`;
+    return flattenOutline(mockDb.seedOutline(id, Date.now(), reportType), id);
+  }
+  const outline = await apiRequest<BackendOutlineNode[]>("/api/reports/outline", {
+    method: "POST",
+    body: JSON.stringify({ reportType })
+  });
+  return flattenOutline(outline, "fixed-outline");
 }
 
 export async function getReport(id: EntityId) {
   if (enableMock) return mockGetReport(id);
 
-  const draft = readDraft(id);
-  if (draft) return draft;
-
   const detail = await apiRequest<BackendReportRecord>(`/api/reports/history/${id}`);
-  return mapDetail(detail);
+  let report = mapDetail(detail);
+  if (report.status === "DRAFT" || !report.outline.length || !hasReportTables(report)) {
+    try {
+      const savedOutline = restoreCachedOutlineTables(await getSavedOutlineReport(id, report), [id]);
+      if (report.status === "DRAFT" || !report.outline.length) return rememberReportTables(savedOutline, [id]);
+      if (!hasReportTables(report) && hasReportTables(savedOutline)) {
+        return rememberReportTables(mergeOutlineTables(report, savedOutline), [id]);
+      }
+      report = mergeOutlineTables(report, savedOutline);
+    } catch (error) {
+      if (report.status === "DRAFT") throw error;
+    }
+  }
+  return rememberReportTables(report, [id]);
+}
+
+async function getSavedOutlineReport(id: EntityId, base?: Partial<ReportDetail>) {
+  const saved = await apiRequest<OutlineDraftResponse>(`/api/reports/${id}/outline`);
+  return mapOutlineDraft(saved, base);
 }
 
 export async function deleteReport(id: EntityId) {
@@ -292,25 +686,44 @@ export async function deleteReport(id: EntityId) {
 export async function generateOutline(id: EntityId) {
   if (enableMock) return mockGenerateOutline(id);
 
-  const draft = readDraft(id);
-  if (!draft) throw new Error("只能在新建报告临时态重新生成大纲");
+  const draft = await getReport(id);
+  if (draft.status !== "DRAFT") throw new Error("只有草稿状态可以重新生成大纲");
+  const generationMode: GenerationMode = draft.templateId ? "TEMPLATE" : "AI";
   const result = await apiRequest<GenerateOutlineResponse>("/api/reports/outline/generate", {
     method: "POST",
-    body: JSON.stringify(reportPayload(draft))
+    body: JSON.stringify(reportPayload(draft, generationMode))
   });
-  const nextDraft = makeDraft(draft, result, id);
-  writeDraft(nextDraft);
-  return nextDraft;
+  const generatedOutline = flattenOutline(result.outline || [], draft.id);
+  replaceCachedOutlineTables(id, generatedOutline);
+  replaceCachedOutlineTables(draft.id, generatedOutline);
+  replaceCachedOutlineTables(result.tempId, generatedOutline);
+  const savedDraft = await apiRequest<OutlineDraftResponse>(`/api/reports/${id}/outline/draft`, {
+    method: "PUT",
+    body: JSON.stringify(outlinePersistPayload(draft, buildOutlineTree(generatedOutline), result.tempId))
+  });
+  return rememberReportTables(mapOutlineDraft(savedDraft, {
+    ...draft,
+    tempId: result.tempId,
+    outlineSource: result.source,
+    outlineExpireSeconds: result.expireSeconds,
+    outline: generatedOutline
+  }), [id, result.tempId]);
 }
 
 export async function saveOutline(id: EntityId, outline: OutlineNode[]) {
   if (enableMock) return mockSaveOutline(id, outline);
 
-  const draft = readDraft(id);
-  if (!draft) throw new Error("当前报告不是可确认的大纲临时态");
+  const draft = await getReport(id);
+  if (draft.status !== "DRAFT") throw new Error("只有草稿状态的大纲可以确认保存");
+  const submittedOutline = renumberOutline(outline);
+  const submittedTree = buildOutlineTree(submittedOutline);
+  replaceCachedOutlineTables(id, submittedOutline);
+  replaceCachedOutlineTables(draft.id, submittedOutline);
+  replaceCachedOutlineTables(draft.tempId, submittedOutline);
   const result = await apiRequest<ConfirmOutlineResponse>("/api/reports/outline/confirm", {
     method: "POST",
     body: JSON.stringify({
+      reportId: draft.id,
       tempId: draft.tempId,
       name: draft.name,
       reportType: draft.type,
@@ -318,24 +731,49 @@ export async function saveOutline(id: EntityId, outline: OutlineNode[]) {
       specialty: draft.specialty,
       powerPlant: draft.powerPlant,
       reportYear: draft.reportYear,
-      outline: buildOutlineTree(renumberOutline(outline))
+      outline: submittedTree
     })
   });
 
-  removeDraft(id);
-  return {
+  const confirmedOutline = mergeMissingOutlineTables(
+    flattenOutline(result.outline?.length ? result.outline : submittedTree, result.reportId),
+    submittedOutline
+  );
+  return rememberReportTables(ensureReportSections({
     ...draft,
     id: result.reportId,
+    tempId: undefined,
+    outlineSource: undefined,
+    outlineExpireSeconds: undefined,
     status: result.status,
-    outline: flattenOutline(result.outline || buildOutlineTree(outline), result.reportId),
-    totalSections: result.outlineCount,
+    outline: confirmedOutline,
+    totalSections: countContentOutlineNodes(confirmedOutline),
     updatedAt: new Date().toISOString()
-  };
+  }), [id, draft.id, draft.tempId]);
+}
+
+export async function saveOutlineDraft(id: EntityId, outline: OutlineNode[]) {
+  if (enableMock) return mockSaveOutlineDraft(id, outline);
+
+  const draft = await getReport(id);
+  if (draft.status !== "DRAFT") throw new Error("只有草稿状态的大纲可以保存");
+  const nextOutline = renumberOutline(outline);
+  replaceCachedOutlineTables(id, nextOutline);
+  replaceCachedOutlineTables(draft.id, nextOutline);
+  replaceCachedOutlineTables(draft.tempId, nextOutline);
+  const savedDraft = await apiRequest<OutlineDraftResponse>(`/api/reports/${id}/outline/draft`, {
+    method: "PUT",
+    body: JSON.stringify(outlinePersistPayload(draft, buildOutlineTree(nextOutline), draft.tempId))
+  });
+  return rememberReportTables(mapOutlineDraft(savedDraft, { ...draft, outline: nextOutline }), [id, draft.id, draft.tempId]);
 }
 
 export async function startGenerate(id: EntityId) {
   if (enableMock) return mockStartGenerate(id);
-  await apiRequest(`/api/reports/${id}/sections/generate`, { method: "POST" });
+  await apiRequest(`/api/reports/${id}/sections/generate`, {
+    method: "POST",
+    body: JSON.stringify({ generationMode: "AI" })
+  });
 }
 
 export function createGenerateStream(
@@ -455,36 +893,60 @@ export function createGenerateStream(
   };
 }
 
-export async function saveSection(reportId: EntityId, sectionId: EntityId, contentMarkdown: string) {
+export async function saveSection(
+  reportId: EntityId,
+  sectionId: EntityId,
+  contentMarkdown: string,
+  tableJson?: OutlineTable[]
+) {
   if (enableMock) return mockSaveSection(reportId, sectionId, contentMarkdown);
+  const body: { contentMarkdown: string; tableJson?: string } = { contentMarkdown };
+  if (tableJson) body.tableJson = JSON.stringify(tableJson);
   const section = await apiRequest<BackendSection>(`/api/reports/${reportId}/sections/${sectionId}`, {
     method: "PUT",
-    body: JSON.stringify({ contentMarkdown })
+    body: JSON.stringify(body)
   });
+  return mapSection(section);
+}
+
+export async function listSections(reportId: EntityId) {
+  if (enableMock) {
+    const detail = await mockGetReport(reportId);
+    return detail.sections;
+  }
+  const sections = await apiRequest<BackendSection[]>(`/api/reports/${reportId}/sections`);
+  return sections.map(mapSection);
+}
+
+export async function getSection(reportId: EntityId, sectionId: EntityId) {
+  if (enableMock) {
+    const sections = await listSections(reportId);
+    const section = sections.find((item) => sameId(item.id, sectionId));
+    if (!section) throw new Error("章节不存在");
+    return section;
+  }
+  const section = await apiRequest<BackendSection>(`/api/reports/${reportId}/sections/${sectionId}`);
   return mapSection(section);
 }
 
 export async function regenerateSection(reportId: EntityId, sectionId: EntityId, hint = "") {
   if (enableMock) return mockRegenerateSection(reportId, sectionId);
-  const regenerated = await apiRequest<BackendSection | undefined>(`/api/reports/${reportId}/sections/${sectionId}/regenerate`, {
+  return apiRequest<SectionTaskResponse>(`/api/reports/${reportId}/sections/${sectionId}/regenerate`, {
     method: "POST",
     body: JSON.stringify({ hint })
   });
-  if (regenerated?.sectionId) return mapSection(regenerated);
-  const detail = await getReport(reportId);
-  const section = detail.sections.find((item) => sameId(item.id, sectionId));
-  if (!section) throw new Error("章节已重新生成，但未能获取最新章节内容");
-  return section;
 }
 
-export async function exportDocx(reportId: EntityId) {
+export async function exportDocx(reportId: EntityId, options: ExportDocxOptions = {}) {
   if (enableMock) return mockExportDocx(reportId);
   const file = await apiRequest<ExportDocxResponse>(`/api/reports/${reportId}/export/docx`, {
     method: "POST",
     body: JSON.stringify({
-      figureNumberingMode: "GLOBAL",
-      tableNumberingMode: "SECTION",
-      includeEmptySections: true
+      templateId: options.templateId,
+      useTemplate: options.useTemplate ?? true,
+      figureNumberingMode: options.figureNumberingMode || "GLOBAL",
+      tableNumberingMode: options.tableNumberingMode || "SECTION",
+      includeEmptySections: options.includeEmptySections ?? true
     })
   });
   return mapFile(file);
@@ -495,11 +957,26 @@ export async function downloadFile(_reportId: EntityId, fileId: EntityId) {
   return (await apiDownload(`/api/reports/files/${fileId}/download`)).blob;
 }
 
+function findOutlineForStreamEvent(detail: ReportDetail, event: { number: string; title: string }) {
+  return (
+    detail.outline.find((node) => node.number === event.number && node.title === event.title) ||
+    detail.outline.find((node) => node.number === event.number) ||
+    detail.outline.find((node) => node.title === event.title)
+  );
+}
+
 export function applyStreamEvent(detail: ReportDetail, event: GenerateStreamEvent) {
   if (event.type === "section_started") {
+    const outline = findOutlineForStreamEvent(detail, event);
+    if (outline && !isContentOutlineNode(detail.outline, outline)) return;
+
     let section = detail.sections.find((item) => sameId(item.id, event.sectionId));
+    if (!section && outline) {
+      section = detail.sections.find((item) => sameId(item.outlineNodeId, outline.id));
+      if (section) section.id = event.sectionId;
+    }
+
     if (!section) {
-      const outline = detail.outline.find((node) => node.number === event.number || node.title === event.title);
       const now = new Date().toISOString();
       section = {
         id: event.sectionId,
@@ -508,6 +985,7 @@ export function applyStreamEvent(detail: ReportDetail, event: GenerateStreamEven
         number: event.number,
         title: event.title,
         contentMarkdown: "",
+        tableJson: outline?.tables || [],
         status: "GENERATING",
         source: "AI",
         version: 1,
@@ -516,6 +994,12 @@ export function applyStreamEvent(detail: ReportDetail, event: GenerateStreamEven
       };
       detail.sections.push(section);
     }
+    if (outline) {
+      section.outlineNodeId = outline.id;
+      section.tableJson = section.tableJson?.length ? section.tableJson : cloneTables(outline.tables);
+    }
+    section.number = event.number;
+    section.title = event.title;
     section.status = "GENERATING";
   }
   if (event.type === "content_delta") {
@@ -609,9 +1093,10 @@ async function mockGenerateOutline(id: EntityId) {
   if (!report) throw new Error("报告不存在");
   await wait(550);
   const baseId = mockDb.nextId(db) + 100;
+  report.tempId = String(report.id);
   report.outline = mockDb.seedOutline(report.id, baseId, report.type);
   report.sections = mockDb.outlineToSections(report.outline);
-  report.status = "OUTLINE_READY";
+  report.status = "DRAFT";
   report.totalSections = report.sections.length;
   report.completedSections = 0;
   report.updatedAt = new Date().toISOString();
@@ -628,7 +1113,24 @@ async function mockSaveOutline(id: EntityId, outline: OutlineNode[]) {
   report.sections = mockDb.outlineToSections(report.outline);
   report.totalSections = report.sections.length;
   report.completedSections = 0;
+  report.tempId = undefined;
   report.status = "OUTLINE_READY";
+  report.updatedAt = new Date().toISOString();
+  mockDb.save(db);
+  return report;
+}
+
+async function mockSaveOutlineDraft(id: EntityId, outline: OutlineNode[]) {
+  const db = mockDb.data;
+  const report = db.reports.find((item) => sameId(item.id, id));
+  if (!report) throw new Error("报告不存在");
+  await wait();
+  report.outline = renumberOutline(outline);
+  report.sections = mockDb.outlineToSections(report.outline);
+  report.totalSections = report.sections.length;
+  report.completedSections = 0;
+  report.tempId = String(report.id);
+  report.status = "DRAFT";
   report.updatedAt = new Date().toISOString();
   mockDb.save(db);
   return report;
@@ -672,7 +1174,17 @@ function mockCreateGenerateStream(
     }, delay));
     delay += 260;
 
-    [`## ${section.number} ${section.title}\n\n`, `本节依据报告主题和模板结构，对“${section.title}”进行业务化分析。`, "\n\n| 项目 | 当前判断 | 后续措施 |\n| --- | --- | --- |\n", `| ${section.title} | 已完成初稿 | 用户复核并补充现场数据 |\n`].forEach((delta) => {
+    const deltas = [`## ${section.number} ${section.title}\n\n`, `本节依据报告主题和模板结构，对“${section.title}”进行业务化分析。`];
+    const plan = section.tableJson?.[0];
+    if (plan?.columns.length) {
+      deltas.push(
+        `\n\n| ${plan.columns.join(" | ")} |\n`,
+        `| ${plan.columns.map(() => "---").join(" | ")} |\n`,
+        `| ${plan.columns.map((column, columnIndex) => (columnIndex === 0 ? section.title : "待补充")).join(" | ")} |\n`
+      );
+    }
+
+    deltas.forEach((delta) => {
       timers.push(window.setTimeout(() => {
         if (closed) return;
         section.contentMarkdown += delta;

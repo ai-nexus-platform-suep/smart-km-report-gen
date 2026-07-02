@@ -1,4 +1,5 @@
 import type {
+  AssetRecord,
   EntityId,
   LlmConfig,
   OutlineNode,
@@ -9,10 +10,12 @@ import type {
   ReportType,
   TemplateRecord
 } from "@/types/domain";
+import { isContentOutlineNode } from "@/utils/outline";
 
 interface MockDb {
   reports: ReportDetail[];
   templates: TemplateRecord[];
+  assets: AssetRecord[];
   llmConfigs: LlmConfig[];
   nextId: number;
 }
@@ -86,23 +89,14 @@ function seedOutline(reportId: EntityId, baseId: number, type: ReportType): Outl
 }
 
 function outlineToSections(outline: OutlineNode[]): ReportSection[] {
-  return outline.map((node) => ({
+  return outline.filter((node) => isContentOutlineNode(outline, node)).map((node) => ({
     id: `${node.id}-section`,
     reportId: node.reportId,
     outlineNodeId: node.id,
     number: node.number,
     title: node.title,
     contentMarkdown: "",
-    tableJson:
-      node.level === 1
-        ? {
-            columns: ["检查项", "状态", "建议"],
-            rows: [
-              [node.title, "待生成", "等待 AI 补充"],
-              ["资料完整性", "待核验", "生成后由用户复核"]
-            ]
-          }
-        : undefined,
+    tableJson: node.tables?.length ? node.tables : undefined,
     status: "PENDING",
     source: "AI",
     version: 1,
@@ -150,18 +144,83 @@ function seedTemplates(): TemplateRecord[] {
       name: "迎峰度夏检查报告模板",
       reportType: "SUMMER_PEAK_CHECK",
       version: "v1.2",
+      storageType: "MINIO",
+      filePath: "minio://report-templates/templates/SUMMER_PEAK_CHECK/tpl-summer-default.docx",
+      bucketName: "report-templates",
+      objectName: "templates/SUMMER_PEAK_CHECK/tpl-summer-default.docx",
+      originalFileName: "迎峰度夏检查报告模板.docx",
+      contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      fileSize: 20480,
+      configJson: "{}",
       enabled: true,
       createdBy: "C组管理员",
-      createdAt: now()
+      createdAt: now(),
+      updatedAt: now()
     },
     {
       id: "tpl-coal-audit",
       name: "煤库存审计报告模板",
       reportType: "COAL_INVENTORY_AUDIT",
       version: "v1.0",
+      storageType: "MINIO",
+      filePath: "minio://report-templates/templates/COAL_INVENTORY_AUDIT/tpl-coal-audit.docx",
+      bucketName: "report-templates",
+      objectName: "templates/COAL_INVENTORY_AUDIT/tpl-coal-audit.docx",
+      originalFileName: "煤库存审计报告模板.docx",
+      contentType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      fileSize: 22528,
+      configJson: "{}",
       enabled: true,
       createdBy: "C组管理员",
-      createdAt: now()
+      createdAt: now(),
+      updatedAt: now()
+    }
+  ];
+}
+
+function seedAssets(): AssetRecord[] {
+  return [
+    {
+      id: "asset-standard-001",
+      name: "电力行业迎峰度夏检查数据表",
+      category: "STANDARD_DOC",
+      categoryLabel: "标准文档",
+      fileType: "xlsx",
+      storageType: "MINIO",
+      filePath: "minio://report-assets/assets/STANDARD_DOC/asset-standard-001.xlsx",
+      bucketName: "report-assets",
+      objectName: "assets/STANDARD_DOC/asset-standard-001.xlsx",
+      originalFileName: "电力行业迎峰度夏检查数据表.xlsx",
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      fileSize: 102400,
+      sha256: "mock-asset-standard-001",
+      description: "迎峰度夏检查依据和数据项。",
+      tags: "标准,迎峰度夏",
+      enabled: true,
+      createdBy: "admin",
+      createdAt: now(),
+      updatedAt: now()
+    },
+    {
+      id: "asset-report-data-001",
+      name: "设备运行统计样表",
+      category: "REPORT_DATA",
+      categoryLabel: "报告数据",
+      fileType: "xlsx",
+      storageType: "MINIO",
+      filePath: "minio://report-assets/assets/REPORT_DATA/asset-report-data-001.xlsx",
+      bucketName: "report-assets",
+      objectName: "assets/REPORT_DATA/asset-report-data-001.xlsx",
+      originalFileName: "设备运行统计样表.xlsx",
+      contentType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      fileSize: 40960,
+      sha256: "mock-asset-report-data-001",
+      description: "正文生成可参考的运行数据样表。",
+      tags: "数据,设备",
+      enabled: true,
+      createdBy: "admin",
+      createdAt: now(),
+      updatedAt: now()
     }
   ];
 }
@@ -193,6 +252,7 @@ function initialDb(): MockDb {
   return {
     reports: [seedReport()],
     templates: seedTemplates(),
+    assets: seedAssets(),
     llmConfigs: seedLlmConfigs(),
     nextId: 1000
   };
@@ -225,6 +285,7 @@ function normalizeDb(db: Partial<MockDb>): MockDb {
   return {
     reports: (db.reports ?? initial.reports).map(normalizeReport),
     templates: db.templates ?? initial.templates,
+    assets: db.assets ?? initial.assets,
     llmConfigs: db.llmConfigs ?? initial.llmConfigs,
     nextId: db.nextId ?? initial.nextId
   };

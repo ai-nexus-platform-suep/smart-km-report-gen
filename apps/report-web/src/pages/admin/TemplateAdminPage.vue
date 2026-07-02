@@ -29,12 +29,13 @@
           <el-table-column label="创建时间" min-width="180">
             <template #default="{ row }">{{ new Date(row.createdAt).toLocaleString() }}</template>
           </el-table-column>
-          <el-table-column label="操作" width="310" fixed="right">
+          <el-table-column label="操作" width="430" fixed="right">
             <template #default="{ row }">
               <div class="action-row template-actions">
+                <el-button size="small" :icon="ViewIcon" @click="openPreview(row)">预览</el-button>
                 <el-button size="small" @click="openConfig(row)">配置</el-button>
                 <el-button size="small" @click="openReplace(row)">替换</el-button>
-                <el-button size="small" @click="download(row)">下载</el-button>
+                <el-button size="small" :icon="DownloadIcon" :loading="sameId(downloadingId, row.id)" @click="download(row)">下载</el-button>
                 <el-button size="small" text type="danger" @click="remove(row)">删除</el-button>
               </div>
             </template>
@@ -62,7 +63,7 @@
           </el-form-item>
           <el-form-item label="模板文件">
             <div class="file-picker">
-              <input ref="fileInputRef" type="file" accept=".doc,.docx" @change="handleFileChange" />
+              <input ref="fileInputRef" type="file" accept=".docx" @change="handleFileChange" />
               <span>{{ uploadFile?.name || "请选择 .docx 模板文件" }}</span>
             </div>
           </el-form-item>
@@ -78,7 +79,7 @@
           <strong>{{ currentTemplate?.name }}</strong>
           <p>仅替换 DOCX 模板文件，模板名称、报告类型、版本和启用状态仍通过列表元信息维护。</p>
           <div class="file-picker">
-            <input ref="replaceFileInputRef" type="file" accept=".doc,.docx" @change="handleReplaceFileChange" />
+            <input ref="replaceFileInputRef" type="file" accept=".docx" @change="handleReplaceFileChange" />
             <span>{{ replaceFile?.name || "请选择新的 .docx 模板文件" }}</span>
           </div>
         </div>
@@ -133,6 +134,80 @@
           <el-button type="primary" :loading="configSaving" @click="saveConfig">保存配置</el-button>
         </template>
       </el-dialog>
+
+      <el-dialog v-model="previewVisible" title="模板 Word 预览" width="1120px" class="word-preview-dialog">
+        <div v-loading="previewLoading" class="preview-panel">
+          <template v-if="previewTemplate">
+            <div class="preview-meta-grid">
+              <div class="data-line">
+                <span>模板名称</span>
+                <strong>{{ previewTemplate.name }}</strong>
+              </div>
+              <div class="data-line">
+                <span>报告类型</span>
+                <strong>{{ reportTypeLabels[previewTemplate.reportType] }}</strong>
+              </div>
+              <div class="data-line">
+                <span>原始文件</span>
+                <strong>{{ previewTemplate.originalFileName || "-" }}</strong>
+              </div>
+              <div class="data-line">
+                <span>文件大小</span>
+                <strong>{{ formatBytes(previewTemplate.fileSize || 0) }}</strong>
+              </div>
+              <div class="data-line">
+                <span>存储位置</span>
+                <strong>{{ previewTemplate.objectName || previewTemplate.filePath || "-" }}</strong>
+              </div>
+              <div class="data-line">
+                <span>更新时间</span>
+                <strong>{{ previewTemplate.updatedAt ? new Date(previewTemplate.updatedAt).toLocaleString() : "-" }}</strong>
+              </div>
+            </div>
+
+            <div class="word-browser">
+              <div class="word-browser-toolbar">
+                <div>
+                  <span class="terminal-label">WORD DOCUMENT</span>
+                  <strong>{{ previewTemplate.originalFileName || `${previewTemplate.name}.docx` }}</strong>
+                </div>
+                <span>{{ previewDoc.sections.length }} 页</span>
+              </div>
+              <template v-if="previewDoc.sections.length">
+                <div class="word-pages">
+                  <article v-for="(section, sectionIndex) in previewDoc.sections" :key="section.name" class="word-page">
+                    <header class="word-page-header">
+                      <span>{{ previewTemplate.name }}</span>
+                      <span>{{ reportTypeLabels[previewTemplate.reportType] }}</span>
+                    </header>
+                    <div class="word-page-body">
+                      <h2>{{ section.name }}</h2>
+                      <template v-for="(block, index) in section.blocks" :key="`${section.name}-${index}`">
+                        <p v-if="block.type === 'paragraph'" class="word-paragraph">{{ block.text }}</p>
+                        <table v-else class="word-table">
+                          <tbody>
+                            <tr v-for="(row, rowIndex) in block.rows" :key="rowIndex">
+                              <td v-for="(cell, cellIndex) in row" :key="cellIndex">{{ cell }}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </template>
+                    </div>
+                    <footer class="word-page-footer">第 {{ sectionIndex + 1 }} 页</footer>
+                  </article>
+                </div>
+              </template>
+              <el-empty v-else :description="previewError || '未读取到模板正文内容'" />
+            </div>
+          </template>
+        </div>
+        <template #footer>
+          <el-button @click="previewVisible = false">关闭</el-button>
+          <el-button v-if="previewTemplate" :icon="DownloadIcon" type="primary" @click="download(previewTemplate)">
+            下载模板文件
+          </el-button>
+        </template>
+      </el-dialog>
     </div>
   </AuthGuard>
 </template>
@@ -140,11 +215,13 @@
 <script setup lang="ts">
 import { onMounted, reactive, ref } from "vue";
 import { ElMessage, ElMessageBox, type FormInstance, type FormRules } from "element-plus";
+import { Download as DownloadIcon, View as ViewIcon } from "@element-plus/icons-vue";
 import AuthGuard from "@platform/ui/src/components/AuthGuard.vue";
 import PageHeader from "@/components/PageHeader.vue";
 import {
   deleteTemplate,
   downloadTemplate,
+  getTemplate,
   getTemplateConfig,
   listTemplates,
   replaceTemplateFile,
@@ -154,7 +231,9 @@ import {
   type TemplateStyleConfig
 } from "@/api/admin";
 import type { ReportType, TemplateRecord } from "@/types/domain";
-import { reportTypeLabels } from "@/utils/labels";
+import { assertValidDocxBlob } from "@/utils/docx";
+import { readDocxPreview, type DocxPreview } from "@/utils/docxPreview";
+import { formatBytes, reportTypeLabels } from "@/utils/labels";
 
 const templates = ref<TemplateRecord[]>([]);
 const loading = ref(false);
@@ -164,7 +243,13 @@ const replaceVisible = ref(false);
 const replacing = ref(false);
 const configVisible = ref(false);
 const configSaving = ref(false);
+const previewVisible = ref(false);
+const previewLoading = ref(false);
 const currentTemplate = ref<TemplateRecord>();
+const previewTemplate = ref<TemplateRecord>();
+const previewDoc = ref<DocxPreview>({ sections: [] });
+const previewError = ref("");
+const downloadingId = ref<TemplateRecord["id"]>();
 const uploadFormRef = ref<FormInstance>();
 const fileInputRef = ref<HTMLInputElement>();
 const replaceFileInputRef = ref<HTMLInputElement>();
@@ -181,6 +266,7 @@ const uploadForm = reactive({
 const config = reactive<TemplateStyleConfig>({ titleSize: 18, bodySize: 12, lineHeight: 1.5, header: "示范电厂", footer: "" });
 
 const typeOptions = Object.entries(reportTypeLabels).map(([value, label]) => ({ value, label }));
+const sameId = (a?: TemplateRecord["id"], b?: TemplateRecord["id"]) => String(a) === String(b);
 
 const uploadRules: FormRules = {
   name: [{ required: true, message: "请输入模板名称", trigger: "blur" }],
@@ -214,6 +300,10 @@ function handleFileChange(event: Event) {
   uploadFile.value = input.files?.[0];
 }
 
+function isDocxFile(file?: File) {
+  return Boolean(file && /\.docx$/i.test(file.name));
+}
+
 function openReplace(template: TemplateRecord) {
   currentTemplate.value = template;
   replaceFile.value = undefined;
@@ -232,6 +322,10 @@ async function submitUpload() {
     ElMessage.warning("请选择模板文件");
     return;
   }
+  if (!isDocxFile(uploadFile.value)) {
+    ElMessage.warning("模板文件仅支持 .docx");
+    return;
+  }
   uploading.value = true;
   try {
     await uploadTemplate({ ...uploadForm, file: uploadFile.value });
@@ -247,6 +341,10 @@ async function submitReplace() {
   if (!currentTemplate.value) return;
   if (!replaceFile.value) {
     ElMessage.warning("请选择新的模板文件");
+    return;
+  }
+  if (!isDocxFile(replaceFile.value)) {
+    ElMessage.warning("模板文件仅支持 .docx");
     return;
   }
   replacing.value = true;
@@ -271,6 +369,25 @@ async function openConfig(template: TemplateRecord) {
   configVisible.value = true;
 }
 
+async function openPreview(template: TemplateRecord) {
+  previewVisible.value = true;
+  previewLoading.value = true;
+  previewTemplate.value = template;
+  previewDoc.value = { sections: [] };
+  previewError.value = "";
+  try {
+    const [detail, file] = await Promise.all([getTemplate(template.id), downloadTemplate(template.id)]);
+    previewTemplate.value = detail;
+    await assertValidDocxBlob(file.blob);
+    previewDoc.value = await readDocxPreview(file.blob);
+  } catch (error) {
+    previewError.value = error instanceof Error ? error.message : "模板预览失败";
+    ElMessage.error(previewError.value);
+  } finally {
+    previewLoading.value = false;
+  }
+}
+
 async function saveConfig() {
   if (!currentTemplate.value) return;
   configSaving.value = true;
@@ -284,16 +401,25 @@ async function saveConfig() {
 }
 
 async function download(template: TemplateRecord) {
-  const { blob, fileName } = await downloadTemplate(template.id);
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = fileName || `${template.name}.docx`;
-  link.style.display = "none";
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+  downloadingId.value = template.id;
+  try {
+    const { blob, fileName } = await downloadTemplate(template.id);
+    await assertValidDocxBlob(blob);
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = fileName || `${template.name}.docx`;
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    ElMessage.success("模板下载已开始");
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : "模板下载失败");
+  } finally {
+    downloadingId.value = undefined;
+  }
 }
 
 async function remove(template: TemplateRecord) {
@@ -356,6 +482,7 @@ async function remove(template: TemplateRecord) {
 .template-actions {
   flex-wrap: nowrap;
   justify-content: center;
+  gap: 8px;
 }
 
 .template-actions :deep(.el-button + .el-button) {
@@ -421,5 +548,139 @@ async function remove(template: TemplateRecord) {
 .template-preview td {
   padding: 8px;
   border: 1px solid var(--border-default);
+}
+
+.preview-panel {
+  min-height: 520px;
+}
+
+.preview-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 22px;
+  margin-bottom: 18px;
+}
+
+.word-browser {
+  display: grid;
+  overflow: hidden;
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  background: #e9edf3;
+}
+
+.word-browser-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 18px;
+  border-bottom: 1px solid rgba(132, 151, 176, 0.28);
+  color: var(--text-secondary);
+  background: #f8fafc;
+}
+
+.word-browser-toolbar strong,
+.word-browser-toolbar span {
+  display: block;
+}
+
+.word-browser-toolbar strong {
+  margin-top: 4px;
+  color: var(--text-primary);
+  font-size: 15px;
+}
+
+.word-pages {
+  display: grid;
+  gap: 22px;
+  max-height: 62vh;
+  overflow: auto;
+  padding: 28px;
+}
+
+.word-page {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  width: min(100%, 794px);
+  min-height: 1123px;
+  margin: 0 auto;
+  padding: 42px 58px 38px;
+  border: 1px solid rgba(132, 151, 176, 0.32);
+  background: #fff;
+  box-shadow: 0 18px 42px rgba(21, 26, 32, 0.14);
+  color: #202733;
+  font-family: "Times New Roman", "SimSun", serif;
+}
+
+.word-page-header,
+.word-page-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  color: #7a8493;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.word-page-header {
+  padding-bottom: 12px;
+  border-bottom: 1px solid #d8dde5;
+}
+
+.word-page-footer {
+  justify-content: center;
+  padding-top: 12px;
+  border-top: 1px solid #d8dde5;
+}
+
+.word-page-body {
+  padding: 30px 0;
+}
+
+.word-page-body h2 {
+  margin: 0 0 18px;
+  color: #111827;
+  font-family: "SimHei", "Microsoft YaHei UI", sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.word-paragraph {
+  margin: 0 0 12px;
+  color: #202733;
+  font-size: 15px;
+  line-height: 1.9;
+  text-align: justify;
+  text-indent: 2em;
+  white-space: pre-wrap;
+}
+
+.word-table {
+  width: 100%;
+  margin: 16px 0;
+  border-collapse: collapse;
+  background: #fff;
+  font-size: 14px;
+}
+
+.word-table td {
+  padding: 8px 10px;
+  border: 1px solid #3f4a5a;
+  color: #202733;
+  line-height: 1.6;
+}
+
+@media (max-width: 1220px) {
+  .word-pages {
+    padding: 18px;
+  }
+
+  .word-page {
+    min-height: 980px;
+    padding: 34px 38px 30px;
+  }
 }
 </style>
