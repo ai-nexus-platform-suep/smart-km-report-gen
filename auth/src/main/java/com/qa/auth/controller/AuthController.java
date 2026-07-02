@@ -55,7 +55,7 @@ public class AuthController {
 
     @PostMapping("/register")
     @ResponseStatus(HttpStatus.CREATED)
-    public ApiResponse<Void> register(@RequestBody RegisterRequest req) {
+    public ApiResponse<AuthResponse> register(@RequestBody RegisterRequest req) {
         String type = req.getRegisterType() != null ? req.getRegisterType().toUpperCase() : "USERNAME";
 
         if (isBlank(req.getCaptchaKey()) || isBlank(req.getCaptchaCode())
@@ -63,15 +63,21 @@ public class AuthController {
             throw new BusinessException(ApiCode.CAPTCHA_ERROR, "图形验证码错误或已过期");
         }
 
+        String username;
         if ("EMAIL".equals(type)) {
-            registerByEmail(req);
+            username = registerByEmail(req);
         } else {
-            registerByUsername(req);
+            username = registerByUsername(req);
         }
-        return ApiResponse.success("注册成功", null);
+
+        SysUserEntity user = userService.findActiveByUsername(username)
+                .orElseThrow(() -> new BusinessException(ApiCode.USER_NOT_FOUND, "用户不存在"));
+        AuthResponse response = authTokenService.issueTokens(user);
+        log.info("User registered and auto login: {}, roles={}", user.getUsername(), response.getRoles());
+        return ApiResponse.success("注册成功", response);
     }
 
-    private void registerByUsername(RegisterRequest req) {
+    private String registerByUsername(RegisterRequest req) {
         if (isBlank(req.getUsername())) {
             throw new BusinessException(ApiCode.BAD_REQUEST, "用户名不能为空");
         }
@@ -91,9 +97,10 @@ public class AuthController {
             throw new BusinessException(ApiCode.USER_ALREADY_EXISTS, "用户已存在");
         }
         log.info("User registered by username: {}", req.getUsername());
+        return req.getUsername().trim();
     }
 
-    private void registerByEmail(RegisterRequest req) {
+    private String registerByEmail(RegisterRequest req) {
         if (isBlank(req.getEmail()) || !EMAIL_PATTERN.matcher(req.getEmail()).matches()) {
             throw new BusinessException(ApiCode.BAD_REQUEST, "邮箱格式不正确");
         }
@@ -108,6 +115,7 @@ public class AuthController {
         String username = userService.registerByEmail(email);
         emailService.deleteCode(email);
         log.info("User registered by email: username={}, email={}", username, email);
+        return username;
     }
 
     private void validatePasswordStrength(String password) {
