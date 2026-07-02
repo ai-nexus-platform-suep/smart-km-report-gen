@@ -26,7 +26,8 @@ public class JwtTokenProvider {
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
-    public String generateAccessToken(Long userId, String username, List<String> roles, List<String> permissions) {
+    public String generateAccessToken(Long userId, String username, List<String> roles,
+                                       List<String> permissions, Long tokenVersion) {
         Date now = new Date();
         Date expiration = new Date(now.getTime() + jwtProperties.getAccessTokenExpiration() * 1000);
 
@@ -36,6 +37,7 @@ public class JwtTokenProvider {
                 .claim("userId", userId)
                 .claim("roles", roles)
                 .claim("permissions", permissions)
+                .claim("tokenVersion", tokenVersion)
                 .issuedAt(now)
                 .expiration(expiration)
                 .signWith(getSigningKey())
@@ -92,6 +94,10 @@ public class JwtTokenProvider {
     public List<String> getPermissions(String token) {
         List<String> permissions = parseToken(token).get("permissions", List.class);
         return permissions != null ? permissions : Collections.emptyList();
+    }
+
+    public Long getTokenVersion(String token) {
+        return parseToken(token).get("tokenVersion", Long.class);
     }
 
     public boolean isExpired(String token) {

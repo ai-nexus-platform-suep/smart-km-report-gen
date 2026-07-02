@@ -9,7 +9,7 @@ from sse_starlette.sse import EventSourceResponse
 
 from .schemas import ChatReq, ChatTestReq, ChatTestResp
 from ..core.constants import SSEEventType
-from ..core.deps import require_user_id
+from ..core.deps import require_permission, require_user_id
 from ..core.user_context import get_user_id
 from ..db.constants import (
     GENERATE_STATUS_COMPLETED,
@@ -203,6 +203,7 @@ async def chat(req: ChatReq) -> EventSourceResponse:
     if not req.question.strip():
         raise HTTPException(status_code=400, detail="问题不能为空")
     require_user_id()
+    require_permission("chat:conversation:use")
 
     async def event_generator() -> AsyncIterator[dict]:
         try:
@@ -230,6 +231,7 @@ async def chat_test(req: ChatTestReq) -> ChatTestResp:
         raise HTTPException(status_code=400, detail="问题不能为空")
 
     user_id = require_user_id()
+    require_permission("chat:conversation:use")
     model_config = await fetch_llm_config(user_id=user_id)
     agent_input = {
         "messages": _test_history_messages(req),

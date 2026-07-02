@@ -7,11 +7,14 @@ import com.qa.auth.dto.response.RoleVO;
 import com.qa.auth.entity.SysRoleEntity;
 import com.qa.auth.entity.SysRoleMenuEntity;
 import com.qa.auth.entity.SysRolePermissionEntity;
+import com.qa.auth.entity.SysUserEntity;
 import com.qa.auth.mapper.SysMenuMapper;
 import com.qa.auth.mapper.SysPermissionMapper;
 import com.qa.auth.mapper.SysRoleMapper;
 import com.qa.auth.mapper.SysRoleMenuMapper;
 import com.qa.auth.mapper.SysRolePermissionMapper;
+import com.qa.auth.mapper.SysUserMapper;
+import com.qa.auth.mapper.SysUserRoleMapper;
 import com.myenglish.qacommon.dto.ApiCode;
 import com.myenglish.qacommon.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +33,9 @@ public class RoleService {
     private final SysRoleMenuMapper sysRoleMenuMapper;
     private final SysPermissionMapper sysPermissionMapper;
     private final SysMenuMapper sysMenuMapper;
+    private final SysUserMapper sysUserMapper;
+    private final SysUserRoleMapper sysUserRoleMapper;
+    private final RefreshTokenService refreshTokenService;
 
     public List<RoleVO> listRoles() {
         return sysRoleMapper.selectList(
@@ -88,26 +94,77 @@ public class RoleService {
     public void grantPermissions(Long roleId, RoleGrantRequest req) {
         ensureRole(roleId);
         sysRolePermissionMapper.deleteByRoleId(roleId);
-        if (req.getPermissionIds() != null) {
+        if (req.getPermissionIds() != null && !req.getPermissionIds().isEmpty()) {
+            // 校验所有 permissionId 合法性
+            List<Long> validIds = new java.util.ArrayList<>();
+            List<Long> invalidIds = new java.util.ArrayList<>();
             for (Long permissionId : req.getPermissionIds()) {
+                if (sysPermissionMapper.selectById(permissionId) != null) {
+                    validIds.add(permissionId);
+                } else {
+                    invalidIds.add(permissionId);
+                }
+            }
+            if (!invalidIds.isEmpty()) {
+                throw new BusinessException(ApiCode.BAD_REQUEST,
+                        "以下权限ID不存在: " + invalidIds.stream().map(String::valueOf)
+                                .collect(Collectors.joining(", ")));
+            }
+            for (Long permissionId : validIds) {
                 SysRolePermissionEntity rp = new SysRolePermissionEntity();
                 rp.setRoleId(roleId);
                 rp.setPermissionId(permissionId);
                 sysRolePermissionMapper.insert(rp);
             }
         }
+        // 权限变更：递增该角色下所有用户的 tokenVersion，使其 JWT 失效
+        invalidateUsersByRole(roleId);
     }
 
     @Transactional
     public void grantMenus(Long roleId, RoleGrantRequest req) {
         ensureRole(roleId);
         sysRoleMenuMapper.deleteByRoleId(roleId);
-        if (req.getMenuIds() != null) {
+        if (req.getMenuIds() != null && !req.getMenuIds().isEmpty()) {
+            // 校验所有 menuId 合法性
+            List<Long> validIds = new java.util.ArrayList<>();
+            List<Long> invalidIds = new java.util.ArrayList<>();
             for (Long menuId : req.getMenuIds()) {
+                if (sysMenuMapper.selectById(menuId) != null) {
+                    validIds.add(menuId);
+                } else {
+                    invalidIds.add(menuId);
+                }
+            }
+            if (!invalidIds.isEmpty()) {
+                throw new BusinessException(ApiCode.BAD_REQUEST,
+                        "以下菜单ID不存在: " + invalidIds.stream().map(String::valueOf)
+                                .collect(Collectors.joining(", ")));
+            }
+            for (Long menuId : validIds) {
                 SysRoleMenuEntity rm = new SysRoleMenuEntity();
                 rm.setRoleId(roleId);
                 rm.setMenuId(menuId);
                 sysRoleMenuMapper.insert(rm);
+            }
+        }
+        // 权限变更：递增该角色下所有用户的 tokenVersion，使其 JWT 失效
+        invalidateUsersByRole(roleId);
+    }
+
+    /**
+     * 递增指定角色下所有用户的 tokenVersion，并清除其 refresh token，
+     * 使旧 JWT 因版本不匹配而失效，用户需重新登录获取新权限。
+     */
+    private void invalidateUsersByRole(Long roleId) {
+        List<Long> userIds = sysUserRoleMapper.selectUserIdsByRoleId(roleId);
+        for (Long userId : userIds) {
+            SysUserEntity user = sysUserMapper.selectById(userId);
+            if (user != null) {
+                Long currentVersion = user.getTokenVersion() != null ? user.getTokenVersion() : 0L;
+                user.setTokenVersion(currentVersion + 1);
+                sysUserMapper.updateById(user);
+                refreshTokenService.deleteByUserId(userId);
             }
         }
     }

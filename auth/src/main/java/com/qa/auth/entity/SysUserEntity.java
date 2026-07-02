@@ -28,6 +28,11 @@ public class SysUserEntity {
     private Long createdBy;
     private Long updatedBy;
 
+    /**
+     * Token版本号：角色/权限变更时递增，用于JWT校验，旧Token失效后需重新登录
+     */
+    private Long tokenVersion;
+
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createdAt;
 

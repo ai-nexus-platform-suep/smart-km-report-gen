@@ -1,23 +1,16 @@
 spring:
   application:
     name: qa-chat-service
-  datasource:
-    url: jdbc:mysql://127.0.0.1:3306/smart_km_report_gen?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
-    username: root
-    password: ${MYSQL_PASSWORD:1234}
-    driver-class-name: com.mysql.cj.jdbc.Driver
-
-mybatis-plus:
-  mapper-locations: classpath*:/mapper/**/*.xml
-  configuration:
-    map-underscore-to-camel-case: true
-  global-config:
-    db-config:
-      id-type: assign_id
-
-server:
-  port: 8090
-
-model-config:
-  aes-key: ${AES_KEY:smart-km-report-gen-2026-aes-key}
-  default-timeout-seconds: 60
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:0eab4d97-bb36-401e-8481-3b50d0963efe}
+      config:
+        server-addr: ${NACOS_SERVER_ADDR:127.0.0.1:8848}
+        namespace: ${NACOS_NAMESPACE:0eab4d97-bb36-401e-8481-3b50d0963efe}
+        file-extension: yaml
+        group: DEFAULT_GROUP
+  config:
+    import:
+      - nacos:qa-chat-service.yaml?group=DEFAULT_GROUP

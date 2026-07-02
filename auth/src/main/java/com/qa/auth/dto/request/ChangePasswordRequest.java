@@ -1,7 +1,7 @@
 package com.qa.auth.dto.request;
 
+import com.qa.auth.validation.StrongPassword;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 @Data
@@ -11,6 +11,6 @@ public class ChangePasswordRequest {
     private String oldPassword;
 
     @NotBlank(message = "新密码不能为空")
-    @Size(min = 6, max = 64, message = "新密码长度应为 6-64 位")
+    @StrongPassword
     private String newPassword;
 }

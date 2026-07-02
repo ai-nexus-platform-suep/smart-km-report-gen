@@ -12,7 +12,7 @@ from ..api.schemas import (
     PageResult,
     UpdateConversationReq,
 )
-from app.core.deps import require_user_id
+from app.core.deps import require_permission, require_user_id
 from app.db.models import QaMessage, QaSession
 from app.db.repository import (
     create_conversation,
@@ -60,6 +60,7 @@ async def list_conversations_api(
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[PageResult[ConversationVO]]:
     user_id = require_user_id()
+    require_permission("chat:conversation:use")
     items, total = await list_conversations(db, user_id=user_id, page=page, size=size)
     return ApiResponse(
         data=PageResult(
@@ -76,6 +77,7 @@ async def create_conversation_api(
     req: CreateConversationReq | None = None,
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[ConversationVO]:
+    require_permission("chat:conversation:use")
     title = req.title if req else None
     conversation = await create_conversation(db, user_id=require_user_id(), title=title)
     return ApiResponse(data=_to_conversation_vo(conversation))
@@ -87,6 +89,7 @@ async def delete_conversation_api(
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[None]:
     user_id = require_user_id()
+    require_permission("chat:conversation:use")
     try:
         await require_conversation_for_user(db, conversation_id, user_id)
         await delete_conversation(db, conversation_id)
@@ -103,6 +106,7 @@ async def get_messages_api(
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[ConversationDetailVO]:
     user_id = require_user_id()
+    require_permission("chat:conversation:use")
     try:
         conversation = await require_conversation_for_user(db, conversation_id, user_id)
         messages, total = await get_messages(db, conversation_id, page=page, size=size)
@@ -126,6 +130,7 @@ async def update_conversation_api(
     db: AsyncSession = Depends(get_db),
 ) -> ApiResponse[ConversationVO]:
     user_id = require_user_id()
+    require_permission("chat:conversation:use")
     try:
         await require_conversation_for_user(db, conversation_id, user_id)
         conversation = await update_conversation_title(db, conversation_id, req.title)
