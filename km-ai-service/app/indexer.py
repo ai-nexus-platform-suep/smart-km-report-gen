@@ -2,13 +2,18 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import json
+import logging
 from typing import Callable
 
 from .backend_client import BackendClient
 from .chunker import Chunk, chunk_markdown
 from .embedder import Embedder
+from .elasticsearch_store import ElasticsearchChunkStore
 from .qdrant_store import QdrantVectorStore
 from .settings import Settings
+
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -23,6 +28,7 @@ class DocumentIndexer:
         self._backend_client = BackendClient(settings)
         self._embedder = Embedder(settings, self._backend_client)
         self._qdrant_store = QdrantVectorStore(settings)
+        self._elasticsearch_store = ElasticsearchChunkStore(settings)
 
     def index_markdown(
         self,
@@ -70,6 +76,10 @@ class DocumentIndexer:
             source_object=source_object,
             metadata_object=metadata_object,
         )
+        try:
+            self._elasticsearch_store.replace_document_chunks(document_id=document_id, kb_id=kb_id, chunks=chunks)
+        except Exception as exc:
+            logger.warning("Elasticsearch chunk projection update failed, document_id=%s: %s", document_id, exc)
         return DocumentIndexResult(chunks=chunks, chunk_count=chunk_count, dimension=dimension)
 
 

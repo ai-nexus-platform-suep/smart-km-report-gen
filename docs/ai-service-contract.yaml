@@ -3,9 +3,9 @@ info:
   title: 知识管理 AI 服务内部 API（km-ai-service）
   description: |
     Java `km-backend` ↔ Python `km-ai-service` 内部契约。
-    - **chunk 切分、embedding、rerank** 均由本服务提供
+    - **chunk 切分、embedding、rerank、BM25 投影、混合检索融合** 均由本服务提供
     - 路径前缀 `/internal`，不对外暴露；经 Gateway 时仅内网可达
-    - 向量库：**Qdrant**
+    - 向量库：**Qdrant**；BM25 投影：**Elasticsearch**（通过 `KM_ELASTICSEARCH_*` 配置）
     - 统一响应：`{ "code": 0, "message": "ok", "data": ... }`（联调前与大组确认是否改为 200）
   version: 1.0.0
   contact:
@@ -24,7 +24,9 @@ tags:
   - name: embed
   - name: rerank
   - name: search
-    description: Qdrant 向量检索
+    description: Qdrant 向量检索与 Elasticsearch BM25 + Qdrant 混合检索
+  - name: projection
+    description: 检索投影删除与批量重建
 
 paths:
   /internal/health:
@@ -45,7 +47,8 @@ paths:
       tags: [process]
       summary: 处理单个文档（异步推荐）
       description: |
-        完整管线：读 MinIO → 解析 → chunk → 回写 MySQL chunk 元数据 → embed → 写 Qdrant。
+        完整管线：读 MinIO → 解析 → chunk → 回写 MySQL chunk 元数据 → embed → 写 Qdrant → 写 Elasticsearch BM25 投影。
+        Elasticsearch 写入失败只记录告警，不中断既有 MySQL/Qdrant 索引路径。
         可由 RabbitMQ 消费者内部调用；也可 Java 直接 HTTP 触发。
         处理过程中通过回调更新 Java 侧 document.status。
       operationId: processDocument
@@ -122,6 +125,69 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ApiResponseVectorSearch"
+
+  /internal/search/hybrid:
+    post:
+      tags: [search]
+      summary: Elasticsearch BM25 + Qdrant 向量混合检索
+      description: |
+        由本接口完成 query embedding、Elasticsearch BM25 检索、Qdrant 向量检索、分支归一化、按权重融合、按 chunkId 去重和排序。
+        Elasticsearch 连接由 Python 环境变量 `KM_ELASTICSEARCH_ENABLED`、`KM_ELASTICSEARCH_BASE_URL`、`KM_ELASTICSEARCH_INDEX_NAME`、
+        `KM_ELASTICSEARCH_USERNAME` / `KM_ELASTICSEARCH_PASSWORD` 或 `KM_ELASTICSEARCH_API_KEY` 配置。
+      operationId: hybridSearch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/HybridSearchRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseHybridSearch"
+
+  /internal/retrieval-projections:delete:
+    post:
+      tags: [projection]
+      summary: 删除文档检索投影
+      description: Java 删除文档提交后通知本接口删除 Elasticsearch 切片投影。
+      operationId: deleteRetrievalProjections
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RetrievalProjectionDeleteRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseRetrievalProjectionDelete"
+
+  /internal/chunks:batch-reindex:
+    post:
+      tags: [projection]
+      summary: 批量重建 Qdrant 与 Elasticsearch 检索投影
+      description: 复用 DocumentIndexer 重新处理已解析产物；启用 Elasticsearch 时会同步重建 BM25 投影。
+      operationId: batchReindexChunks
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BatchReindexRequest"
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ApiResponseBatchReindex"
 
 components:
   schemas:
@@ -304,6 +370,27 @@ components:
           format: float
           default: 0.6
 
+    HybridSearchRequest:
+      allOf:
+        - $ref: "#/components/schemas/VectorSearchRequest"
+        - type: object
+          properties:
+            topK:
+              type: integer
+              default: 10
+              minimum: 1
+              maximum: 50
+            bm25Weight:
+              type: number
+              format: float
+              default: 0.45
+              minimum: 0
+            vectorWeight:
+              type: number
+              format: float
+              default: 0.55
+              minimum: 0
+
     VectorSearchHit:
       type: object
       properties:
@@ -318,6 +405,16 @@ components:
         similarityScore:
           type: number
           format: float
+        bm25Score:
+          type: number
+          format: float
+          nullable: true
+        hybridScore:
+          type: number
+          format: float
+          nullable: true
+        chunkType:
+          type: string
 
     VectorSearchResult:
       type: object
@@ -334,3 +431,68 @@ components:
           properties:
             data:
               $ref: "#/components/schemas/VectorSearchResult"
+
+    HybridSearchResult:
+      type: object
+      properties:
+        hits:
+          type: array
+          items:
+            $ref: "#/components/schemas/VectorSearchHit"
+
+    ApiResponseHybridSearch:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponseBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/HybridSearchResult"
+
+    RetrievalProjectionDeleteRequest:
+      type: object
+      properties:
+        documentIds:
+          type: array
+          items:
+            type: string
+
+    RetrievalProjectionDeleteResult:
+      type: object
+      properties:
+        deletedDocumentCount:
+          type: integer
+
+    ApiResponseRetrievalProjectionDelete:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponseBase"
+        - type: object
+          properties:
+            data:
+              $ref: "#/components/schemas/RetrievalProjectionDeleteResult"
+
+    BatchReindexRequest:
+      type: object
+      properties:
+        prefix:
+          type: string
+        documentIds:
+          type: array
+          items:
+            type: string
+        limit:
+          type: integer
+          minimum: 1
+        dryRun:
+          type: boolean
+          default: false
+        failFast:
+          type: boolean
+          default: false
+
+    ApiResponseBatchReindex:
+      allOf:
+        - $ref: "#/components/schemas/ApiResponseBase"
+        - type: object
+          properties:
+            data:
+              type: object

@@ -2,9 +2,9 @@ spring:
   application:
     name: km-backend
   datasource:
-    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:smart_km_report_gen}?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
-    username: ${MYSQL_USER:root}
-    password: ${MYSQL_PASSWORD:}
+    url: jdbc:mysql://localhost:3306/smart_km_report_gen?useUnicode=true&characterEncoding=utf8&useSSL=false&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true
+    username: root
+    password: MMATAO20051024M
     driver-class-name: com.mysql.cj.jdbc.Driver
   redis:
     host: localhost
@@ -12,8 +12,8 @@ spring:
   rabbitmq:
     host: localhost
     port: 5672
-    username: ${RABBITMQ_USER:guest}
-    password: ${RABBITMQ_PASSWORD:guest}
+    username: guest
+    password: guest
     virtual-host: /
   flyway:
     enabled: true
@@ -43,12 +43,12 @@ km:
   minio:
     enabled: true
     endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
-    access-key: ${MINIO_ACCESS_KEY:minioadmin}
-    secret-key: ${MINIO_SECRET_KEY:minioadmin}
-    bucket: ${MINIO_BUCKET:km-documents}
+    access-key: pluto
+    secret-key: MMATAO20051024M
+    bucket: km-documents
   storage:
     type: minio
-    local-path: ${KM_STORAGE_LOCAL_PATH:D:/kb/uploads}
+    local-path: D:/kb/uploads
   jwt:
     secret: change-me-in-production-km-platform-2026
     expire-hours: 24

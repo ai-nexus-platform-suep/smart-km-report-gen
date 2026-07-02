@@ -35,6 +35,15 @@ public class KmAiClient {
         return body != null ? body.getData() : null;
     }
 
+    public HybridSearchResponse hybridSearch(HybridSearchRequest request) {
+        AiApiResponse<HybridSearchResponse> body = post("/internal/search/hybrid", request);
+        return body != null ? body.getData() : null;
+    }
+
+    public void deleteRetrievalProjection(RetrievalProjectionDeleteRequest request) {
+        post("/internal/retrieval-projections:delete", request);
+    }
+
     public RerankResponse rerank(RerankRequest request) {
         AiApiResponse<RerankResponse> body = post("/internal/rerank", request);
         return body != null ? body.getData() : null;

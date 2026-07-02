@@ -84,6 +84,7 @@ npm run dev
 
 - `MYSQL_*` / `REDIS_*` / `RABBITMQ_*` / `MINIO_*` / `QDRANT_*`
 - `SILICONFLOW_API_KEY`（嵌入/重排，Python 服务使用）
+- `KM_ELASTICSEARCH_ENABLED` / `KM_ELASTICSEARCH_BASE_URL` / `KM_ELASTICSEARCH_INDEX_NAME` / `KM_ELASTICSEARCH_USERNAME` / `KM_ELASTICSEARCH_PASSWORD` / `KM_ELASTICSEARCH_API_KEY` / `KM_ELASTICSEARCH_TIMEOUT_SECONDS` / `KM_SEARCH_HYBRID_BM25_WEIGHT` / `KM_SEARCH_HYBRID_VECTOR_WEIGHT` / `KM_SEARCH_HYBRID_CANDIDATE_MULTIPLIER`（Python 服务可选配置，启用 `searchMode=hybrid` 的 BM25 投影与融合；本地 ES 示例：`http://localhost:9200`）
 - `JWT_SECRET`
 
 后端 Spring Boot 配置统一维护在 `km-backend/src/main/resources/application.yml`；本地数据库密码、MinIO、RabbitMQ 等连接信息都在该文件中修改。
@@ -100,7 +101,7 @@ MySQL 表结构由 Flyway 自动执行 `km-backend/src/main/resources/db/migrati
 | `/api/knowledge-bases` | GET/POST | 知识库列表 / 创建 |
 | `/api/knowledge-bases/{id}` | GET/PUT/DELETE | 知识库详情 / 更新 / 删除 |
 | `/api/knowledge-bases/{kbId}/documents` | GET/POST | 文档列表 / 上传 |
-| `/api/search` | POST | 向量检索（问答 RAG 核心） |
+| `/api/search` | POST | 向量检索；可选 `searchMode=hybrid` 委托 km-ai-service 融合 Elasticsearch BM25 与 Qdrant 向量结果 |
 | `/api/stats/summary` | GET | 统计概览 |
 | `/api/admin/config/*` | GET/PUT | 嵌入 / 重排 / 解析器配置 |
 
@@ -118,6 +119,11 @@ curl -F "file=@sample.pdf" \
   -F "tags=demo" \
   -H "userid: 1" \
   http://localhost:8091/api/knowledge-bases/{kbId}/documents
+
+curl -X POST http://localhost:8091/api/search \
+  -H "Content-Type: application/json" \
+  -H "userid: 1" \
+  -d '{"query":"变压器油温异常","knowledgeBaseIds":["{kbId}"],"searchMode":"hybrid","bm25Weight":0.45,"vectorWeight":0.55}'
 ```
 
 ## 组员开发流程

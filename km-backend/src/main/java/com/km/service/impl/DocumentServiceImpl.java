@@ -4,6 +4,8 @@ import com.km.common.constant.DocumentStatus;
 import com.km.common.dto.PageResult;
 import com.km.common.exception.BusinessException;
 import com.km.common.exception.ErrorCode;
+import com.km.client.KmAiClient;
+import com.km.dto.ai.RetrievalProjectionDeleteRequest;
 import com.km.dto.request.ReplaceDocumentChunksRequest;
 import com.km.dto.response.DocumentBatchDeleteResponse;
 import com.km.dto.response.DocumentDeleteResponse;
@@ -37,6 +39,7 @@ import java.io.OutputStream;
 import java.net.URLEncoder;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -70,6 +73,7 @@ public class DocumentServiceImpl implements DocumentService {
     private final KnowledgeBaseMapper knowledgeBaseMapper;
     private final FileStorageService fileStorageService;
     private final ObjectProvider<DocumentProcessQueuePublisher> documentProcessQueuePublisher;
+    private final KmAiClient kmAiClient;
 
     @Override
     @Transactional(rollbackFor = Exception.class)
@@ -158,6 +162,7 @@ public class DocumentServiceImpl implements DocumentService {
         chunkMapper.deleteByDocId(docId);
         documentMapper.deleteById(docId);
         knowledgeBaseMapper.decrementDocCount(kbId, 1);
+        notifyRetrievalProjectionDeleteAfterCommit(docId);
 
         return new DocumentDeleteResponse(docId, Math.max(0, kb.getDocCount() - 1));
     }
@@ -189,6 +194,7 @@ public class DocumentServiceImpl implements DocumentService {
         chunkMapper.deleteByDocIds(uniqueIds);
         documentMapper.deleteByIds(uniqueIds);
         knowledgeBaseMapper.decrementDocCount(kbId, uniqueIds.size());
+        notifyRetrievalProjectionDeleteAfterCommit(uniqueIds);
 
         return new DocumentBatchDeleteResponse(uniqueIds, Math.max(0, kb.getDocCount() - uniqueIds.size()));
     }
@@ -338,6 +344,21 @@ public class DocumentServiceImpl implements DocumentService {
         return new ReplaceDocumentChunksResponse(docId, chunks.size());
     }
 
+    private void notifyRetrievalProjectionDeleteAfterCommit(String docId) {
+        notifyRetrievalProjectionDeleteAfterCommit(Collections.singletonList(docId));
+    }
+
+    private void notifyRetrievalProjectionDeleteAfterCommit(List<String> docIds) {
+        List<String> documentIds = new ArrayList<>(docIds);
+        runAfterCommit(() -> {
+            try {
+                kmAiClient.deleteRetrievalProjection(new RetrievalProjectionDeleteRequest(documentIds));
+            } catch (Exception e) {
+                log.warn("Retrieval projection delete notification failed, docIds={}", documentIds, e);
+            }
+        });
+    }
+
     private static final List<String> ALLOWED_STATUSES = Arrays.asList(
             DocumentStatus.UPLOADED,
             DocumentStatus.PARSING,
@@ -390,16 +411,20 @@ public class DocumentServiceImpl implements DocumentService {
     }
 
     private void publishProcessJobAfterCommit(Document doc, KnowledgeBase kb) {
+        runAfterCommit(() -> publishProcessJob(doc, kb));
+    }
+
+    private void runAfterCommit(Runnable action) {
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    publishProcessJob(doc, kb);
+                    action.run();
                 }
             });
             return;
         }
-        publishProcessJob(doc, kb);
+        action.run();
     }
 
     private void publishProcessJob(Document doc, KnowledgeBase kb) {
