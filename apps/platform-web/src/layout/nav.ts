@@ -51,7 +51,7 @@ export const platformNavItems: NavItem[] = [
       { path: '/reports/new', title: '新建报告' },
       { path: '/reports/dashboard', title: '趋势统计', admin: true },
       { path: '/reports/templates', title: '模板管理', admin: true },
-      { path: '/reports/materials', title: '素材映射', admin: true },
+      { path: '/reports/materials', title: '素材管理', admin: true },
     ],
   },
   {
