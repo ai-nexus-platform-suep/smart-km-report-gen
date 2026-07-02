@@ -12,6 +12,7 @@ public class SectionResponse {
     private String number;
     private String title;
     private String contentMarkdown;
+    private String tableJson;
     private String status;
     private String source;
     private Integer version;

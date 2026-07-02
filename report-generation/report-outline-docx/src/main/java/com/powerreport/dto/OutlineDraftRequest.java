@@ -10,15 +10,10 @@ import java.util.List;
 import lombok.Data;
 
 @Data
-public class OutlineConfirmRequest {
+public class OutlineDraftRequest {
 
     /**
-     * Optional existing draft report ID. When present, confirm will promote the draft to OUTLINE_READY.
-     */
-    private String reportId;
-
-    /**
-     * /outline/generate 返回的临时 ID。前端传最终编辑后的 outline 时可选。
+     * /outline/generate returned tempId. Used when outline is omitted.
      */
     private String tempId;
 
@@ -41,7 +36,7 @@ public class OutlineConfirmRequest {
     private Integer reportYear;
 
     /**
-     * 用户最终确认的大纲 JSON；若为空，则后端尝试按 tempId 从 Redis 读取。
+     * Current frontend outline tree. Empty is allowed for an early draft.
      */
     @Valid
     private List<OutlineNodeResponse> outline = new ArrayList<>();

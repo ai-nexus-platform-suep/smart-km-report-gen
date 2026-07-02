@@ -54,6 +54,8 @@ class SectionStreamRequest(BaseModel):
     sectionLevel: Optional[int] = 2
     promptHint: Optional[str] = None
     outlineContext: Optional[str] = None
+    allowTables: bool = False
+    tablePlans: list[dict[str, Any]] = Field(default_factory=list)
     existingContentMarkdown: Optional[str] = None
     userHint: Optional[str] = None
     regenerate: bool = False
@@ -70,6 +72,8 @@ def _normalize_section_payload(raw_payload: dict[str, Any]) -> dict[str, Any]:
     payload["sectionLevel"] = payload.get("sectionLevel") or 2
     payload["promptHint"] = payload.get("promptHint") or ""
     payload["outlineContext"] = payload.get("outlineContext") or ""
+    payload["allowTables"] = bool(payload.get("allowTables"))
+    payload["tablePlans"] = payload.get("tablePlans") or []
     payload["existingContentMarkdown"] = payload.get("existingContentMarkdown") or ""
     payload["userHint"] = payload.get("userHint") or ""
     if not payload.get("reportTypeLabel"):
@@ -84,8 +88,8 @@ def _normalize_section_payload(raw_payload: dict[str, Any]) -> dict[str, Any]:
 async def _read_json_body(request: Request) -> dict[str, Any]:
     raw_body = await request.body()
     if not raw_body:
-        logger.warning("Section stream request body is empty; fallback defaults will be used.")
-        return {}
+        logger.warning("Section stream request body is empty; reject request to avoid wrong section generation.")
+        raise HTTPException(status_code=400, detail="章节生成请求体不能为空")
 
     try:
         parsed = json.loads(raw_body.decode("utf-8"))

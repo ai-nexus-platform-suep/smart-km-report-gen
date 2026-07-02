@@ -31,6 +31,9 @@ import org.springframework.util.StringUtils;
 @RequiredArgsConstructor
 public class HistoryServiceImpl implements HistoryService {
 
+    private static final String TABLE_PLAN_PREFIX = "<!--TABLE_PLAN_JSON_BASE64:";
+    private static final String TABLE_PLAN_SUFFIX = "-->";
+
     private final ReportMapper reportMapper;
     private final ReportOutlineNodeMapper outlineNodeMapper;
     private final ReportSectionMapper sectionMapper;
@@ -187,8 +190,25 @@ public class HistoryServiceImpl implements HistoryService {
         response.setNumber(node.getNumber());
         response.setTitle(node.getTitle());
         response.setLevel(node.getLevel());
-        response.setPromptHint(node.getPromptHint());
+        response.setPromptHint(visiblePromptHint(node.getPromptHint()));
         return response;
+    }
+
+    private String visiblePromptHint(String promptHint) {
+        if (!StringUtils.hasText(promptHint)) {
+            return promptHint;
+        }
+        int start = promptHint.indexOf(TABLE_PLAN_PREFIX);
+        if (start < 0) {
+            return promptHint;
+        }
+        int end = promptHint.indexOf(TABLE_PLAN_SUFFIX, start);
+        String before = promptHint.substring(0, start).stripTrailing();
+        String after = end >= 0
+                ? promptHint.substring(end + TABLE_PLAN_SUFFIX.length()).stripLeading()
+                : "";
+        String visible = StringUtils.hasText(after) ? before + "\n" + after : before;
+        return StringUtils.hasText(visible) ? visible.strip() : null;
     }
 
     private List<SectionResponse> listSectionResponses(String reportId) {
@@ -210,6 +230,7 @@ public class HistoryServiceImpl implements HistoryService {
         response.setNumber(section.getNumber());
         response.setTitle(section.getTitle());
         response.setContentMarkdown(section.getContentMarkdown());
+        response.setTableJson(section.getTableJson());
         response.setStatus(section.getStatus());
         response.setSource(section.getSource());
         response.setVersion(section.getVersion());

@@ -1,16 +1,22 @@
 package com.powerreport.admin.dto;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import java.util.ArrayList;
 import java.util.List;
 import lombok.Data;
 
 @Data
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class TemplateVisualConfigDto {
 
     private FontConfig fonts = new FontConfig();
     private MarginConfig margins = new MarginConfig();
     private ParagraphConfig paragraph = new ParagraphConfig();
     private CaptionConfig caption = new CaptionConfig();
+    private HeaderConfig header = new HeaderConfig();
+    private FooterConfig footer = new FooterConfig();
+    private Boolean preferTemplateHeaderFooter = true;
+    private Boolean renderReportHeader = true;
     private List<TemplateOutlineNodeDto> outline = new ArrayList<>();
 
     @Data
@@ -41,5 +47,17 @@ public class TemplateVisualConfigDto {
     public static class CaptionConfig {
         private String figureNumberingMode = "GLOBAL";
         private String tableNumberingMode = "GLOBAL";
+    }
+
+    @Data
+    public static class HeaderConfig {
+        private Boolean enabled = true;
+        private String text = "{reportName}";
+    }
+
+    @Data
+    public static class FooterConfig {
+        private Boolean enabled = true;
+        private String text = "第 {page} 页 / 共 {pages} 页";
     }
 }

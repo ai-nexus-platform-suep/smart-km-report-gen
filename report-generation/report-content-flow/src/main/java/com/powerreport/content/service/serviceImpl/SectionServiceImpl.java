@@ -2,16 +2,20 @@ package com.powerreport.content.service.serviceImpl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.powerreport.config.ReportAiProperties;
 import com.powerreport.content.dto.SectionContentRequest;
+import com.powerreport.content.dto.SectionGenerateRequest;
 import com.powerreport.content.dto.SectionGenerateResponse;
 import com.powerreport.content.dto.SectionRegenerateRequest;
 import com.powerreport.content.dto.SectionResponse;
 import com.powerreport.content.service.SectionService;
+import com.powerreport.dto.OutlineTablePlan;
 import com.powerreport.entity.ReportEntity;
 import com.powerreport.entity.ReportOutlineNodeEntity;
 import com.powerreport.entity.ReportSectionEntity;
+import com.powerreport.enums.ContentGenerationMode;
 import com.powerreport.enums.ReportStatus;
 import com.powerreport.enums.SectionStatus;
 import com.powerreport.mapper.ReportMapper;
@@ -29,6 +33,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -54,9 +59,13 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 public class SectionServiceImpl implements SectionService {
 
     private static final String SOURCE_AI = "AI";
+    private static final String SOURCE_TEMPLATE = "TEMPLATE";
     private static final String SOURCE_REGENERATED = "REGENERATED";
     private static final String SOURCE_USER_EDITED = "USER_EDITED";
     private static final String REGENERATE_HINT_KEY_PREFIX = "report:section:regenerate:";
+    private static final String TABLE_PLAN_PREFIX = "<!--TABLE_PLAN_JSON_BASE64:";
+    private static final String TABLE_PLAN_SUFFIX = "-->";
+    private static final int AI_SECTION_MAX_ATTEMPTS = 3;
 
     private final ReportMapper reportMapper;
     private final ReportOutlineNodeMapper outlineNodeMapper;
@@ -65,6 +74,7 @@ public class SectionServiceImpl implements SectionService {
     private final ObjectMapper objectMapper;
     private final StringRedisTemplate redisTemplate;
     private final HttpClient httpClient = HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)
             .connectTimeout(Duration.ofSeconds(10))
             .build();
     private final Map<String, String> localRegenerateHints = new ConcurrentHashMap<>();
@@ -74,7 +84,12 @@ public class SectionServiceImpl implements SectionService {
 
     @Override
     @Transactional
-    public SectionGenerateResponse startGeneration(String reportId) {
+    public SectionGenerateResponse startGeneration(String reportId, SectionGenerateRequest request) {
+        SectionGenerateRequest actualRequest = request == null ? new SectionGenerateRequest() : request;
+        if (actualRequest.getGenerationMode() == ContentGenerationMode.TEMPLATE) {
+            return generateTemplateSections(reportId);
+        }
+
         ReportEntity report = findReport(reportId);
         List<ReportSectionEntity> sections = ensureSectionRows(report);
         int targetCount = 0;
@@ -107,6 +122,38 @@ public class SectionServiceImpl implements SectionService {
         );
     }
 
+    private SectionGenerateResponse generateTemplateSections(String reportId) {
+        ReportEntity report = findReport(reportId);
+        List<ReportSectionEntity> sections = ensureSectionRows(report);
+        int generatedCount = 0;
+
+        for (ReportSectionEntity section : sections) {
+            if (SectionStatus.USER_EDITED.name().equals(section.getStatus())
+                    && StringUtils.hasText(section.getContentMarkdown())) {
+                continue;
+            }
+            section.setContentMarkdown(buildTemplateContent(report, section));
+            section.setStatus(SectionStatus.GENERATED.name());
+            section.setSource(SOURCE_TEMPLATE);
+            section.setVersion(nextVersion(section));
+            section.setErrorMessage(null);
+            sectionMapper.updateById(section);
+            generatedCount++;
+        }
+
+        refreshReportProgress(reportId);
+        ReportEntity refreshed = findReport(reportId);
+        return new SectionGenerateResponse(
+                UUID.randomUUID().toString(),
+                reportId,
+                null,
+                refreshed.getStatus(),
+                sections.size(),
+                refreshed.getCompletedSections(),
+                "Template section content created. Generated sections: " + generatedCount
+        );
+    }
+
     @Override
     public SseEmitter streamSections(String reportId) {
         SseEmitter emitter = new SseEmitter(0L);
@@ -119,6 +166,9 @@ public class SectionServiceImpl implements SectionService {
     public SectionResponse saveSection(String reportId, String sectionId, SectionContentRequest request) {
         ReportSectionEntity section = findSection(reportId, sectionId);
         section.setContentMarkdown(request.getContentMarkdown());
+        if (request.getTableJson() != null) {
+            section.setTableJson(normalizeTableJson(request.getTableJson()));
+        }
         section.setStatus(SectionStatus.USER_EDITED.name());
         section.setSource(SOURCE_USER_EDITED);
         section.setVersion(nextVersion(section));
@@ -224,8 +274,12 @@ public class SectionServiceImpl implements SectionService {
         boolean incrementVersion = shouldIncrementVersion(section);
 
         try {
-            streamAiContent(report, section, outlineNode, outlineContext, regenerate, userHint, emitter, content);
-            section.setContentMarkdown(content.toString());
+            String outlineTableJson = outlineNodeTableJson(outlineNode);
+            if (!StringUtils.hasText(section.getTableJson()) && StringUtils.hasText(outlineTableJson)) {
+                section.setTableJson(outlineTableJson);
+            }
+            streamAiContentWithRetry(report, section, outlineNode, outlineContext, regenerate, userHint, emitter, content);
+            section.setContentMarkdown(sanitizeTables(content.toString(), section.getTableJson()));
             section.setStatus(SectionStatus.GENERATED.name());
             section.setSource(regenerate ? SOURCE_REGENERATED : SOURCE_AI);
             section.setVersion(incrementVersion ? nextVersion(section) : defaultVersion(section));
@@ -266,6 +320,7 @@ public class SectionServiceImpl implements SectionService {
                 aiProperties.getSectionStreamUrl(), section.getNumber(), requestBody.length());
 
         HttpRequest request = HttpRequest.newBuilder(URI.create(aiProperties.getSectionStreamUrl()))
+                .version(HttpClient.Version.HTTP_1_1)
                 .timeout(Duration.ofSeconds(Math.max(1, aiProperties.getTimeoutSeconds())))
                 .header("Accept", "text/event-stream")
                 .header("Content-Type", "application/json")
@@ -281,13 +336,65 @@ public class SectionServiceImpl implements SectionService {
                             "AI section stream returned HTTP " + response.statusCode() + ": " + readLimited(reader)
                     );
                 }
-                parseAiSse(reader, emitter, content);
+                parseAiSse(reader, emitter, content, section.getTableJson());
             }
         } catch (IOException ex) {
             throw new IllegalStateException("AI section stream I/O failed: " + ex.getMessage(), ex);
         } catch (InterruptedException ex) {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("AI section stream was interrupted", ex);
+        }
+    }
+
+    private void streamAiContentWithRetry(
+            ReportEntity report,
+            ReportSectionEntity section,
+            ReportOutlineNodeEntity outlineNode,
+            String outlineContext,
+            boolean regenerate,
+            String userHint,
+            SseEmitter emitter,
+            StringBuilder content
+    ) {
+        RuntimeException lastException = null;
+        for (int attempt = 1; attempt <= AI_SECTION_MAX_ATTEMPTS; attempt++) {
+            int beforeLength = content.length();
+            try {
+                streamAiContent(report, section, outlineNode, outlineContext, regenerate, userHint, emitter, content);
+                String currentAttemptContent = content.substring(beforeLength);
+                if (!StringUtils.hasText(currentAttemptContent)) {
+                    throw new IllegalStateException("AI section stream returned empty content");
+                }
+                if (attempt > 1) {
+                    log.info("AI section stream recovered after retry. section={}, attempt={}", section.getNumber(), attempt);
+                }
+                return;
+            } catch (RuntimeException ex) {
+                lastException = ex;
+                if (content.length() > beforeLength) {
+                    throw ex;
+                }
+                if (attempt >= AI_SECTION_MAX_ATTEMPTS) {
+                    break;
+                }
+                log.warn("AI section stream failed before receiving content, retrying. section={}, attempt={}, reason={}",
+                        section.getNumber(), attempt, ex.getMessage());
+                sleepBeforeRetry(attempt);
+            }
+        }
+        throw new IllegalStateException(
+                "AI section stream failed after " + AI_SECTION_MAX_ATTEMPTS + " attempts: "
+                        + (lastException == null ? "unknown error" : lastException.getMessage()),
+                lastException
+        );
+    }
+
+    private void sleepBeforeRetry(int attempt) {
+        try {
+            Thread.sleep(Math.min(2000L, 400L * attempt));
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("AI section retry was interrupted", ex);
         }
     }
 
@@ -308,8 +415,11 @@ public class SectionServiceImpl implements SectionService {
         payload.put("sectionNumber", defaultText(section.getNumber(), "1"));
         payload.put("sectionTitle", defaultText(section.getTitle(), "Untitled Section"));
         payload.put("sectionLevel", outlineNode == null || outlineNode.getLevel() == null ? 2 : outlineNode.getLevel());
-        payload.put("promptHint", outlineNode == null ? "" : defaultText(outlineNode.getPromptHint(), ""));
+        payload.put("promptHint", outlineNode == null ? "" : defaultText(visiblePromptHint(outlineNode.getPromptHint()), ""));
         payload.put("outlineContext", defaultText(outlineContext, ""));
+        List<OutlineTablePlan> tablePlans = readTablePlans(section.getTableJson());
+        payload.put("allowTables", !tablePlans.isEmpty());
+        payload.put("tablePlans", tablePlans);
         payload.put("existingContentMarkdown", section.getContentMarkdown());
         payload.put("userHint", userHint);
         payload.put("regenerate", regenerate);
@@ -320,13 +430,18 @@ public class SectionServiceImpl implements SectionService {
         return StringUtils.hasText(value) ? value : defaultValue;
     }
 
-    private void parseAiSse(BufferedReader reader, SseEmitter emitter, StringBuilder content) throws IOException {
+    private void parseAiSse(
+            BufferedReader reader,
+            SseEmitter emitter,
+            StringBuilder content,
+            String tableJson
+    ) throws IOException {
         String eventName = "message";
         StringBuilder data = new StringBuilder();
         String line;
         while ((line = reader.readLine()) != null) {
             if (line.isEmpty()) {
-                if (handleAiEvent(eventName, data.toString(), emitter, content)) {
+                if (handleAiEvent(eventName, data.toString(), emitter, content, tableJson)) {
                     return;
                 }
                 eventName = "message";
@@ -343,7 +458,7 @@ public class SectionServiceImpl implements SectionService {
         }
 
         if (data.length() > 0) {
-            handleAiEvent(eventName, data.toString(), emitter, content);
+            handleAiEvent(eventName, data.toString(), emitter, content, tableJson);
         }
     }
 
@@ -351,12 +466,16 @@ public class SectionServiceImpl implements SectionService {
             String eventName,
             String data,
             SseEmitter emitter,
-            StringBuilder content
+            StringBuilder content,
+            String tableJson
     ) throws IOException {
         if ("content".equals(eventName) || "message".equals(eventName)) {
             if (!data.isEmpty()) {
-                content.append(data);
-                sendEvent(emitter, "content", data);
+                String filtered = sanitizeTables(data, tableJson);
+                if (StringUtils.hasText(filtered)) {
+                    content.append(filtered);
+                    sendEvent(emitter, "content", filtered);
+                }
             }
             return false;
         }
@@ -456,9 +575,24 @@ public class SectionServiceImpl implements SectionService {
                 .map(ReportSectionEntity::getOutlineNodeId)
                 .filter(StringUtils::hasText)
                 .collect(Collectors.toSet());
+        Map<String, ReportSectionEntity> existingByOutlineId = existing.stream()
+                .filter(section -> StringUtils.hasText(section.getOutlineNodeId()))
+                .collect(Collectors.toMap(
+                        ReportSectionEntity::getOutlineNodeId,
+                        Function.identity(),
+                        (left, right) -> left
+                ));
 
         for (ReportOutlineNodeEntity node : outlineNodes) {
+            String outlineTableJson = outlineNodeTableJson(node);
             if (existingOutlineIds.contains(node.getId())) {
+                ReportSectionEntity existingSection = existingByOutlineId.get(node.getId());
+                if (existingSection != null
+                        && !StringUtils.hasText(existingSection.getTableJson())
+                        && StringUtils.hasText(outlineTableJson)) {
+                    existingSection.setTableJson(outlineTableJson);
+                    sectionMapper.updateById(existingSection);
+                }
                 continue;
             }
             ReportSectionEntity section = new ReportSectionEntity();
@@ -468,6 +602,7 @@ public class SectionServiceImpl implements SectionService {
             section.setNumber(node.getNumber());
             section.setTitle(node.getTitle());
             section.setContentMarkdown(null);
+            section.setTableJson(outlineTableJson);
             section.setStatus(SectionStatus.PENDING.name());
             section.setSource(SOURCE_AI);
             section.setVersion(1);
@@ -567,6 +702,215 @@ public class SectionServiceImpl implements SectionService {
         return section.getVersion() == null ? 1 : section.getVersion() + 1;
     }
 
+    private String outlineNodeTableJson(ReportOutlineNodeEntity node) {
+        if (node == null) {
+            return null;
+        }
+        if (StringUtils.hasText(node.getTableJson())) {
+            return node.getTableJson();
+        }
+        return tableJsonFromPromptHint(node.getPromptHint());
+    }
+
+    private String visiblePromptHint(String promptHint) {
+        if (!StringUtils.hasText(promptHint)) {
+            return promptHint;
+        }
+        int start = promptHint.indexOf(TABLE_PLAN_PREFIX);
+        if (start < 0) {
+            return promptHint;
+        }
+        int end = promptHint.indexOf(TABLE_PLAN_SUFFIX, start);
+        String before = promptHint.substring(0, start).stripTrailing();
+        String after = end >= 0
+                ? promptHint.substring(end + TABLE_PLAN_SUFFIX.length()).stripLeading()
+                : "";
+        String visible = StringUtils.hasText(after) ? before + "\n" + after : before;
+        return StringUtils.hasText(visible) ? visible.strip() : null;
+    }
+
+    private String tableJsonFromPromptHint(String promptHint) {
+        if (!StringUtils.hasText(promptHint)) {
+            return null;
+        }
+        int start = promptHint.indexOf(TABLE_PLAN_PREFIX);
+        if (start < 0) {
+            return null;
+        }
+        int valueStart = start + TABLE_PLAN_PREFIX.length();
+        int end = promptHint.indexOf(TABLE_PLAN_SUFFIX, valueStart);
+        if (end <= valueStart) {
+            return null;
+        }
+        try {
+            byte[] decoded = Base64.getDecoder().decode(promptHint.substring(valueStart, end));
+            return new String(decoded, StandardCharsets.UTF_8);
+        } catch (IllegalArgumentException ex) {
+            log.warn("Invalid outline table plan marker ignored. reason={}", ex.getMessage());
+            return null;
+        }
+    }
+
+    private String buildTemplateContent(ReportEntity report, ReportSectionEntity section) {
+        StringBuilder content = new StringBuilder();
+        content.append("本章节依据已确认的大纲模板生成，围绕“")
+                .append(defaultText(section.getTitle(), "本章节"))
+                .append("”补充报告正文。请结合")
+                .append(defaultText(report.getPowerPlant(), "电厂"))
+                .append("、")
+                .append(defaultText(report.getSpecialty(), "专业"))
+                .append("和")
+                .append(report.getReportYear() == null ? "报告年度" : report.getReportYear() + "年")
+                .append("实际情况完善检查过程、主要结论和整改要求。");
+
+        List<OutlineTablePlan> tablePlans = readTablePlans(section.getTableJson());
+        for (OutlineTablePlan table : tablePlans) {
+            content.append("\n\n表：").append(table.getCaption()).append("\n");
+            List<String> columns = table.getColumns() == null || table.getColumns().isEmpty()
+                    ? List.of("项目", "内容", "备注")
+                    : table.getColumns();
+            content.append("| ").append(String.join(" | ", columns)).append(" |\n");
+            content.append("| ").append(columns.stream().map(ignored -> "---").collect(Collectors.joining(" | "))).append(" |\n");
+            content.append("| ").append(columns.stream().map(ignored -> "待补充").collect(Collectors.joining(" | "))).append(" |\n");
+        }
+        return content.toString();
+    }
+
+    private String sanitizeTables(String markdown, String tableJson) {
+        if (!StringUtils.hasText(markdown) || !readTablePlans(tableJson).isEmpty()) {
+            return markdown;
+        }
+
+        List<String> lines = new ArrayList<>();
+        for (String line : markdown.replace("\r\n", "\n").replace('\r', '\n').split("\n", -1)) {
+            String trimmed = line.trim();
+            if (isTableCaption(trimmed) || isMarkdownTableLine(trimmed) || isMarkdownSeparatorLine(trimmed)) {
+                continue;
+            }
+            lines.add(line);
+        }
+        return String.join("\n", lines);
+    }
+
+    private boolean isTableCaption(String line) {
+        return line.startsWith("表：")
+                || line.startsWith("表:")
+                || line.matches("^表\\s*\\d+(\\.\\d+)?\\s+.*");
+    }
+
+    private boolean isMarkdownTableLine(String line) {
+        return line.startsWith("|") && line.contains("|");
+    }
+
+    private boolean isMarkdownSeparatorLine(String line) {
+        String stripped = line.replace("|", "").replace(":", "").replace("-", "").trim();
+        return stripped.isEmpty() && line.contains("---");
+    }
+
+    private String normalizeTableJson(String tableJson) {
+        List<OutlineTablePlan> tablePlans = readTablePlans(tableJson);
+        if (tablePlans.isEmpty()) {
+            return null;
+        }
+        try {
+            return objectMapper.writeValueAsString(tablePlans);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalArgumentException("tableJson must be valid table plan JSON", ex);
+        }
+    }
+
+    private List<OutlineTablePlan> readTablePlans(String tableJson) {
+        if (!StringUtils.hasText(tableJson)) {
+            return new ArrayList<>();
+        }
+        try {
+            return readTablePlans(objectMapper.readTree(tableJson));
+        } catch (JsonProcessingException ex) {
+            throw new IllegalArgumentException("tableJson must be valid JSON", ex);
+        }
+    }
+
+    private List<OutlineTablePlan> readTablePlans(JsonNode node) {
+        if (node == null || node.isNull() || node.isMissingNode()) {
+            return new ArrayList<>();
+        }
+        if (node.isObject() && node.has("tables")) {
+            return readTablePlans(node.get("tables"));
+        }
+
+        List<OutlineTablePlan> result = new ArrayList<>();
+        if (node.isArray()) {
+            for (JsonNode item : node) {
+                toTablePlan(item).ifPresent(result::add);
+            }
+        } else {
+            toTablePlan(node).ifPresent(result::add);
+        }
+        return result;
+    }
+
+    private java.util.Optional<OutlineTablePlan> toTablePlan(JsonNode node) {
+        if (node == null || !node.isObject()) {
+            return java.util.Optional.empty();
+        }
+        String caption = firstText(node, "caption", "name", "title", "tableName");
+        if (!StringUtils.hasText(caption)) {
+            return java.util.Optional.empty();
+        }
+        OutlineTablePlan table = new OutlineTablePlan();
+        table.setId(firstText(node, "id", "tableId"));
+        table.setCaption(caption);
+        table.setDescription(firstText(node, "description", "note", "promptHint"));
+        table.setColumns(readColumns(firstNode(node, "columns", "headers", "fields")));
+        return java.util.Optional.of(table);
+    }
+
+    private List<String> readColumns(JsonNode node) {
+        if (node == null || node.isNull() || node.isMissingNode()) {
+            return List.of();
+        }
+        List<String> columns = new ArrayList<>();
+        if (node.isArray()) {
+            for (JsonNode item : node) {
+                if (item.isTextual() && StringUtils.hasText(item.asText())) {
+                    columns.add(item.asText().strip());
+                } else if (item.isObject()) {
+                    String name = firstText(item, "name", "title", "label", "field");
+                    if (StringUtils.hasText(name)) {
+                        columns.add(name);
+                    }
+                }
+            }
+        } else if (node.isTextual()) {
+            for (String value : node.asText().split("[,，、|]")) {
+                if (StringUtils.hasText(value)) {
+                    columns.add(value.strip());
+                }
+            }
+        }
+        return columns.stream().distinct().toList();
+    }
+
+    private JsonNode firstNode(JsonNode node, String... fields) {
+        for (String field : fields) {
+            JsonNode value = node.get(field);
+            if (value != null && !value.isNull()) {
+                return value;
+            }
+        }
+        return null;
+    }
+
+    private String firstText(JsonNode node, String... fields) {
+        for (String field : fields) {
+            JsonNode value = node.get(field);
+            if (value != null && !value.isNull() && StringUtils.hasText(value.asText())) {
+                return value.asText().strip();
+            }
+        }
+        return null;
+    }
+
     private String toJson(Map<String, Object> payload) {
         try {
             return objectMapper.writeValueAsString(payload);
@@ -643,6 +987,7 @@ public class SectionServiceImpl implements SectionService {
         response.setNumber(section.getNumber());
         response.setTitle(section.getTitle());
         response.setContentMarkdown(section.getContentMarkdown());
+        response.setTableJson(section.getTableJson());
         response.setStatus(section.getStatus());
         response.setSource(section.getSource());
         response.setVersion(section.getVersion());

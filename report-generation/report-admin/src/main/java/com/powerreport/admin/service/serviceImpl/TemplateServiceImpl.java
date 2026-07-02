@@ -2,14 +2,19 @@ package com.powerreport.admin.service.serviceImpl;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.powerreport.admin.config.TemplateStorageProperties;
 import com.powerreport.admin.dto.TemplateConfigRequest;
 import com.powerreport.admin.dto.TemplateFileResource;
+import com.powerreport.admin.dto.TemplateOutlineNodeDto;
 import com.powerreport.admin.dto.TemplatePageResponse;
 import com.powerreport.admin.dto.TemplateResponse;
 import com.powerreport.admin.dto.TemplateUpdateRequest;
+import com.powerreport.admin.dto.TemplateVisualConfigDto;
 import com.powerreport.admin.service.TemplateService;
+import com.powerreport.admin.service.support.TemplateDocxOutlineParser;
 import com.powerreport.entity.ReportTemplateEntity;
 import com.powerreport.enums.ReportType;
 import com.powerreport.mapper.ReportTemplateMapper;
@@ -25,9 +30,11 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.InputStreamResource;
 import org.springframework.core.io.Resource;
 import org.springframework.core.io.UrlResource;
@@ -37,17 +44,21 @@ import org.springframework.web.multipart.MultipartFile;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class TemplateServiceImpl implements TemplateService {
 
     private static final int DEFAULT_PAGE = 1;
     private static final int DEFAULT_SIZE = 10;
     private static final int MAX_SIZE = 100;
     private static final String DEFAULT_VERSION = "1.0.0";
+    private static final String OUTLINE_SOURCE_FIELD = "_outlineSource";
+    private static final String OUTLINE_SOURCE_DOCX_AUTO = "DOCX_AUTO";
 
     private final ReportTemplateMapper templateMapper;
     private final TemplateStorageProperties storageProperties;
     private final ObjectMapper objectMapper;
     private final MinioClient minioClient;
+    private final TemplateDocxOutlineParser docxOutlineParser;
 
     @Override
     public TemplatePageResponse list(Integer page, Integer size, String reportType, Boolean enabled, String keyword) {
@@ -80,6 +91,7 @@ public class TemplateServiceImpl implements TemplateService {
         String normalizedType = normalizeReportType(reportType);
         String normalizedVersion = normalizeVersion(version);
         validateConfigJson(configJson);
+        String resolvedConfigJson = resolveConfigJsonWithAutoOutline(file, normalizedType, configJson, false);
         StoredTemplateFile storedFile = storeFile(file, normalizedType);
 
         ReportTemplateEntity entity = new ReportTemplateEntity();
@@ -88,7 +100,7 @@ public class TemplateServiceImpl implements TemplateService {
         entity.setReportType(normalizedType);
         entity.setVersion(normalizedVersion);
         applyStoredFile(entity, storedFile);
-        entity.setConfigJson(StringUtils.hasText(configJson) ? configJson : null);
+        entity.setConfigJson(StringUtils.hasText(resolvedConfigJson) ? resolvedConfigJson : null);
         entity.setEnabled(enabled == null || enabled);
         entity.setCreatedBy(StringUtils.hasText(username) ? username : "local_user");
         entity.setCreatedAt(LocalDateTime.now());
@@ -130,7 +142,14 @@ public class TemplateServiceImpl implements TemplateService {
     public TemplateResponse replaceFile(String templateId, MultipartFile file) {
         ReportTemplateEntity entity = requireTemplate(templateId);
         StoredTemplateFile oldFile = toStoredFile(entity);
+        String resolvedConfigJson = resolveConfigJsonWithAutoOutline(
+                file,
+                entity.getReportType(),
+                entity.getConfigJson(),
+                isAutoParsedOutline(entity.getConfigJson())
+        );
         applyStoredFile(entity, storeFile(file, entity.getReportType()));
+        entity.setConfigJson(StringUtils.hasText(resolvedConfigJson) ? resolvedConfigJson : null);
         entity.setUpdatedAt(LocalDateTime.now());
         templateMapper.updateById(entity);
         deleteStoredFileQuietly(oldFile);
@@ -423,6 +442,73 @@ public class TemplateServiceImpl implements TemplateService {
             objectMapper.readTree(configJson);
         } catch (IOException e) {
             throw new IllegalArgumentException("configJson must be valid JSON");
+        }
+    }
+
+    private String resolveConfigJsonWithAutoOutline(
+            MultipartFile file,
+            String reportType,
+            String configJson,
+            boolean forceRefresh
+    ) {
+        if (hasOutline(configJson) && !forceRefresh) {
+            return configJson;
+        }
+        try {
+            List<TemplateOutlineNodeDto> outline = docxOutlineParser.parse(file);
+            if (outline.isEmpty()) {
+                return configJson;
+            }
+            return mergeOutline(configJson, outline);
+        } catch (RuntimeException ex) {
+            log.warn("Template DOCX outline auto parse failed. reportType={}, reason={}", reportType, ex.getMessage());
+            return configJson;
+        }
+    }
+
+    private boolean hasOutline(String configJson) {
+        if (!StringUtils.hasText(configJson)) {
+            return false;
+        }
+        try {
+            JsonNode outline = objectMapper.readTree(configJson).get("outline");
+            return outline != null && outline.isArray() && !outline.isEmpty();
+        } catch (IOException ex) {
+            return false;
+        }
+    }
+
+    private boolean isAutoParsedOutline(String configJson) {
+        if (!StringUtils.hasText(configJson)) {
+            return false;
+        }
+        try {
+            JsonNode root = objectMapper.readTree(configJson);
+            JsonNode source = root.get(OUTLINE_SOURCE_FIELD);
+            return source != null && OUTLINE_SOURCE_DOCX_AUTO.equals(source.asText());
+        } catch (IOException ex) {
+            return false;
+        }
+    }
+
+    private String mergeOutline(String configJson, List<TemplateOutlineNodeDto> outline) {
+        try {
+            if (StringUtils.hasText(configJson)) {
+                JsonNode root = objectMapper.readTree(configJson);
+                ObjectNode objectNode = root != null && root.isObject()
+                        ? (ObjectNode) root
+                        : objectMapper.createObjectNode();
+                objectNode.set("outline", objectMapper.valueToTree(outline));
+                objectNode.put(OUTLINE_SOURCE_FIELD, OUTLINE_SOURCE_DOCX_AUTO);
+                return objectMapper.writeValueAsString(objectNode);
+            }
+            TemplateVisualConfigDto config = new TemplateVisualConfigDto();
+            config.setOutline(outline);
+            ObjectNode objectNode = objectMapper.valueToTree(config);
+            objectNode.put(OUTLINE_SOURCE_FIELD, OUTLINE_SOURCE_DOCX_AUTO);
+            return objectMapper.writeValueAsString(objectNode);
+        } catch (IOException ex) {
+            throw new IllegalArgumentException("failed to merge template outline config", ex);
         }
     }
 

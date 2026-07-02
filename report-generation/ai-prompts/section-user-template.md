@@ -23,10 +23,18 @@
 
 {outlineContext}
 
+## 表格计划
+
+allowTables={allowTables}
+
+tablePlans:
+
+{tablePlansJson}
+
 ## 写作要求
 
 1. 内容紧扣「{sectionTitle}」，与报告类型「{reportTypeLabel}」的专业规范一致
-2. 若写作要点提到表格，请输出符合规范的 Markdown 表格
+2. 只有 allowTables=true 且 tablePlans 非空时才可以输出 Markdown 表格；否则严禁输出任何表格或表题
 3. 不要输出章节标题「{sectionNumber} {sectionTitle}」
 4. 直接输出 Markdown 正文
 5. 严禁所有章节使用相似段落。

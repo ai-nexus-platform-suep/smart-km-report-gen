@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS report_sections (
   content_markdown LONGTEXT NULL COMMENT '正文 Markdown',
   table_json JSON NULL COMMENT '结构化表格 JSON',
   status VARCHAR(50) NOT NULL DEFAULT 'PENDING' COMMENT '章节状态',
-  source VARCHAR(50) NOT NULL DEFAULT 'AI' COMMENT '内容来源：AI / USER_EDITED / REGENERATED / MANUAL',
+  source VARCHAR(50) NOT NULL DEFAULT 'AI' COMMENT '内容来源：AI / TEMPLATE / USER_EDITED / REGENERATED / MANUAL',
   version INT NOT NULL DEFAULT 1 COMMENT '内容版本',
   error_message TEXT NULL COMMENT '失败原因',
   created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间',
@@ -129,7 +129,12 @@ CREATE TABLE IF NOT EXISTS project_assets (
   name VARCHAR(300) NOT NULL COMMENT '素材名称',
   category VARCHAR(50) NOT NULL DEFAULT 'OTHER' COMMENT '素材分类：STANDARD_DOC / REPORT_DATA / OTHER',
   file_type VARCHAR(20) NOT NULL COMMENT '文件类型扩展名，例如 pdf / xlsx',
-  file_path VARCHAR(1000) NOT NULL COMMENT '存储路径',
+  storage_type VARCHAR(20) NOT NULL DEFAULT 'MINIO' COMMENT '存储类型：LOCAL/MINIO',
+  file_path VARCHAR(1000) NULL COMMENT '兼容旧版本的本地存储路径或 MinIO URI',
+  bucket_name VARCHAR(100) NULL COMMENT 'MinIO bucket 名称',
+  object_name VARCHAR(500) NULL COMMENT 'MinIO objectName',
+  original_file_name VARCHAR(255) NULL COMMENT '原始文件名',
+  content_type VARCHAR(100) NULL COMMENT '文件 Content-Type',
   file_size BIGINT NOT NULL DEFAULT 0 COMMENT '文件大小，字节',
   sha256 CHAR(64) NULL COMMENT '文件 SHA256',
   description VARCHAR(1000) NULL COMMENT '描述',
@@ -142,5 +147,6 @@ CREATE TABLE IF NOT EXISTS project_assets (
   KEY idx_assets_category (category),
   KEY idx_assets_enabled (enabled),
   KEY idx_assets_file_type (file_type),
-  KEY idx_assets_created_at (created_at)
+  KEY idx_assets_created_at (created_at),
+  KEY idx_assets_storage_object (bucket_name, object_name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='专业素材文档表';

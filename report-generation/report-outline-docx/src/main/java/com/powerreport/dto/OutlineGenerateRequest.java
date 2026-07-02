@@ -1,6 +1,7 @@
 package com.powerreport.dto;
 
 import com.powerreport.enums.ReportType;
+import com.powerreport.enums.ContentGenerationMode;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -13,6 +14,16 @@ public class OutlineGenerateRequest {
 
     @NotNull
     private ReportType reportType;
+
+    /**
+     * AI: call AI outline service. TEMPLATE: read enabled template config_json.outline.
+     */
+    private ContentGenerationMode generationMode = ContentGenerationMode.AI;
+
+    /**
+     * Optional report_templates.id. Used when generationMode=TEMPLATE or as template preference.
+     */
+    private String templateId;
 
     @NotBlank
     private String subject;

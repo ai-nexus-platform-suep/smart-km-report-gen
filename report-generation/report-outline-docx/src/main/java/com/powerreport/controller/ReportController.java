@@ -3,6 +3,8 @@ package com.powerreport.controller;
 import com.myenglish.qacommon.dto.ApiResponse;
 import com.powerreport.dto.OutlineConfirmRequest;
 import com.powerreport.dto.OutlineConfirmResponse;
+import com.powerreport.dto.OutlineDraftRequest;
+import com.powerreport.dto.OutlineDraftResponse;
 import com.powerreport.dto.OutlineGenerateRequest;
 import com.powerreport.dto.OutlineGenerateResponse;
 import com.powerreport.dto.OutlineNodeResponse;
@@ -26,6 +28,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -54,6 +57,35 @@ public class ReportController {
             @Valid @RequestBody OutlineGenerateRequest request
     ) {
         return ApiResponse.success(outlineService.generateOutline(request));
+    }
+
+    /**
+     * Save frontend-edited outline as a draft report.
+     */
+    @PostMapping("/outline/draft")
+    public ApiResponse<OutlineDraftResponse> createDraftOutline(
+            @Valid @RequestBody OutlineDraftRequest request
+    ) {
+        return ApiResponse.success(outlineService.createDraftOutline(request));
+    }
+
+    /**
+     * Update an existing draft outline.
+     */
+    @PutMapping("/{reportId}/outline/draft")
+    public ApiResponse<OutlineDraftResponse> updateDraftOutline(
+            @PathVariable String reportId,
+            @Valid @RequestBody OutlineDraftRequest request
+    ) {
+        return ApiResponse.success(outlineService.updateDraftOutline(reportId, request));
+    }
+
+    /**
+     * Read saved report metadata and outline tree.
+     */
+    @GetMapping("/{reportId}/outline")
+    public ApiResponse<OutlineDraftResponse> getSavedOutline(@PathVariable String reportId) {
+        return ApiResponse.success(outlineService.getSavedOutline(reportId));
     }
 
     /**

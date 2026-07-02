@@ -1,6 +1,7 @@
 package com.powerreport.content.service;
 
 import com.powerreport.content.dto.SectionContentRequest;
+import com.powerreport.content.dto.SectionGenerateRequest;
 import com.powerreport.content.dto.SectionGenerateResponse;
 import com.powerreport.content.dto.SectionRegenerateRequest;
 import com.powerreport.content.dto.SectionResponse;
@@ -9,7 +10,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 public interface SectionService {
 
-    SectionGenerateResponse startGeneration(String reportId);
+    SectionGenerateResponse startGeneration(String reportId, SectionGenerateRequest request);
 
     SseEmitter streamSections(String reportId);
 
