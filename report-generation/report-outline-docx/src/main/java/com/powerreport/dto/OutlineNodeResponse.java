@@ -12,5 +12,6 @@ public class OutlineNodeResponse {
     private String title;
     private Integer level;
     private String promptHint;
+    private List<OutlineTablePlan> tables = new ArrayList<>();
     private List<OutlineNodeResponse> children = new ArrayList<>();
 }
