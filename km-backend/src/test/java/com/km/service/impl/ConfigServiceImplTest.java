@@ -1,5 +1,6 @@
 package com.km.service.impl;
 
+import com.km.client.ModelConfigTestClient;
 import com.km.common.constant.ConfigKeys;
 import com.km.common.exception.BusinessException;
 import com.km.common.exception.ErrorCode;
@@ -33,6 +34,9 @@ class ConfigServiceImplTest {
     @Mock
     private SystemConfigMapper systemConfigMapper;
 
+    @Mock
+    private ModelConfigTestClient modelConfigTestClient;
+
     private ConfigServiceImpl configService;
 
     private static final String EMBEDDING_JSON =
@@ -46,7 +50,7 @@ class ConfigServiceImplTest {
 
     @BeforeEach
     void setUp() {
-        configService = new ConfigServiceImpl(systemConfigMapper);
+        configService = new ConfigServiceImpl(systemConfigMapper, modelConfigTestClient);
     }
 
     // ====== Embedding 查询 ======

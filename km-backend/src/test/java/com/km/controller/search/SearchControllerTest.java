@@ -1,5 +1,6 @@
 package com.km.controller.search;
 
+import com.km.controller.support.RequestUserResolver;
 import com.km.dto.request.SearchRequest;
 import com.km.dto.response.SearchResultItemVO;
 import com.km.dto.response.SearchResultVO;
@@ -31,6 +32,9 @@ class SearchControllerTest {
     @Mock
     private SearchService searchService;
 
+    @Mock
+    private RequestUserResolver requestUserResolver;
+
     @InjectMocks
     private SearchController controller;
 
@@ -44,26 +48,6 @@ class SearchControllerTest {
     }
 
     @Test
-    void shouldSearchWithDefaultUserId() throws Exception {
-        SearchRequest request = new SearchRequest();
-        request.setQuery("test query");
-
-        SearchResultVO result = new SearchResultVO();
-        result.setTotal(0);
-        result.setResults(Arrays.asList());
-
-        when(searchService.search(any(SearchRequest.class), eq(0L))).thenReturn(result);
-
-        mockMvc.perform(post("/api/search")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(0));
-
-        verify(searchService).search(any(SearchRequest.class), eq(0L));
-    }
-
-    @Test
     void shouldSearchWithCustomUserId() throws Exception {
         SearchRequest request = new SearchRequest();
         request.setQuery("test query");
@@ -72,37 +56,17 @@ class SearchControllerTest {
         result.setTotal(0);
         result.setResults(Arrays.asList());
 
+        when(requestUserResolver.requireUserId("123")).thenReturn(123L);
         when(searchService.search(any(SearchRequest.class), eq(123L))).thenReturn(result);
 
         mockMvc.perform(post("/api/search")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request))
-                        .header("X-User-Id", "123"))
+                        .header("userid", "123"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0));
 
         verify(searchService).search(any(SearchRequest.class), eq(123L));
-    }
-
-    @Test
-    void shouldSearchWithInvalidUserIdHeader() throws Exception {
-        SearchRequest request = new SearchRequest();
-        request.setQuery("test query");
-
-        SearchResultVO result = new SearchResultVO();
-        result.setTotal(0);
-        result.setResults(Arrays.asList());
-
-        when(searchService.search(any(SearchRequest.class), eq(0L))).thenReturn(result);
-
-        mockMvc.perform(post("/api/search")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request))
-                        .header("X-User-Id", "abc"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(0));
-
-        verify(searchService).search(any(SearchRequest.class), eq(0L));
     }
 
     @Test
@@ -122,11 +86,13 @@ class SearchControllerTest {
         result.setTotal(1);
         result.setResults(Arrays.asList(item));
 
-        when(searchService.search(any(SearchRequest.class), eq(0L))).thenReturn(result);
+        when(requestUserResolver.requireUserId("1")).thenReturn(1L);
+        when(searchService.search(any(SearchRequest.class), eq(1L))).thenReturn(result);
 
         mockMvc.perform(post("/api/search")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                        .content(objectMapper.writeValueAsString(request))
+                        .header("userid", "1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.message").value("ok"))

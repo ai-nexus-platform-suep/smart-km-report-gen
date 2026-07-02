@@ -3,6 +3,7 @@ package com.km.controller.document;
 import com.km.common.dto.PageResult;
 import com.km.common.exception.BusinessException;
 import com.km.common.exception.ErrorCode;
+import com.km.controller.support.RequestUserResolver;
 import com.km.dto.request.BatchDeleteRequest;
 import com.km.dto.request.UpdateDocumentTagsRequest;
 import com.km.dto.response.DocumentBatchDeleteResponse;
@@ -50,6 +51,9 @@ class DocumentControllerTest {
     @Mock
     private DocumentService documentService;
 
+    @Mock
+    private RequestUserResolver requestUserResolver;
+
     @InjectMocks
     private DocumentController controller;
 
@@ -76,19 +80,19 @@ class DocumentControllerTest {
 
         DocumentUploadResponse uploadResponse = new DocumentUploadResponse(docVO, 5);
 
-        when(documentService.uploadDocument(eq("kb-1"), any(), eq("tag1,tag2"), eq(1L)))
+        when(requestUserResolver.requireUserId("1")).thenReturn(1L);
+        when(documentService.uploadDocument(eq("kb-1"), any(), isNull(), eq(1L)))
                 .thenReturn(uploadResponse);
 
         mockMvc.perform(multipart("/api/knowledge-bases/kb-1/documents")
                         .file(file)
-                        .param("tags", "tag1,tag2")
-                        .requestAttr("userId", 1L))
+                        .header("userid", "1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.document.id").value("doc-1"))
                 .andExpect(jsonPath("$.data.kbDocCount").value(5));
 
-        verify(documentService).uploadDocument(eq("kb-1"), any(), eq("tag1,tag2"), eq(1L));
+        verify(documentService).uploadDocument(eq("kb-1"), any(), isNull(), eq(1L));
     }
 
     @Test
@@ -103,16 +107,18 @@ class DocumentControllerTest {
 
         DocumentUploadResponse uploadResponse = new DocumentUploadResponse(docVO, 1);
 
-        when(documentService.uploadDocument(eq("kb-1"), any(), isNull(), eq(0L)))
+        when(requestUserResolver.requireUserId("2")).thenReturn(2L);
+        when(documentService.uploadDocument(eq("kb-1"), any(), isNull(), eq(2L)))
                 .thenReturn(uploadResponse);
 
         mockMvc.perform(multipart("/api/knowledge-bases/kb-1/documents")
-                        .file(file))
+                        .file(file)
+                        .header("userid", "2"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.document.id").value("doc-2"));
 
-        verify(documentService).uploadDocument(eq("kb-1"), any(), isNull(), eq(0L));
+        verify(documentService).uploadDocument(eq("kb-1"), any(), isNull(), eq(2L));
     }
 
     @Test
@@ -262,7 +268,7 @@ class DocumentControllerTest {
                 .thenThrow(new BusinessException(ErrorCode.KM_DOC_001));
 
         mockMvc.perform(get("/api/documents/non-existent"))
-                .andExpect(status().isOk())
+                .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value(1003001))
                 .andExpect(jsonPath("$.message").value("文档不存在"));
     }

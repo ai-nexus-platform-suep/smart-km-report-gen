@@ -102,8 +102,22 @@ class KnowledgeBaseServiceImplTest {
         CreateKnowledgeBaseRequest request = new CreateKnowledgeBaseRequest();
         request.setName("我的知识库");
         request.setDescription("测试描述");
-        request.setDocType("技术文档");
+        request.setDocType("技术报告论文");
+        request.setChunkStrategy(java.util.Collections.singletonMap("type", "heading"));
         request.setSearchStrategy("vector");
+
+        // create 内部先 insert 再 getById，mock getById 返回插入的数据
+        when(knowledgeBaseMapper.getById(anyString())).thenAnswer(inv -> {
+            KnowledgeBase kb = new KnowledgeBase();
+            kb.setId(inv.getArgument(0));
+            kb.setName("我的知识库");
+            kb.setDescription("测试描述");
+            kb.setDocType("技术报告论文");
+            kb.setSearchStrategy("vector");
+            kb.setOwnerId(TEST_OWNER_ID);
+            kb.setDocCount(0);
+            return kb;
+        });
 
         KnowledgeBaseVO vo = knowledgeBaseService.create(request, TEST_OWNER_ID);
 
@@ -113,7 +127,7 @@ class KnowledgeBaseServiceImplTest {
         assertEquals(32, vo.getId().length(), "UUID without dashes should be 32 chars");
         assertEquals("我的知识库", vo.getName());
         assertEquals("测试描述", vo.getDescription());
-        assertEquals("技术文档", vo.getDocType());
+        assertEquals("技术报告论文", vo.getDocType());
         assertEquals("vector", vo.getSearchStrategy());
         assertEquals(TEST_OWNER_ID, vo.getOwnerId());
 
@@ -125,10 +139,23 @@ class KnowledgeBaseServiceImplTest {
     }
 
     @Test
-    void shouldCreateKnowledgeBaseWithDefaults() {
+    void shouldCreateKnowledgeBaseWithHeadingStrategy() {
         CreateKnowledgeBaseRequest request = new CreateKnowledgeBaseRequest();
-        request.setName("默认知识库");
-        // docType and searchStrategy not set
+        request.setName("知识库");
+        request.setDocType("通用文档");
+        request.setChunkStrategy(java.util.Collections.singletonMap("type", "heading"));
+        request.setSearchStrategy("vector_rerank");
+
+        when(knowledgeBaseMapper.getById(anyString())).thenAnswer(inv -> {
+            KnowledgeBase kb = new KnowledgeBase();
+            kb.setId(inv.getArgument(0));
+            kb.setName("知识库");
+            kb.setDocType("通用文档");
+            kb.setSearchStrategy("vector_rerank");
+            kb.setOwnerId(TEST_OWNER_ID);
+            kb.setDocCount(0);
+            return kb;
+        });
 
         KnowledgeBaseVO vo = knowledgeBaseService.create(request, TEST_OWNER_ID);
 
@@ -222,15 +249,22 @@ class KnowledgeBaseServiceImplTest {
     @Test
     void shouldBatchDeleteKnowledgeBases() {
         List<String> ids = Arrays.asList("kb-1", "kb-2", "kb-3");
+        KnowledgeBase kb1 = createKnowledgeBase("kb-1", "KB1", "", "通用文档");
+        KnowledgeBase kb2 = createKnowledgeBase("kb-2", "KB2", "", "通用文档");
+        KnowledgeBase kb3 = createKnowledgeBase("kb-3", "KB3", "", "通用文档");
+        when(knowledgeBaseMapper.getById("kb-1")).thenReturn(kb1);
+        when(knowledgeBaseMapper.getById("kb-2")).thenReturn(kb2);
+        when(knowledgeBaseMapper.getById("kb-3")).thenReturn(kb3);
 
         assertDoesNotThrow(() -> knowledgeBaseService.batchDelete(ids));
         verify(knowledgeBaseMapper).batchDelete(ids);
     }
 
     @Test
-    void shouldBatchDeleteEmptyList() {
-        assertDoesNotThrow(() -> knowledgeBaseService.batchDelete(Collections.emptyList()));
-        verify(knowledgeBaseMapper).batchDelete(Collections.emptyList());
+    void shouldThrowExceptionWhenBatchDeleteEmptyList() {
+        BusinessException ex = assertThrows(BusinessException.class,
+                () -> knowledgeBaseService.batchDelete(Collections.emptyList()));
+        assertEquals(ErrorCode.BAD_REQUEST.getCode(), ex.getCode());
     }
 
     // ====== 辅助方法 ======

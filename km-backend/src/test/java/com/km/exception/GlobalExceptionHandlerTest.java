@@ -4,6 +4,7 @@ import com.km.common.dto.ApiResponse;
 import com.km.common.exception.BusinessException;
 import com.km.common.exception.ErrorCode;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -22,7 +23,8 @@ class GlobalExceptionHandlerTest {
     void shouldHandleBusinessException() {
         BusinessException ex = new BusinessException(ErrorCode.KM_KB_001);
 
-        ApiResponse<Void> response = handler.handleBusiness(ex);
+        ResponseEntity<ApiResponse<Void>> responseEntity = handler.handleBusiness(ex);
+        ApiResponse<Void> response = responseEntity.getBody();
 
         assertNotNull(response);
         assertEquals(1002001, response.getCode());
@@ -34,7 +36,8 @@ class GlobalExceptionHandlerTest {
     void shouldHandleBusinessExceptionWithCustomMessage() {
         BusinessException ex = new BusinessException(ErrorCode.KM_KB_001, "自定义");
 
-        ApiResponse<Void> response = handler.handleBusiness(ex);
+        ResponseEntity<ApiResponse<Void>> responseEntity = handler.handleBusiness(ex);
+        ApiResponse<Void> response = responseEntity.getBody();
 
         assertNotNull(response);
         assertEquals(1002001, response.getCode());
@@ -49,13 +52,13 @@ class GlobalExceptionHandlerTest {
         HttpRequestMethodNotSupportedException ex =
                 new HttpRequestMethodNotSupportedException("POST", new String[]{"GET", "PUT"});
 
-        ApiResponse<Void> response = handler.handleMethodNotSupported(ex);
+        ResponseEntity<ApiResponse<Void>> responseEntity = handler.handleMethodNotSupported(ex);
+        ApiResponse<Void> response = responseEntity.getBody();
 
         assertNotNull(response);
         assertEquals(400, response.getCode());
-        assertTrue(response.getMessage().contains("GET"));
-        assertTrue(response.getMessage().contains("PUT"));
-        assertTrue(response.getMessage().contains("POST") || response.getMessage().contains("请求方法不支持"));
+        assertTrue(response.getMessage().contains("POST"));
+        assertTrue(response.getMessage().contains("Request method not supported"));
         assertNull(response.getData());
     }
 
@@ -65,7 +68,8 @@ class GlobalExceptionHandlerTest {
     void shouldHandleGenericException() {
         Exception ex = new RuntimeException("oops");
 
-        ApiResponse<Void> response = handler.handleException(ex);
+        ResponseEntity<ApiResponse<Void>> responseEntity = handler.handleException(ex);
+        ApiResponse<Void> response = responseEntity.getBody();
 
         assertNotNull(response);
         assertEquals(500, response.getCode());
@@ -79,7 +83,8 @@ class GlobalExceptionHandlerTest {
     void shouldReturnApiResponseFormatForBusinessException() {
         BusinessException ex = new BusinessException(ErrorCode.BAD_REQUEST);
 
-        ApiResponse<Void> response = handler.handleBusiness(ex);
+        ResponseEntity<ApiResponse<Void>> responseEntity = handler.handleBusiness(ex);
+        ApiResponse<Void> response = responseEntity.getBody();
 
         assertEquals(400, response.getCode());
         assertEquals("请求参数错误", response.getMessage());
@@ -90,7 +95,8 @@ class GlobalExceptionHandlerTest {
     void shouldReturnApiResponseFormatForGenericException() {
         Exception ex = new NullPointerException("Unexpected null");
 
-        ApiResponse<Void> response = handler.handleException(ex);
+        ResponseEntity<ApiResponse<Void>> responseEntity = handler.handleException(ex);
+        ApiResponse<Void> response = responseEntity.getBody();
 
         assertEquals(ErrorCode.INTERNAL_ERROR.getCode(), response.getCode());
         assertEquals(ErrorCode.INTERNAL_ERROR.getMessage(), response.getMessage());

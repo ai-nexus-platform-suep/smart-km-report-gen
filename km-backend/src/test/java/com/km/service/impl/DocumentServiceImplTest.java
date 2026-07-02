@@ -13,6 +13,7 @@ import com.km.entity.KnowledgeBase;
 import com.km.repository.ChunkMapper;
 import com.km.repository.DocumentMapper;
 import com.km.repository.KnowledgeBaseMapper;
+import com.km.service.DocumentProcessQueuePublisher;
 import com.km.storage.FileStorageService;
 import com.km.vo.ChunkVO;
 import com.km.vo.DocumentVO;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.multipart.MultipartFile;
@@ -54,6 +56,9 @@ class DocumentServiceImplTest {
     @Mock
     private FileStorageService fileStorageService;
 
+    @Mock
+    private ObjectProvider<DocumentProcessQueuePublisher> publisherProvider;
+
     private DocumentServiceImpl documentService;
 
     private static final Long TEST_USER_ID = 1L;
@@ -62,7 +67,7 @@ class DocumentServiceImplTest {
     @BeforeEach
     void setUp() {
         documentService = new DocumentServiceImpl(documentMapper, chunkMapper,
-                knowledgeBaseMapper, fileStorageService);
+                knowledgeBaseMapper, fileStorageService, publisherProvider);
     }
 
     // ====== 上传文档 ======
@@ -358,10 +363,7 @@ class DocumentServiceImplTest {
         DocumentVO vo = documentService.updateTags("doc-1", tags);
 
         assertNotNull(vo);
-        verify(documentMapper).updateById(any(Document.class));
-        ArgumentCaptor<Document> captor = ArgumentCaptor.forClass(Document.class);
-        verify(documentMapper).updateById(captor.capture());
-        assertNotNull(captor.getValue().getTagsJson());
+        verify(documentMapper).updateTags(eq("doc-1"), anyString());
     }
 
     @Test
@@ -373,15 +375,15 @@ class DocumentServiceImplTest {
         DocumentVO vo = documentService.updateTags("doc-1", new HashMap<String, String>());
 
         assertNotNull(vo);
-        ArgumentCaptor<Document> captor = ArgumentCaptor.forClass(Document.class);
-        verify(documentMapper).updateById(captor.capture());
-        assertNull(captor.getValue().getTagsJson());
+        verify(documentMapper).updateTags("doc-1", null);
     }
 
     // ====== 更新状态 ======
 
     @Test
     void shouldUpdateStatus() {
+        when(documentMapper.updateStatus("doc-1", DocumentStatus.PARSING, null)).thenReturn(1);
+
         documentService.updateStatus("doc-1", DocumentStatus.PARSING, null);
 
         verify(documentMapper).updateStatus("doc-1", DocumentStatus.PARSING, null);
@@ -389,9 +391,11 @@ class DocumentServiceImplTest {
 
     @Test
     void shouldUpdateStatusWithErrorMessage() {
+        when(documentMapper.updateStatus("doc-2", DocumentStatus.FAILED, "Process failed: 文件损坏无法解析")).thenReturn(1);
+
         documentService.updateStatus("doc-2", DocumentStatus.FAILED, "文件损坏无法解析");
 
-        verify(documentMapper).updateStatus("doc-2", DocumentStatus.FAILED, "文件损坏无法解析");
+        verify(documentMapper).updateStatus("doc-2", DocumentStatus.FAILED, "Process failed: 文件损坏无法解析");
     }
 
     // ====== 辅助方法 ======

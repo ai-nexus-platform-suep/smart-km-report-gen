@@ -58,7 +58,7 @@ class ErrorCodeTest {
 
     @Test
     void shouldHaveCorrectCount() {
-        assertEquals(16, ErrorCode.values().length);
+        assertEquals(17, ErrorCode.values().length);
     }
 
     @Test

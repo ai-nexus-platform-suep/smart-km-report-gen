@@ -5,6 +5,7 @@ import com.km.dto.request.BatchDeleteRequest;
 import com.km.dto.request.CreateKnowledgeBaseRequest;
 import com.km.dto.request.UpdateKnowledgeBaseRequest;
 import com.km.dto.response.KnowledgeBaseVO;
+import com.km.controller.support.RequestUserResolver;
 import com.km.service.KnowledgeBaseService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,6 +39,9 @@ class KnowledgeBaseControllerTest {
 
     @Mock
     private KnowledgeBaseService knowledgeBaseService;
+
+    @Mock
+    private RequestUserResolver requestUserResolver;
 
     @InjectMocks
     private KnowledgeBaseController controller;
@@ -92,27 +96,29 @@ class KnowledgeBaseControllerTest {
         CreateKnowledgeBaseRequest request = new CreateKnowledgeBaseRequest();
         request.setName("New KB");
         request.setDescription("A test knowledge base");
-        request.setDocType("pdf");
-        request.setChunkStrategy("paragraph");
+        request.setDocType("通用文档");
+        request.setChunkStrategy(java.util.Collections.singletonMap("type", "heading"));
         request.setSearchStrategy("vector_rerank");
 
         KnowledgeBaseVO kb = new KnowledgeBaseVO();
         kb.setId("kb-new");
         kb.setName("New KB");
         kb.setDescription("A test knowledge base");
-        kb.setDocType("pdf");
+        kb.setDocType("通用文档");
 
-        when(knowledgeBaseService.create(any(CreateKnowledgeBaseRequest.class), eq(0L))).thenReturn(kb);
+        when(requestUserResolver.requireUserId("1")).thenReturn(1L);
+        when(knowledgeBaseService.create(any(CreateKnowledgeBaseRequest.class), eq(1L))).thenReturn(kb);
 
         mockMvc.perform(post("/api/knowledge-bases")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(request)))
+                        .content(objectMapper.writeValueAsString(request))
+                        .header("userid", "1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
                 .andExpect(jsonPath("$.data.id").value("kb-new"))
                 .andExpect(jsonPath("$.data.name").value("New KB"));
 
-        verify(knowledgeBaseService).create(any(CreateKnowledgeBaseRequest.class), eq(0L));
+        verify(knowledgeBaseService).create(any(CreateKnowledgeBaseRequest.class), eq(1L));
     }
 
     @Test

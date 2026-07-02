@@ -137,7 +137,7 @@ class ConfigControllerTest {
     @Test
     void shouldGetParserConfig() throws Exception {
         ParserConfigVO config = new ParserConfigVO();
-        config.setBackend("python-parser");
+        config.setBackend("tika");
         config.setMaxConcurrency(4);
 
         when(configService.getParserConfig()).thenReturn(config);
@@ -145,7 +145,7 @@ class ConfigControllerTest {
         mockMvc.perform(get("/api/admin/config/parser"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
-                .andExpect(jsonPath("$.data.backend").value("python-parser"))
+                .andExpect(jsonPath("$.data.backend").value("tika"))
                 .andExpect(jsonPath("$.data.maxConcurrency").value(4));
 
         verify(configService).getParserConfig();
@@ -154,11 +154,11 @@ class ConfigControllerTest {
     @Test
     void shouldUpdateParserConfig() throws Exception {
         ParserConfigRequest request = new ParserConfigRequest();
-        request.setBackend("python-parser");
+        request.setBackend("tika");
         request.setMaxConcurrency(4);
 
         ParserConfigVO config = new ParserConfigVO();
-        config.setBackend("python-parser");
+        config.setBackend("tika");
         config.setMaxConcurrency(4);
 
         when(configService.updateParserConfig(any(ParserConfigRequest.class))).thenReturn(config);
@@ -168,7 +168,7 @@ class ConfigControllerTest {
                         .content(objectMapper.writeValueAsString(request)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(0))
-                .andExpect(jsonPath("$.data.backend").value("python-parser"));
+                .andExpect(jsonPath("$.data.backend").value("tika"));
 
         verify(configService).updateParserConfig(any(ParserConfigRequest.class));
     }
