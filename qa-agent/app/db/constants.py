@@ -1,0 +1,18 @@
+"""会话与消息常量 (人员 B 独占)"""
+
+STATUS_ACTIVE = 1
+STATUS_DELETED = 0
+
+GENERATE_STATUS_GENERATING = 0
+GENERATE_STATUS_COMPLETED = 1
+GENERATE_STATUS_FAILED = 2
+
+DEFAULT_TITLE = "新对话"
+TITLE_MAX_LENGTH = 50
+
+# 已接入 Gateway JWT 鉴权，userId 从 user-id Header 获取
+# DEFAULT_USER_ID = 1
+
+ROLE_USER = "user"
+ROLE_ASSISTANT = "assistant"
+ROLE_SYSTEM = "system"

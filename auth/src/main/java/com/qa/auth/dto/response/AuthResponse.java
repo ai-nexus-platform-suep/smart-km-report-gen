@@ -2,13 +2,12 @@ package com.qa.auth.dto.response;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 
 import java.util.List;
 
-/**
- * 认证响应
- */
 @Data
+@NoArgsConstructor
 @AllArgsConstructor
 public class AuthResponse {
 
@@ -18,4 +17,5 @@ public class AuthResponse {
     private long expiresIn;
     private String username;
     private List<String> roles;
+    private List<String> permissions;
 }

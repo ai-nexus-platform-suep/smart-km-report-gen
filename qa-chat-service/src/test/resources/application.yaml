@@ -1,0 +1,11 @@
+spring:
+  application:
+    name: qa-chat-service
+  cloud:
+    nacos:
+      config:
+        enabled: false
+      discovery:
+        enabled: false
+  config:
+    import: ""

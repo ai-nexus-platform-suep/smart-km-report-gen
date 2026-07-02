@@ -1,0 +1,294 @@
+### ================================================================
+### Auth & RBAC 接口自动化测试（IntelliJ / VS Code REST Client）
+### ================================================================
+### 用法:
+###   1. 执行 init.sql，启动 auth(8081) + gateway(8080)
+###   2. 安装 REST Client 插件，打开本文件
+###   3. 从「0. 环境检查」起顺序 Run All 或逐个运行
+### 账号: superadmin / admin / user  密码: admin123
+### ================================================================
+
+@baseUrl = http://localhost:8080
+@authDirectUrl = http://localhost:8081
+@password = admin123
+
+### ================================================================
+### 0. 超管登录（写入全局变量）
+### ================================================================
+# @name login_superadmin
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "superadmin",
+  "password": "{{password}}"
+}
+
+> {%
+    client.test("超管登录 200", function() {
+        client.assert(response.status === 200, "status=" + response.status);
+        client.assert(response.body.code === 200, "code=" + response.body.code);
+        client.assert(response.body.data.accessToken, "missing accessToken");
+        client.assert(response.body.data.permissions.includes("auth:role:manage"), "missing auth:role:manage");
+    });
+    client.global.set("superadminToken", response.body.data.accessToken);
+    client.global.set("superadminRefresh", response.body.data.refreshToken);
+%}
+
+### ================================================================
+### 1. 公开注册
+### ================================================================
+# @name register_public
+POST {{baseUrl}}/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "rest_test_user",
+  "password": "123456"
+}
+
+> {%
+    client.test("注册 201", function() {
+        client.assert(response.status === 201 || response.body.code === 1002, "status/code");
+    });
+%}
+
+### ================================================================
+### 2. 三角色登录 + JWT 内容校验
+### ================================================================
+# @name login_admin
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{"username": "admin", "password": "{{password}}"}
+
+> {%
+    client.test("管理员登录", function() {
+        client.assert(response.body.code === 200);
+        client.assert(response.body.data.roles.includes("ROLE_ADMIN"));
+        client.assert(response.body.data.permissions.includes("auth:user:list"));
+        client.assert(!response.body.data.permissions.includes("auth:role:manage"));
+    });
+    client.global.set("adminToken", response.body.data.accessToken);
+%}
+
+###
+# @name login_user
+POST {{baseUrl}}/api/auth/login
+Content-Type: application/json
+
+{"username": "user", "password": "{{password}}"}
+
+> {%
+    client.test("普通用户登录", function() {
+        client.assert(response.body.code === 200);
+        client.assert(response.body.data.roles.includes("ROLE_USER"));
+        client.assert(response.body.data.permissions.includes("chat:conversation:use"));
+        client.assert(!response.body.data.permissions.includes("auth:user:list"));
+    });
+    client.global.set("userToken", response.body.data.accessToken);
+%}
+
+### ================================================================
+### 3. 当前用户 / 权限 / 菜单
+### ================================================================
+# @name me_superadmin
+GET {{baseUrl}}/api/auth/me
+Authorization: Bearer {{superadminToken}}
+
+> {%
+    client.test("/me", function() {
+        client.assert(response.body.code === 200);
+        client.assert(response.body.data.username === "superadmin");
+        client.assert(response.body.data.roles.length > 0);
+        client.assert(response.body.data.permissions.length > 0);
+    });
+%}
+
+###
+# @name me_permissions
+GET {{baseUrl}}/api/auth/me/permissions
+Authorization: Bearer {{superadminToken}}
+
+> {%
+    client.test("/me/permissions", function() {
+        client.assert(response.body.code === 200);
+        client.assert(Array.isArray(response.body.data));
+    });
+%}
+
+###
+# @name me_menus_user
+GET {{baseUrl}}/api/auth/me/menus
+Authorization: Bearer {{userToken}}
+
+> {%
+    client.test("/me/menus 普通用户", function() {
+        client.assert(response.body.code === 200);
+        client.assert(response.body.data.length >= 1);
+    });
+%}
+
+### ================================================================
+### 4. Refresh Token
+### ================================================================
+# @name refresh_token
+POST {{baseUrl}}/api/auth/refresh
+Content-Type: application/json
+
+{
+  "refreshToken": "{{superadminRefresh}}"
+}
+
+> {%
+    client.test("刷新 Token", function() {
+        client.assert(response.body.code === 200);
+        client.assert(response.body.data.accessToken);
+        client.assert(response.body.data.refreshToken);
+    });
+    client.global.set("superadminToken", response.body.data.accessToken);
+%}
+
+### ================================================================
+### 5. 超管 — 管理 API
+### ================================================================
+# @name list_users
+GET {{baseUrl}}/api/auth/users
+Authorization: Bearer {{superadminToken}}
+
+> {%
+    client.test("用户列表", function() {
+        client.assert(response.body.code === 200);
+        client.assert(Array.isArray(response.body.data));
+    });
+%}
+
+###
+# @name list_roles
+GET {{baseUrl}}/api/auth/roles
+Authorization: Bearer {{superadminToken}}
+
+> {%
+    client.test("角色列表", function() {
+        client.assert(response.body.code === 200);
+    });
+%}
+
+###
+# @name list_menus
+GET {{baseUrl}}/api/auth/menus
+Authorization: Bearer {{superadminToken}}
+
+> {%
+    client.test("菜单树", function() {
+        client.assert(response.body.code === 200);
+        client.assert(Array.isArray(response.body.data));
+    });
+%}
+
+###
+# @name list_permissions
+GET {{baseUrl}}/api/auth/permissions
+Authorization: Bearer {{superadminToken}}
+
+> {%
+    client.test("权限列表", function() {
+        client.assert(response.body.code === 200);
+    });
+%}
+
+###
+# @name list_logs
+GET {{baseUrl}}/api/auth/logs?pageNum=1&pageSize=10
+Authorization: Bearer {{superadminToken}}
+
+> {%
+    client.test("操作日志", function() {
+        client.assert(response.body.code === 200);
+        client.assert(response.body.data.records !== undefined);
+    });
+%}
+
+### ================================================================
+### 6. RBAC 403 校验
+### ================================================================
+# @name user_forbidden_users
+GET {{baseUrl}}/api/auth/users
+Authorization: Bearer {{userToken}}
+
+> {%
+    client.test("普通用户访问用户列表应 403", function() {
+        client.assert(response.body.code === 403);
+    });
+%}
+
+###
+# @name admin_forbidden_permissions
+GET {{baseUrl}}/api/auth/permissions
+Authorization: Bearer {{adminToken}}
+
+> {%
+    client.test("管理员访问权限配置应 403", function() {
+        client.assert(response.body.code === 403);
+    });
+%}
+
+###
+# @name admin_can_users
+GET {{baseUrl}}/api/auth/users
+Authorization: Bearer {{adminToken}}
+
+> {%
+    client.test("管理员可访问用户列表", function() {
+        client.assert(response.body.code === 200);
+    });
+%}
+
+### ================================================================
+### 7. Gateway 鉴权 + 业务接口（需 qa-chat-service :8090）
+### ================================================================
+# @name no_token_401
+GET {{baseUrl}}/api/model-configs
+
+> {%
+    client.test("无 Token 401", function() {
+        client.assert(response.status === 401 || response.body.code === 401);
+    });
+%}
+
+###
+# @name admin_model_configs
+GET {{baseUrl}}/api/model-configs
+Authorization: Bearer {{adminToken}}
+
+> {%
+    client.test("管理员模型配置", function() {
+        client.assert(response.body.code === 200);
+    });
+%}
+
+###
+# @name user_qa_stats
+GET {{baseUrl}}/api/stats/qa/overview
+Authorization: Bearer {{userToken}}
+
+> {%
+    client.test("普通用户 QA 统计", function() {
+        client.assert(response.body.code === 200);
+    });
+%}
+
+### ================================================================
+### 8. 直连 Auth（可选，不经过 Gateway）
+### ================================================================
+# @name direct_auth_login
+POST {{authDirectUrl}}/api/auth/login
+Content-Type: application/json
+
+{"username": "superadmin", "password": "{{password}}"}
+
+> {%
+    client.test("直连 auth 登录", function() {
+        client.assert(response.body.code === 200);
+    });
+%}

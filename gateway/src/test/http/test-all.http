@@ -13,14 +13,14 @@
 ### USE smart_km_report_gen;
 ### SOURCE qa-chat-service/src/main/resources/db/conversation.sql;
 ### SOURCE qa-chat-service/src/main/resources/db/model_config.sql;
-### SOURCE qa-chat-service/src/main/resources/db/mock_data.sql;
+### （可选，仅开发测试） SOURCE qa-chat-service/src/main/resources/db/mock_data.sql;
 
 ### ================================================================
 ### 启动服务（4 个终端）
 ### ================================================================
 ### 终端1: mvn spring-boot:run -pl auth
 ### 终端2: mvn spring-boot:run -pl qa-chat-service
-### 终端3: $env:PYTHONPATH="qa-agent"; python qa-agent/main.py
+### 终端3: cd qa-agent; python -m app.main
 ### 终端4: mvn spring-boot:run -pl gateway
 
 
@@ -39,6 +39,12 @@ POST http://localhost:8081/api/auth/login
 Content-Type: application/json
 
 {"username": "admin", "password": "admin123"}
+
+> {%
+    client.global.set("token", response.body.data.accessToken);
+    client.global.set("refreshToken", response.body.data.refreshToken);
+    client.global.set("userId", response.body.data.userId);
+%}
 
 ### 3. 获取当前用户（替换 token）
 GET http://localhost:8081/api/auth/me
@@ -61,6 +67,12 @@ Content-Type: application/json
 
 {"username": "admin", "password": "admin123"}
 
+> {%
+    client.global.set("token", response.body.data.accessToken);
+    client.global.set("refreshToken", response.body.data.refreshToken);
+    client.global.set("userId", response.body.data.userId);
+%}
+
 ### 2. 白名单路径（无需 token）
 POST http://localhost:8080/api/auth/register
 Content-Type: application/json
@@ -74,16 +86,51 @@ Authorization: Bearer {{token}}
 ### 4. 无 token → 401
 GET http://localhost:8080/api/model-configs
 
-### 5. QA 对话（Python :8000 通过 Gateway）
+### 5. QA 对话（Python :8000 通过 Gateway，userId 由 Gateway 从 JWT 注入）
 POST http://localhost:8080/api/chat
 Content-Type: application/json
 Authorization: Bearer {{token}}
 
-{"conversation_id": {{conversation_id}}, "question": "什么是技术监督？", "user_id": 1}
+{"conversation_id": {{conversation_id}}, "question": "什么是技术监督？"}
 
 
 ### ================================================================
-### 第五步：模型配置管理
+### 第五步：会话管理（Python qa-agent :8000 通过 Gateway）
+### ================================================================
+
+### 1. 创建会话
+POST http://localhost:8080/api/conversations
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{"title": "测试对话"}
+
+> {%
+    client.global.set("conversation_id", response.body.data.session_id);
+%}
+
+### 2. 会话列表（按 userId 隔离）
+GET http://localhost:8080/api/conversations?page=1&size=20
+Authorization: Bearer {{token}}
+
+### 3. 查看会话消息
+GET http://localhost:8080/api/conversations/{{conversation_id}}/messages?page=1&size=50
+Authorization: Bearer {{token}}
+
+### 4. 修改会话标题
+PATCH http://localhost:8080/api/conversations/{{conversation_id}}
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{"title": "新标题"}
+
+### 5. 删除会话
+DELETE http://localhost:8080/api/conversations/{{conversation_id}}
+Authorization: Bearer {{token}}
+
+
+### ================================================================
+### 第六步：模型配置管理
 ### ================================================================
 
 ### 1. 新增 DeepSeek 配置
@@ -98,6 +145,10 @@ Authorization: Bearer {{token}}
   "apiKey": "sk-your-deepseek-key",
   "scenario": "chat"
 }
+
+> {%
+    client.global.set("config_id", response.body.data.id);
+%}
 
 ### 2. 查看列表（apiKey 脱敏）
 GET http://localhost:8080/api/model-configs
@@ -124,8 +175,8 @@ Authorization: Bearer {{token}}
 DELETE http://localhost:8080/api/model-configs/{{config_id}}
 Authorization: Bearer {{token}}
 
-### 6. Python 内部接口（无需 token，直连 :8082）
-GET http://localhost:8082/internal/model-configs/default?userId=1&scenario=chat
+### 6. Python 内部接口（直连 :8082，替换 userId 为实际注册用户的 ID）
+GET http://localhost:8082/internal/model-configs/default?userId={{userId}}&scenario=chat
 
 
 ### ================================================================
@@ -138,5 +189,7 @@ GET http://localhost:8082/internal/model-configs/default?userId=1&scenario=chat
 ### [ ] Gateway 转发登录  → 和直接调 Auth 一样
 ### [ ] 无 token 访问     → 401 "缺少认证信息"
 ### [ ] 带 token 访问     → 正常返回
+### [ ] 会话 CRUD         → 创建/列表/详情/改标题/删除（按 userId 隔离）
+### [ ] QA 对话           → SSE 流式返回，消息自动持久化
 ### [ ] 模型配置 CRUD     → 增删改查正常
-### [ ] Python 内部接口   → 返回解密 apiKey
+### [ ] Python 内部接口   → 返回解密 apiKey（userId 需替换）

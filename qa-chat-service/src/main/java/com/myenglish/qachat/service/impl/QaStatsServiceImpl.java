@@ -7,6 +7,7 @@ import com.myenglish.qachat.mapper.MessageMapper;
 import com.myenglish.qachat.mapper.dto.DailyCountRow;
 import com.myenglish.qachat.service.QaStatsService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -16,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class QaStatsServiceImpl implements QaStatsService {
@@ -24,6 +26,7 @@ public class QaStatsServiceImpl implements QaStatsService {
 
     @Override
     public QaStatsOverviewVO getOverview() {
+        long start = System.currentTimeMillis();
         long totalCount = messageMapper.countKnowledgeQa(
                 SessionConstants.STATUS_ACTIVE,
                 SessionConstants.ROLE_ASSISTANT,
@@ -52,9 +55,11 @@ public class QaStatsServiceImpl implements QaStatsService {
                     .build());
         }
 
-        return QaStatsOverviewVO.builder()
+        QaStatsOverviewVO result = QaStatsOverviewVO.builder()
                 .totalCount(totalCount)
                 .trend(trend)
                 .build();
+        log.info("QA 统计查询完成 total={} 耗时={}ms", totalCount, System.currentTimeMillis() - start);
+        return result;
     }
 }
